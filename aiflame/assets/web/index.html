@@ -1,0 +1,600 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>SeeEnd · 让完成被看见</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <div class="shell">
+      <header>
+        <div class="brand-block">
+        <div class="brand">
+          <svg viewBox="0 0 30 40" aria-hidden="true">
+            <path
+              d="M17 0C20 11 6 13 7 23C2 18 3 14 3 14C-5 30 5 40 15 40C30 40 35 24 22 14C23 24 15 25 16 18C20 9 20 5 17 0Z"
+            /></svg
+          >SeeEnd <span class="version" id="appVersion">DESKTOP</span>
+        </div>
+        <div class="brand-tagline">让完成，被看见</div>
+        </div>
+        <div class="head-right">
+          <a class="btn" href="/tuning">火焰调参</a>
+          <span class="badge" id="deviceBadge">正在读取模式</span>
+        </div>
+      </header>
+      <nav class="tabs" aria-label="主要功能">
+        <button class="tab active" data-tab="home">灯光与任务</button
+        ><button class="tab" data-tab="device">我的设备</button
+        ><button class="tab" data-tab="testing">接入与诊断</button>
+      </nav>
+      <div id="hardwareWarning" class="hardware-warning" role="status" hidden>
+        <span id="hardwareWarningText">尚未连接设备，硬件灯光暂不可用。</span>
+        <button class="btn" id="connectHardware">连接设备</button>
+      </div>
+      <div id="pane-home" class="pane">
+        <section class="card mode-card" aria-label="运行模式">
+          <div class="title">运行模式 <span class="tag">自动记住选择</span></div>
+          <div class="mode-options">
+            <button class="btn" data-mode="virtual" aria-pressed="false" disabled>虚拟模式</button>
+            <button class="btn" data-mode="hardware" aria-pressed="false" disabled>硬件模式</button>
+          </div>
+          <p id="modeHint" class="muted">屏幕烛火随任务变化，无需连接设备。</p>
+        </section>
+        <section class="top">
+          <div>
+            <p class="eyebrow">A QUIET SIGNAL. A MOMENT TO RETURN.</p>
+            <h1>让完成，被轻轻看见。</h1>
+            <p class="sub" id="welcome">接入常用 AI 应用，在任务完成时收到提醒。</p>
+          </div>
+          <div class="note">
+            本地运行 · 无需硬件也能验证<br />已有火焰灯可直接连接
+          </div>
+        </section>
+        <main class="main">
+          <section class="scene" id="scene">
+            <div class="scene-top">
+              <span>LIVE FLAME</span><span id="delivery">等待设备确认</span>
+            </div>
+            <div class="orb" id="orb"></div>
+            <h2 id="displayTitle">准备连接</h2>
+            <p id="displayHint">正在连接本地 Hub</p>
+            <div class="stats">
+              <span><b id="active">0</b>进行中</span
+              ><span><b id="queued">0</b>待提示</span>
+            </div>
+            <div class="scene-bottom" id="sceneKind">实时任务 · 屏幕提醒</div>
+          </section>
+          <div class="right">
+            <section class="card">
+              <div class="title">
+                看看灯效 <span class="tag">演示不计入真实验证</span>
+              </div>
+              <div class="testgrid">
+                <button class="test" data-state="idle">
+                  <span>○</span>待机</button
+                ><button class="test" data-state="working">
+                  <span>◌</span>工作中</button
+                ><button class="test" data-state="done">
+                  <span>✦</span>已完成</button
+                ><button class="test" data-state="error">
+                  <span>∿</span>失败提示
+                </button>
+              </div>
+              <div class="demo">
+                <div>
+                  <div style="font-size: 11px; margin-bottom: 5px">
+                    体验一次完整等待
+                  </div>
+                  <div class="muted">10 秒灯效演示 · 工作中 5 秒 → 已完成 5 秒</div>
+                  <div class="muted" id="overviewCountdown" hidden></div>
+                </div>
+                <button class="btn primary" id="demo">开始演示 ↗</button>
+              </div>
+            </section>
+            <section class="card">
+              <div class="title">
+                适合你的提醒
+                <label class="check"
+                  ><input type="checkbox" id="paused" />暂停触发</label
+                >
+              </div>
+              <div class="row">
+                <label class="check"
+                  ><input id="desktop_notifications" type="checkbox" />桌面系统通知（需运行桌面应用）</label><label class="check"><input id="hold_until_activity" type="checkbox" />完成常亮（键鼠活动后延时熄灭）</label><label class="check"
+                  >提示时长 / 活动后延时
+                  <select id="duration">
+                    <option value="3">3 秒</option>
+                    <option value="10" selected>10 秒</option>
+                    <option value="20">20 秒</option>
+                    <option value="30">30 秒</option>
+                    <option value="60">60 秒</option>
+                  </select></label
+                >
+              </div>
+              <div class="settingsrow">
+                <label class="check"
+                  ><input type="checkbox" id="quiet_enabled" />夜间静默</label
+                >
+                <div>
+                  <input
+                    type="time"
+                    id="quiet_start"
+                    value="22:00"
+                    aria-label="静默开始时间"
+                  />
+                  <span class="muted">至</span>
+                  <input
+                    type="time"
+                    id="quiet_end"
+                    value="08:00"
+                    aria-label="静默结束时间"
+                  />
+                </div>
+              </div>
+            </section>
+          </div>
+        </main>
+        <section class="lower">
+          <section class="card">
+            <div class="title">
+              让任务找到这束光 <span class="tag">触发来源</span>
+            </div>
+            <div id="sources"></div>
+            <div style="margin-top: 16px">
+              <button class="btn" id="checkCodex">检查 Codex 接入</button>
+              <p class="muted" id="codexCheck" role="status" aria-live="polite">
+                检查配置和真实接收记录，不触发灯光。
+              </p>
+            </div>
+            <details>
+              <summary>接入说明与当前范围</summary>
+              <p>
+                Codex
+                提交消息后进入工作中，工具活动延长呼吸灯，回复完成后显示火苗，主动中断后取消对应提示。完成仅指“一轮回复结束”，不判断答案质量。不会保存或转发提问与回答正文。已有任务可能需要重新打开或重启
+                Codex 才加载配置。
+              </p>
+              <p>
+                本地 API 可通过鉴权的 <code>POST /v1/events</code> 接入，未列出的应用需要主动上报状态。
+                九种 AI 网页共用 Chrome 扩展及本机桥接；豆包、千问、元宝、ChatGPT 的 macOS 桌面普通聊天为实验接入，需授权后用实际客户端验证。Windows / Linux 暂不支持桌面客户端监听。
+              </p>
+              <p>
+                Hub 支持 USB 与 Wi-Fi 控制；在桌面 App
+                中关闭窗口后可从托盘恢复，退出 App 后停止监听。
+              </p>
+            </details>
+          </section>
+          <section class="card">
+            <div class="title">
+              每一次提醒，都有来处
+              <span class="tag" id="historyCount">最近事件</span>
+            </div>
+            <div style="max-height: 260px; overflow: auto">
+              <table class="history">
+                <thead>
+                  <tr>
+                    <th>时间</th>
+                    <th>来源</th>
+                    <th>任务状态</th>
+                    <th>处理结果</th>
+                  </tr>
+                </thead>
+                <tbody id="events">
+                  <tr>
+                    <td colspan="4" class="empty">
+                      还没有事件。接入常用来源后，发起一条真实任务。
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="chain">
+              <span id="step1">① 收到事件</span><span>→</span
+              ><span id="step2">② 来源匹配</span><span>→</span
+              ><span id="step3">③ 等待发送</span><span>→</span
+              ><span id="step4">④ 设备回执</span>
+            </div>
+            <div class="muted" style="font-size: 9px; margin-top: 9px">
+              APP 已呈现与设备已确认分别记录；模拟事件不计入真实验证。实际发光请观察实体灯。
+            </div>
+          </section>
+        </section>
+      </div>
+      <section id="pane-device" class="pane" hidden>
+        <div id="deviceSelector">
+          <h1>选择你的设备</h1>
+          <p class="sub">选择型号，添加或管理设备。已连接的设备会同步 AI 任务状态。</p>
+          <div class="device-model-grid">
+            <button class="device-model-card" data-device-model="ai-flame-v01" data-name="AI Flame 0.1" data-size="9 × 16">
+              <span class="device-model-image" data-kind="matrix"><img src="/device-icons/ai-flame-v01.svg" alt="9列16行暖黄色 LED 灯板" width="96" height="112" /></span>
+              <span class="device-model-info">
+                <span class="device-model-brand">AI FLAME</span><strong>AI Flame 0.1</strong>
+                <span class="device-model-detail">9 × 16 · 暖黄色灯板</span><span class="device-model-connection">USB / Wi-Fi</span>
+                <span class="device-model-footer"><span class="device-model-count" data-model-count="ai-flame-v01">未连接</span><span class="device-model-arrow" aria-hidden="true">→</span></span>
+              </span>
+            </button>
+            <button class="device-model-card" data-device-model="ai-flame-v02" data-name="AI Flame 0.2" data-size="7 × 15">
+              <span class="device-model-image" data-kind="matrix"><img src="/device-icons/ai-flame-v02.svg" alt="7列15行暖黄色 LED 灯板" width="96" height="112" /></span>
+              <span class="device-model-info">
+                <span class="device-model-brand">AI FLAME</span><strong>AI Flame 0.2</strong>
+                <span class="device-model-detail">7 × 15 · 暖黄色灯板</span><span class="device-model-connection">USB / Wi-Fi</span>
+                <span class="device-model-footer"><span class="device-model-count" data-model-count="ai-flame-v02">未连接</span><span class="device-model-arrow" aria-hidden="true">→</span></span>
+              </span>
+            </button>
+            <button class="device-model-card" data-device-model="yeelight-yltd003" data-name="Yeelight YLTD003" data-size="RGB 背光 · Wi-Fi 局域网" data-light-hint="背光：工作中蓝色呼吸，完成绿色，异常 / 待输入橙色。待机或静默时熄灭背光，前方照明沿用灯具设置。">
+              <span class="device-model-image" data-kind="rgb"><img src="/device-icons/yeelight-yltd003.svg" alt="Yeelight 屏幕挂灯与彩色背光" width="96" height="112" /></span>
+              <span class="device-model-info">
+                <span class="device-model-brand">YEELIGHT</span><strong>Yeelight YLTD003</strong>
+                <span class="device-model-detail">屏幕挂灯 Pro · RGB 背光</span><span class="device-model-connection">Wi-Fi 局域网</span>
+                <span class="device-model-footer"><span class="device-model-count" data-model-count="yeelight-yltd003">未连接</span><span class="device-model-arrow" aria-hidden="true">→</span></span>
+              </span>
+            </button>
+            <button class="device-model-card" data-device-model="yeelight-yldp005" data-name="Yeelight YLDP005" data-size="W3 彩色灯泡 · RGB · Wi-Fi 局域网" data-light-hint="灯泡：工作中蓝色呼吸，完成绿色，异常 / 待输入橙色。待机或静默时熄灭灯泡，连接期间整颗灯泡用于任务提醒。">
+              <span class="device-model-image" data-kind="rgb"><img src="/device-icons/yeelight-yldp005.svg" alt="Yeelight W3 彩色智能灯泡" width="96" height="112" /></span>
+              <span class="device-model-info">
+                <span class="device-model-brand">YEELIGHT</span><strong>Yeelight YLDP005</strong>
+                <span class="device-model-detail">W3 彩色灯泡 · RGB</span><span class="device-model-connection">Wi-Fi 局域网</span>
+                <span class="device-model-footer"><span class="device-model-count" data-model-count="yeelight-yldp005">未连接</span><span class="device-model-arrow" aria-hidden="true">→</span></span>
+              </span>
+            </button>
+          </div>
+        </div>
+        <div id="deviceDetails" hidden>
+          <button class="btn" id="backToDeviceModels">← 选择其他设备</button>
+          <h1 id="deviceModelTitle">AI Flame 0.1</h1>
+          <label>配置设备<select id="deviceInstances"><option value="">添加此型号设备…</option></select></label>
+          <p class="muted" id="selectedDeviceState">请选择设备或添加新的设备。</p>
+        <section id="virtualDevice" class="card">
+          <div class="title">当前使用虚拟模式</div>
+          <p class="muted">任务状态通过屏幕烛火呈现，设备查找与连接已关闭。</p>
+          <button id="backToModes" class="btn">前往总览切换模式</button>
+        </section>
+        <section class="card" id="deviceLightSettings">
+          <div class="title">灯光表现 <span class="tag">仅此设备</span></div>
+          <p class="muted">每台设备独立保存，离线时也可调整。</p>
+          <div class="range">
+            <div class="row"><label for="deviceBrightness">灯光亮度 · 上限 25%</label><span id="deviceBrightnessValue">20%</span></div>
+            <input id="deviceBrightness" type="range" min="0" max="25" value="20" disabled />
+          </div>
+          <label class="check"><input id="deviceReduced" type="checkbox" disabled />减少动态效果</label>
+          <p class="muted" id="deviceBrightnessNote" hidden>亮度为 0%，此设备的灯光提醒已关闭。</p>
+          <p class="muted" id="deviceLightHint">先连接并添加设备，即可设置此设备的灯光表现。</p>
+        </section>
+        <div id="hardwareControls" hidden>
+        <div class="top">
+          <div>
+            <p class="eyebrow">YOUR DEVICE, READY TO GLOW.</p>
+            <h1>把这一点光，连起来。</h1>
+            <p class="sub">设备连接可选；应用接入和偏好会直接沿用。选择型号后，按设备指引连接。</p>
+          </div>
+          <span class="tag" id="deviceModelDimensions">暖黄色灯板 · 9 × 16</span>
+        </div>
+        <section id="yeelightControls" class="card" hidden>
+          <div class="title">Yeelight 局域网连接</div>
+          <p class="muted" id="yeelightSetup">先在 Yeelight App 中将灯具 接入 2.4 GHz Wi-Fi，并开启「局域网控制」。电脑与灯具需在同一局域网。</p>
+          <button class="btn" id="discoverYeelight" data-maintenance>搜索 YLTD003</button>
+          <label>发现的灯具<select id="yeelightDiscovered"><option value="">可搜索，或手动填写 IP</option></select></label>
+          <label>灯具 IP 地址<input id="yeelightHost" type="text" placeholder="例如 192.168.1.100" autocomplete="off" /></label>
+          <button class="btn primary" id="connectYeelight" data-maintenance>连接灯具</button>
+          <p class="muted" id="yeelightLightHint">背光：工作中蓝色呼吸，完成绿色，异常 / 待输入橙色。待机或静默时熄灭背光，前方照明沿用灯具设置。</p>
+        </section>
+        <div class="device-grid">
+          <section class="card">
+            <div id="matrixConnection">
+            <div class="title">① 连接你的设备</div>
+            <p class="muted">
+              选择 USB 串口。未找到设备时，请确认数据线支持数据传输。
+            </p>
+            <label class="field"
+              >USB 设备<select id="usbPort">
+                <option value="">点击刷新，查找 USB 设备</option>
+              </select></label
+            >
+            <div class="actions">
+              <button class="btn" id="scanPorts">刷新设备</button
+              ><button class="btn" id="probeDevice" data-maintenance>
+                识别设备
+              </button>
+            </div>
+            <p class="muted" id="pairedDevice">尚未读取配对信息</p>
+            <div class="field">
+              日常连接方式
+              <div class="actions">
+                <button class="btn primary" id="useWifi" data-maintenance>
+                  使用 Wi-Fi</button
+                ><button class="btn primary" id="useUsb" data-maintenance>
+                  使用 USB
+                </button>
+              </div>
+            </div>
+            </div>
+            <p class="muted" id="transportMode"></p>
+            <button class="btn primary" id="testCurrentDevice">试亮此设备</button>
+            <span class="muted" id="deviceTestCountdown" hidden></span>
+            <button class="btn" id="disconnectDevice" data-maintenance>断开此设备</button>
+          </section>
+          <section class="card" id="matrixWifi">
+            <div class="title">② Wi-Fi 网络</div>
+            <p class="muted" id="wifiRemembered">连接设备后读取已记忆的网络</p>
+            <p class="muted">
+              填写 2.4 GHz Wi-Fi。电脑与开发板需在同一局域网。
+            </p>
+            <p class="muted" id="wifiScanHint">点击网络名称，由 ESP32 搜索附近网络并按信号排序，也可手动输入。</p>
+            <form id="wifiForm">
+              <div class="field wifi-picker">
+                <label for="wifiSsid">Wi-Fi 名称</label><input
+                  id="wifiSsid"
+                  role="combobox" aria-controls="wifiNetworks" aria-expanded="false" aria-autocomplete="list"
+                  type="text"
+                  maxlength="32"
+                  autocomplete="off"
+                  required
+                  placeholder="选择 2.4 GHz Wi-Fi，或手动输入" />
+                <div id="wifiNetworks" role="listbox" hidden></div>
+              </div><label class="field"
+                >Wi-Fi 密码<input
+                  id="wifiPassword"
+                  type="password"
+                  maxlength="63"
+                  autocomplete="new-password"
+                  placeholder="输入 Wi-Fi 密码" /></label
+              ><label class="check"
+                ><input
+                  type="checkbox"
+                  id="openNetwork"
+                />这是无密码的开放网络</label
+              >
+              <div class="actions">
+                <button class="btn primary" type="submit" data-maintenance>
+                  保存并连接 Wi-Fi
+                </button>
+              </div>
+            </form>
+            <p class="muted">
+              仅通过 USB 保存网络配置，不重装灯光程序。首次使用请先在设备维护中安装灯光程序。
+            </p>
+          </section>
+          <section class="card" id="matrixMaintenance">
+            <div class="title">
+              ③ 设备维护与恢复 <span class="tag">使用 APP 内置文件</span>
+            </div>
+            <p class="muted">更新灯光程序保留 Wi-Fi 配置。导出的 ZIP 包含底层 .bin 和灯光程序，供手动安装使用。</p>
+            <div class="actions">
+              <button class="btn" id="installFirmware" data-maintenance>
+                更新灯光程序</button
+              ><a class="btn" id="firmwareDownload" href="/api/firmware/download?model=ai-flame-v01" download
+                >导出完整固件包（ZIP）</a
+              >
+            </div>
+            <details>
+              <summary>初始化 / 恢复开发板</summary>
+              <p>
+                已内置 MicroPython 1.29.0，无需下载或选择文件。
+                仅适用 ESP32-S3-N16R8（16 MB Flash / 8 MB Octal PSRAM）。
+                初始化后，再执行上方「保存并连接 Wi-Fi」。
+              </p>
+              <label class="check">
+                <input id="confirmBoard" type="checkbox" />确认所选开发板为 ESP32-S3-N16R8
+              </label>
+              <label class="check">
+                <input id="confirmFlash" type="checkbox" />确认清除板上所有程序、Wi-Fi 配置和配对信息
+              </label>
+              <div class="actions">
+                <button class="btn" id="flashBase" data-maintenance>
+                  使用内置固件初始化
+                </button>
+              </div>
+              <p class="muted">
+                请保持 USB 连接。连接失败时，按住 BOOT，短按 RESET / EN，再松开 BOOT 后重试。
+              </p>
+            </details>
+          </section>
+          <section class="card job-card">
+            <div class="title">
+              操作进度 <span class="tag" id="jobState">准备就绪</span>
+            </div>
+            <progress id="deviceProgress" max="100" value="0"></progress>
+            <p
+              class="job-message"
+              id="deviceMessage"
+              role="status"
+              aria-live="polite"
+            >
+              选择设备后开始操作。
+            </p>
+            <p class="muted" id="deviceResult"></p>
+            <p class="muted">
+              操作结束后，确认设备在线，再点击「试亮此设备」观察实体灯。
+            </p>
+          </section>
+        </div>
+        </div>
+        </div>
+      </section>
+      <section id="pane-testing" class="pane" hidden>
+        <div class="top">
+          <div>
+            <p class="eyebrow">FOLLOW EVERY SIGNAL.</p>
+            <h1>逐个确认，触发是否通畅。</h1>
+            <p class="sub">
+              每次自测发送「开始 → 等待 2 秒 →
+              完成」，可观察屏幕，有灯具时另查设备回执。模拟测试不计入真实验证。
+            </p>
+          </div>
+          <span class="tag">明确标记的模拟任务</span>
+        </div>
+        <div class="device-grid">
+          <section class="card">
+            <div class="title">手动触发</div>
+            <p class="muted">检查 Hub 状态处理与设备指令通路。</p>
+            <button class="btn" data-trigger="manual">测试手动触发</button>
+          </section>
+          <section class="card">
+            <div class="title">本地 HTTP API</div>
+            <p class="muted">
+              通过鉴权 HTTP 请求发送事件，检查 API 到实体设备。
+            </p>
+            <button class="btn" data-trigger="local-script">
+              测试 HTTP API
+            </button>
+          </section>
+          <section class="card" data-cli="codex">
+            <div class="title">Codex</div>
+            <input data-cli-config placeholder="配置目录（留空沿用已连接或默认目录）" aria-label="Codex 配置目录" />
+            <p class="muted">连接 → 重开工具并发一条新任务 → 检查。自动备份，保留原配置。</p>
+            <div class="actions">
+              <button class="btn" data-trigger="codex">测试 Hook 适配器</button
+              ><button class="btn" data-cli-action="install">连接</button><button class="btn" data-cli-action="uninstall">移除接入</button><button class="btn" data-cli-check>检查</button>
+            </div>
+            <p class="muted" data-cli-status role="status" aria-live="polite">尚未检查接入。</p>
+            <details><summary>诊断详情</summary><p data-cli-details class="muted"></p></details>
+          </section>
+          <section class="card" data-cli="claude-code">
+            <div class="title">Claude Code</div>
+            <input data-cli-config placeholder="配置目录（留空沿用已连接或默认目录）" aria-label="Claude Code 配置目录" />
+            <div class="actions">
+              <button class="btn" data-cli-action="install">连接</button>
+              <button class="btn" data-cli-action="uninstall">移除接入</button>
+              <button class="btn" data-cli-check>检查</button>
+              <button class="btn" data-trigger="claude-code">模拟测试</button>
+            </div>
+            <p class="muted" data-cli-status role="status" aria-live="polite">尚未检查接入。</p>
+            <details><summary>诊断详情</summary><p data-cli-details class="muted"></p></details>
+          </section>
+          <section class="card" data-cli="deepseek-harness">
+            <div class="title">DeepSeek Harness</div>
+            <label class="muted">已有 Profile <select data-cli-profile aria-label="DeepSeek Harness Profile"><option value="">正在查找已有 Profile…</option></select></label>
+            <div class="actions">
+              <button class="btn" data-cli-action="install">连接</button>
+              <button class="btn" data-cli-action="uninstall">移除接入</button>
+              <button class="btn" data-cli-check>检查</button>
+              <button class="btn" data-trigger="deepseek-harness">模拟测试</button>
+            </div>
+            <p class="muted" data-cli-status role="status" aria-live="polite">尚未检查接入。</p>
+            <details><summary>诊断详情</summary><p data-cli-details class="muted"></p></details>
+          </section>
+          <section class="card" data-cli="qoder">
+            <div class="title">Qoder CLI</div>
+            <input data-cli-config placeholder="配置目录（留空沿用已连接或默认目录）" aria-label="Qoder CLI 配置目录" />
+            <div class="actions">
+              <button class="btn" data-cli-action="install">连接</button>
+              <button class="btn" data-cli-action="uninstall">移除接入</button>
+              <button class="btn" data-cli-check>检查</button>
+              <button class="btn" data-trigger="qoder">模拟测试</button>
+            </div>
+            <p class="muted" data-cli-status role="status" aria-live="polite">尚未检查接入。</p>
+            <details><summary>诊断详情</summary><p data-cli-details class="muted"></p></details>
+          </section>
+          <section class="card" data-cli="gemini-cli">
+            <div class="title">Gemini CLI</div>
+            <input data-cli-config placeholder="配置目录（留空沿用已连接或默认目录）" aria-label="Gemini CLI 配置目录" />
+            <div class="actions">
+              <button class="btn" data-cli-action="install">连接</button>
+              <button class="btn" data-cli-action="uninstall">移除接入</button>
+              <button class="btn" data-cli-check>检查</button>
+              <button class="btn" data-trigger="gemini-cli">模拟测试</button>
+            </div>
+            <p class="muted" data-cli-status role="status" aria-live="polite">尚未检查接入。</p>
+            <details><summary>诊断详情</summary><p data-cli-details class="muted"></p></details>
+          </section>
+          <section class="card" data-cli="opencode">
+            <div class="title">OpenCode</div>
+            <input data-cli-config placeholder="配置目录（留空沿用已连接或默认目录）" aria-label="OpenCode 配置目录" />
+            <div class="actions">
+              <button class="btn" data-cli-action="install">连接</button>
+              <button class="btn" data-cli-action="uninstall">移除接入</button>
+              <button class="btn" data-cli-check>检查</button>
+              <button class="btn" data-trigger="opencode">模拟测试</button>
+            </div>
+            <p class="muted" data-cli-status role="status" aria-live="polite">尚未检查接入。</p>
+            <details><summary>诊断详情</summary><p data-cli-details class="muted"></p></details>
+          </section>
+          <section class="card">
+            <div class="title">桌面客户端 <span class="tag">macOS · 实验</span></div>
+            <p class="muted">
+              接入豆包、千问（含千问办公）、元宝及 ChatGPT macOS 桌面客户端普通 Chat 聊天。先授权并在「灯光与任务」
+              开启对应来源，再发起新对话。控件识别需在你的客户端版本上验证。
+            </p>
+            <div class="actions">
+              <button class="btn" id="desktopPermissions">申请客户端接入权限</button>
+              <button class="btn" id="checkDesktopClients">检查客户端接入</button>
+            </div>
+            <p class="muted" id="desktopPermissionsStatus" role="status" aria-live="polite">正在检查权限…</p>
+            <div id="desktopClientStatus" class="muted"></div>
+            <p class="muted">
+              需要「辅助功能」和「输入监控」。只检查对话控件和中断信号，
+              不保存按键、输入内容或回复正文。停止生成、对话中操作客户端、
+              最小化窗口或无法持续确认控件时会取消跟踪；再次发起任务可重新跟踪。
+              仅检测到新的回复结束控件才发出完成提醒。
+            </p>
+            <div class="actions">
+              <button class="btn" data-trigger="doubao-desktop">测试豆包事件</button>
+              <button class="btn" data-trigger="qianwen-desktop">测试千问事件</button>
+              <button class="btn" data-trigger="yuanbao-desktop">测试元宝事件</button>
+              <button class="btn" data-trigger="chatgpt-desktop">测试 ChatGPT 桌面事件</button>
+            </div>
+            <p class="muted">事件自测检查模拟事件到设备的通路。真实客户端的状态识别需另行发起对话验证。</p>
+          </section>
+          <section class="card">
+            <div class="title">AI 网页共用桥接</div>
+            <p class="muted">
+              启动本机桥接进程，检查消息帧、网页事件格式与 HTTP
+              通路。支持 ChatGPT、Claude、Gemini、DeepSeek、千问、豆包、元宝、Kimi、智谱清言；
+              真实对话的页面识别与完成提醒需在对应网页中验证。
+            </p>
+            <div class="actions">
+              <button class="btn" data-trigger="chatgpt-web">
+                测试 ChatGPT</button
+              ><button class="btn" data-install="chatgpt-web">
+                安装 / 修复 Chrome 桥接</button
+              ><a class="btn" href="/api/browser-extension/download" download
+                >下载浏览器扩展</a
+              >
+            </div>
+            <p class="muted">
+              下载后解压，在 Chrome 扩展管理页面加载已解压的扩展；再刷新对应 AI
+              网页。升级时重新加载扩展并安装 / 修复桥接。各平台可在「灯光与任务」独立开关。
+            </p>
+            <div class="actions">
+              <button class="btn" data-trigger="deepseek-web">测试 DeepSeek</button>
+              <button class="btn" data-trigger="claude-web">测试 Claude</button>
+              <button class="btn" data-trigger="gemini-web">测试 Gemini</button>
+              <button class="btn" data-trigger="qianwen-web">测试千问</button>
+              <button class="btn" data-trigger="doubao-web">测试豆包</button>
+              <button class="btn" data-trigger="yuanbao-web">测试元宝</button>
+              <button class="btn" data-trigger="kimi-web">测试 Kimi</button>
+              <button class="btn" data-trigger="zhipu-web">测试智谱清言</button>
+            </div>
+          </section>
+        </div>
+        <section class="card test-result">
+          <div class="title">
+            本次测试结果 <span class="tag" id="testState">尚未开始</span>
+          </div>
+          <p
+            id="testMessage"
+            class="job-message"
+            role="status"
+            aria-live="polite"
+          >
+            选择上方任意来源开始测试。
+          </p>
+          <div id="testDelivery" class="muted"></div>
+        </section>
+      </section>
+
+      <div class="statusbar" id="message" role="status" aria-live="polite">
+        正在读取设备状态…
+      </div>
+      <footer>
+        <span
+          >AI FLAME · 桌面预览版 / <span id="footerVersion">读取中</span><br />关闭网页后仍运行；从桌面 App
+          菜单退出可停止 Hub。</span
+        ><span id="deviceDetail">USB · 9×16 灯板 · 协议 1.0</span>
+      </footer>
+    </div>
+    <script type="module" src="/app.js"></script>
+    <script type="module" src="/devices.js"></script>
+  </body>
+</html>

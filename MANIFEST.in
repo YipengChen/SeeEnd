@@ -1,0 +1,9 @@
+include app.py package.json package-lock.json CONTRIBUTING.md
+recursive-include packaging *.py *.spec
+recursive-include tests *.py *.js
+# Workspace docs are added by setup.py; this rule preserves them when rebuilding
+# an extracted source distribution.
+recursive-include docs *.md *.png *.jpg *.gif
+recursive-include hardware/led_board_test *.py *.ino *.md
+prune docs/reference-full-analysis
+global-exclude __pycache__ *.py[cod] .DS_Store

@@ -1,0 +1,58 @@
+{
+  "manifest_version": 3,
+  "name": "SeeEnd - AI Web Chat",
+  "version": "0.2.6",
+  "description": "ChatGPT、Claude、Gemini、DeepSeek、千问、豆包、元宝、Kimi、智谱清言网页对话状态接入本机 SeeEnd。实验 DOM 适配。",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAiJXLFqMO/y053nwOtLfOdShZ2n0m3oIgq5VREt7ZLMT9/bvAD24FQzSAPjyun1iyNMBGYGO9NabVUAdvAebF3H1MnD39lwnmfWd47PDXM8HVBE0kzTAFfw50yXhJmrtOj6JjjHBhn/0ue7AE3OE+QHe+lSE0UCtQPktrEMyoRp/ZbgNfG5b22svO8Vh/PntmINZThOKXGn3m3lzHWH/Wpg4cGyff4KImcq788eIcwQDxaSwf+LzUWtIsdn4dm9TTaIak8XZ3tHh1RXlpWxtPkcGfgOrUfG4hBbSn5l9BCuInaohgdHpd9kasSiXOYvTbwh3F587btvypjLhnT9bYDQIDAQAB",
+  "permissions": [
+    "nativeMessaging",
+    "storage"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://chatgpt.com/*",
+        "https://chat.deepseek.com/*",
+        "https://www.qianwen.com/*",
+        "https://qianwen.com/*",
+        "https://tongyi.aliyun.com/qianwen*",
+        "https://www.doubao.com/chat*",
+        "https://yuanbao.tencent.com/*",
+        "https://www.kimi.com/*",
+        "https://kimi.com/*",
+        "https://kimi.moonshot.cn/*",
+        "https://chatglm.cn/*",
+        "https://claude.ai/*",
+        "https://gemini.google.com/*"
+      ],
+      "js": [
+        "detector.js",
+        "providers.js",
+        "state.js",
+        "content.js"
+      ],
+      "run_at": "document_idle",
+      "all_frames": false
+    },
+    {
+      "matches": [
+        "https://www.qianwen.com/*",
+        "https://qianwen.com/*",
+        "https://tongyi.aliyun.com/qianwen*",
+        "https://chatglm.cn/*"
+      ],
+      "js": [
+        "frames.js"
+      ],
+      "run_at": "document_start",
+      "world": "MAIN",
+      "all_frames": false
+    }
+  ]
+}

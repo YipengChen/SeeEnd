@@ -1,0 +1,3 @@
+backups/
+*.bin
+__pycache__/

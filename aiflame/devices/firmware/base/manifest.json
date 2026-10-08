@@ -1,0 +1,14 @@
+{
+  "file": "ESP32_GENERIC_S3-SPIRAM_OCT-20260824-v1.29.0.bin",
+  "version": "1.29.0",
+  "board": "ESP32-S3-N16R8",
+  "variant": "SPIRAM_OCT",
+  "flash_mb": 16,
+  "psram_mb": 8,
+  "flash_address": "0x0",
+  "source": "https://micropython.org/resources/firmware/ESP32_GENERIC_S3-SPIRAM_OCT-20260824-v1.29.0.bin",
+  "download_page": "https://micropython.org/download/ESP32_GENERIC_S3/",
+  "sha256": "ab24eadfe3ef0e6ee38834d730e648def7cd82f3fa51ee0bbc59c29a6e1bd176",
+  "bytes": 1786704,
+  "license": "MIT"
+}

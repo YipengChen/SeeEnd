@@ -1,0 +1,10 @@
+{
+  "name": "seeend-browser-tests",
+  "private": true,
+  "scripts": {
+    "test": "node --test tests/test_*.js"
+  },
+  "devDependencies": {
+    "jsdom": "26.1.0"
+  }
+}

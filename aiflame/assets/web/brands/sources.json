@@ -1,0 +1,59 @@
+{
+  "codex": {
+    "source": "/Applications/ChatGPT.app/Contents/Resources/icon-codex-light.png",
+    "publisher": "OpenAI",
+    "app_version": "26.928.21956"
+  },
+  "chatgpt": {
+    "source": "/Applications/ChatGPT.app/Contents/Resources/icon-chatgpt.png",
+    "publisher": "OpenAI",
+    "app_version": "26.928.21956"
+  },
+  "deepseek": {
+    "page": "https://chat.deepseek.com/",
+    "source": "https://fe-static.deepseek.com/chat/favicon.svg"
+  },
+  "qianwen": {
+    "page": "https://www.qianwen.com/",
+    "source": "https://img.alicdn.com/imgextra/i2/O1CN01taBbMS1CfyJoOt0lB_!!6000000000109-2-tps-80-80.png"
+  },
+  "doubao": {
+    "page": "https://www.doubao.com/",
+    "source": "https://lf-flow-web-cdn.doubao.com/obj/flow-doubao/favicon/new-doubao/128x128.png"
+  },
+  "yuanbao": {
+    "page": "https://yuanbao.tencent.com/",
+    "source": "https://static.yuanbao.tencent.com/m/yuanbao-web/favicon_new@32.png"
+  },
+  "kimi": {
+    "page": "https://www.kimi.com/",
+    "source": "https://www.kimi.com/pwa-192.png"
+  },
+  "zhipu": {
+    "page": "https://chatglm.cn/",
+    "source": "https://chatglm.cn/favicon.ico"
+  },
+  "claude": {
+    "page": "https://marketplace.visualstudio.com/items?itemName=anthropic.claude-code",
+    "source": "https://anthropic.gallerycdn.vsassets.io/extensions/anthropic/claude-code/2.1.289/1791068913543/Microsoft.VisualStudio.Services.Icons.Default",
+    "publisher": "Anthropic",
+    "sha256": "7241633e5a39b44a947c7b9a821637f30d6e86716e7a8c847136d91f9c3f6ba1"
+  },
+  "qoder": {
+    "page": "https://qoder.com/",
+    "source": "https://img.alicdn.com/imgextra/i4/O1CN01QkSxiCocd3D0prc8_!!6000000008124-2-tps-412-412.png",
+    "sha256": "2276f0f8e6240959e70b83ebc48ec1dac1c0180e24528794f9a52b7386026f3d"
+  },
+  "gemini": {
+    "page": "https://gemini.google.com/",
+    "source": "https://www.gstatic.com/lamda/images/gemini_sparkle_4g_512_lt_f94943af3be039176192d.png",
+    "publisher": "Google",
+    "sha256": "5e7cfecaa53f4f65a313fe89b0f389548126544a78fad8489510c70ae641a4a1"
+  },
+  "opencode": {
+    "page": "https://opencode.ai/brand",
+    "source": "https://raw.githubusercontent.com/anomalyco/opencode/dev/packages/console/app/src/asset/brand/opencode-logo-light-square.png",
+    "publisher": "Anomaly",
+    "sha256": "0628d0293245bf3611ddfc2cd3900b2c9d9ebb1cbfb36d22a26a59fd86b8072a"
+  }
+}

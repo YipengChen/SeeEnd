@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <title>SeeEnd — see a task through to completion</title>
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#394438"/>
+      <stop offset="1" stop-color="#1e2722"/>
+    </linearGradient>
+    <linearGradient id="iris" x1="0" y1="0" x2="0.8" y2="1">
+      <stop offset="0" stop-color="#f6cf91"/>
+      <stop offset="1" stop-color="#dea15d"/>
+    </linearGradient>
+  </defs>
+  <rect x="64" y="64" width="896" height="896" rx="210" fill="url(#tile)"/>
+  <rect x="66" y="66" width="892" height="892" rx="208" fill="none"
+        stroke="#ffffff" stroke-opacity="0.08" stroke-width="4"/>
+  <path fill="#f5efdf" fill-rule="evenodd"
+        d="M204 512C270 390 378 314 512 314C646 314 754 390 820 512C754 634 646 710 512 710C378 710 270 634 204 512Z
+           M252 512C314 408 402 362 512 362C622 362 710 408 772 512C710 616 622 662 512 662C402 662 314 616 252 512Z"/>
+  <circle cx="512" cy="512" r="118" fill="url(#iris)"/>
+  <path d="M458 510L498 550L568 475" fill="none" stroke="#273229"
+        stroke-width="38" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
