@@ -1,0 +1,33 @@
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+build/
+dist/
+*.bin
+*.hex
+*.elf
+*.uf2
+*.o
+*.a
+*.so
+*.dll
+*.exe
+*.dmg
+*.whl
+*.egg-info/
+.DS_Store
+.pytest_cache/
+.ruff_cache/
+node_modules/
+
+# Local credentials and runtime state
+.env
+.env.*
+!.env.example
+credentials.json
+desktop.log
+
+# Local research media and generated frame analysis
+/参考焰火/
+/docs/reference-full-analysis/
