@@ -49,6 +49,9 @@ class TestHooks(unittest.TestCase):
                 "prompt": "PRIVATE",
                 "tool_input": {"command": "PRIVATE"},
                 "transcript_path": "PRIVATE",
+                "input-messages": ["PRIVATE"],
+                "last-assistant-message": "PRIVATE",
+                "cwd": "PRIVATE",
             },
             self.temp.name,
         )
@@ -73,6 +76,7 @@ class TestHooks(unittest.TestCase):
     def test_duplicate_stop_is_idempotent(self):
         self.accept(self.hook("UserPromptSubmit"))
         stop = self.hook("Stop")
+        self.assertNotIn("PRIVATE", str(stop))
         self.assertEqual(stop["event_id"], self.done()["event_id"])
         self.accept(stop)
         self.assertEqual(self.engine.desired()["state"], "done")
@@ -115,6 +119,9 @@ class TestHooks(unittest.TestCase):
         self.assertEqual(self.hook("Stop")["state"], "done")
         self.assertIsNone(
             from_hook({"hook_event_name": "UserPromptSubmit", "session_id": "s"})
+        )
+        self.assertIsNone(
+            from_hook({"hook_event_name": "Stop", "session_id": "s"})
         )
 
     def test_parallel_cancel_preserves_other_task(self):

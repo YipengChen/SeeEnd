@@ -46,11 +46,6 @@ header {
   align-items: center;
   gap: 11px;
 }
-.brand svg {
-  width: 26px;
-  height: 32px;
-  fill: #efa66c;
-}
 .version {
   color: #a8ae9f;
   border: 1px solid #41483d;
@@ -268,6 +263,9 @@ h1 {
   background: #1d211d;
   border-radius: 17px;
   padding: 22px;
+}
+#deviceModelTitle {
+  white-space: nowrap;
 }
 .title {
   font-size: 13px;
@@ -714,3 +712,7 @@ input[type="file"] {
 [data-integration-guide] a { margin-left: 14px; }
 [data-cli-status][data-status="connected"] { color: #397052; }
 [data-cli-status][data-status="configuration_error"], [data-cli-status][data-status="disabled"] { color: #a0472c; }
+
+.source-web-link { color: inherit; text-decoration: none; }
+.source-web-link:hover { color: var(--accent, #b34a1e); }
+.source-web-link:focus-visible { outline: 2px solid #c85b2b; outline-offset: 3px; border-radius: 4px; }

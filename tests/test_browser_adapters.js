@@ -512,3 +512,29 @@ test('all providers complete via worker ticks while page polling timers remain p
     f.dom.window.close();
   }
 });
+
+for (const id of ['claude-web','gemini-web']) test(id + ': current localized reply actions finish only the new completed reply', () => {
+  const site=SITES.find(s=>s.id===id), f=setup(site);
+  const reply=id==='claude-web'
+    ? '<div class="group group/message-row"><div class="contents"><div class="group relative" data-is-streaming="true"><div class="font-claude-response"></div></div></div><div role="toolbar" data-testid="message-actions"><button data-testid="action-bar-copy" class="[&:disabled:not([aria-busy])]:opacity-disabled" aria-label="复制"></button><button data-testid="action-bar-thumbs-up" class="[&:disabled:not([aria-busy])]:opacity-disabled" aria-label="回答不错"></button><button data-testid="action-bar-retry" class="[&:disabled:not([aria-busy])]:opacity-disabled" aria-label="重试"></button></div></div>'
+    : '<model-response><copy-button><gem-icon-button><button aria-label="复制"></button></gem-icon-button></copy-button><thumb-up-button><gem-icon-button><button aria-label="答得好"></button></gem-icon-button></thumb-up-button><regenerate-button><gem-icon-button><button aria-label="重做"></button></gem-icon-button></regenerate-button></model-response>';
+  const mount=()=>{f.doc.querySelector('#messages').insertAdjacentHTML('beforeend',reply);return f.doc.querySelector('#messages').lastElementChild;};
+  const history=mount(); history.querySelector('[data-is-streaming]')?.setAttribute('data-is-streaming','false');
+  f.machine.arm(f.adapter.snapshot()); f.generating(); f.check();
+  f.finish(); f.check(); f.advance(1000); f.check();
+  assert.deepEqual(f.events.map(e=>e.state),['working'],'history toolbar is not this reply');
+  f.generating(); const current=mount(); current.setAttribute('aria-disabled','true'); f.check();
+  f.finish(); f.check(); f.advance(1000); f.check();
+  assert.deepEqual(f.events.map(e=>e.state),['working'],'disabled actions cannot finish');
+  current.removeAttribute('aria-disabled'); current.classList.add('is-disabled');
+  f.check(); f.advance(1000); f.check();
+  assert.deepEqual(f.events.map(e=>e.state),['working'],'plain disabled state class still blocks completion');
+  current.classList.remove('is-disabled'); f.check(); f.advance(1000); f.check();
+  if(id==='claude-web') {
+    assert.deepEqual(f.events.map(e=>e.state),['working'],'streaming flag blocks early toolbar');
+    current.querySelector('[data-is-streaming]').setAttribute('data-is-streaming','false');
+    f.check(); f.advance(801); f.check();
+  }
+  assert.deepEqual(f.events.map(e=>e.state),['working','done']);
+  f.dom.window.close();
+});

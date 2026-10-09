@@ -2,12 +2,20 @@
   "codex": {
     "source": "/Applications/ChatGPT.app/Contents/Resources/icon-codex-light.png",
     "publisher": "OpenAI",
-    "app_version": "26.928.21956"
+    "app_version": "26.928.21956",
+    "original_sha256": "08450c442deae8e8a536816887f0bff2209a1b2f67311c895e2757650667817c",
+    "sha256": "e771b6d50a710cb0cf0bccf8e9f9f4fedbf51a9ff4f4edc68aa88b90c2f0f31c",
+    "processing": "Transparent-background cutout using built-in imagegen; removed backing plate, border and shadow.",
+    "processing_prompt": "Edit target is the attached original Codex application icon. Remove only the pale rounded-square background plate and its border and shadow to a truly transparent alpha background. Isolate exactly the original blue/purple cloud-shaped terminal symbol with the original white > and underscore characters inside it. Preserve the original logo shape, colours, dimensions and proportions faithfully. No redesign, no added text, no extra border, no drop shadow. Clean original icon cutout with antialiased edges. Keep white terminal glyphs opaque; remove white plate surrounding the cloud."
   },
   "chatgpt": {
     "source": "/Applications/ChatGPT.app/Contents/Resources/icon-chatgpt.png",
     "publisher": "OpenAI",
-    "app_version": "26.928.21956"
+    "app_version": "26.928.21956",
+    "original_sha256": "2fda657be5edb85ffda8e45038da689772f21977915a74f13cd90b376db3b8fb",
+    "sha256": "9f89bffda95dad5570d7d5d28cd8deeeee4ca4f72979aac9896cd5d1fa11c4df",
+    "processing": "Transparent-background cutout using built-in imagegen; removed backing plate, border and shadow.",
+    "processing_prompt": "Edit target is the attached original ChatGPT application icon. Remove only the pale rounded-square backing plate, border and shadow to a truly transparent alpha background. Keep exactly the original dark ChatGPT interlocking knot mark. Remove the plate also in the spaces between the knot strokes, so those spaces are truly transparent. Preserve the logo contour, stroke thickness and proportions faithfully. No redesign, no text, no new elements or shadows. Single original dark logo cutout, clean antialiased edges on true alpha transparency."
   },
   "deepseek": {
     "page": "https://chat.deepseek.com/",
@@ -42,7 +50,10 @@
   "qoder": {
     "page": "https://qoder.com/",
     "source": "https://img.alicdn.com/imgextra/i4/O1CN01QkSxiCocd3D0prc8_!!6000000008124-2-tps-412-412.png",
-    "sha256": "2276f0f8e6240959e70b83ebc48ec1dac1c0180e24528794f9a52b7386026f3d"
+    "sha256": "e795cb602716f783adea6432a29e13b4b0d7070e14accf5950712488da1a6cc6",
+    "original_sha256": "2276f0f8e6240959e70b83ebc48ec1dac1c0180e24528794f9a52b7386026f3d",
+    "processing": "Transparent-background cutout using built-in imagegen; removed backing plate, border and shadow.",
+    "processing_prompt": "Edit target: the attached Qoder brand icon. Exact technical background cleanup for an existing desktop application asset. Remove the entire pale-gray rounded-square backing plate, including the pale-gray interior holes of the black linked outline, replacing it with true alpha transparency. Preserve the black logo contours, proportions, thickness and placement exactly. No redesign, no text, no border, no shadow. A single centered isolated original black Qoder symbol on fully transparent background, antialiased edges, tight square composition."
   },
   "gemini": {
     "page": "https://gemini.google.com/",

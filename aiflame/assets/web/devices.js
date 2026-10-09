@@ -36,10 +36,17 @@ function showDeviceDetails(modelId) {
   selectedHardwareModel = modelId;
   $("deviceModelTitle").textContent = button.dataset.name;
   $("deviceModelDimensions").textContent = (isYeelight() ? "" : "暖黄色灯板 · ") + button.dataset.size;
+  if (isYeelight()) $("deviceModelDimensions").textContent = button.querySelector(".device-model-detail").textContent;
   $("yeelightControls").hidden = !isYeelight();
+  $("deviceReducedRow").hidden = isYeelight();
+  $("deviceBrightnessRow").hidden = isYeelight();
+  $("deviceLightTitle").hidden = isYeelight();
+  $("yeelightStateBrightness").hidden = !isYeelight();
+  $("deviceBrightness").max = isYeelight() ? "100" : "25";
+  $("deviceBrightnessLabel").textContent = isYeelight() ? "灯光亮度 · 上限 100%" : "灯光亮度 · 上限 25%";
   if (isYeelight()) {
     $("discoverYeelight").textContent = "搜索 " + button.dataset.name.replace("Yeelight ", "");
-    $("yeelightSetup").textContent = "先在 Yeelight App 中将 " + button.dataset.name + " 接入 2.4 GHz Wi-Fi，并开启「局域网控制」。电脑与灯具需在同一局域网。";
+    $("yeelightSetup").textContent = "在 Yeelight APP 中配置灯具，接入2.4 GHz WiFi，开启「局域网控制」。此电脑需与灯具在同一局域网内。";
     $("yeelightLightHint").textContent = button.dataset.lightHint;
   }
   for (const id of ["matrixConnection", "matrixWifi", "matrixMaintenance"]) $(id).hidden = isYeelight();
@@ -113,6 +120,14 @@ $("deviceBrightness").oninput = () => {
 };
 $("deviceBrightness").onchange = () => saveLightSetting("brightness", Number($("deviceBrightness").value));
 $("deviceReduced").onchange = () => saveLightSetting("reduced", $("deviceReduced").checked);
+const stateBrightnessInputs = {working: "yeelightWorkingBrightness", done: "yeelightDoneBrightness", error: "yeelightErrorBrightness"};
+for (const [state, id] of Object.entries(stateBrightnessInputs)) {
+  $(id).oninput = () => {
+    lightEditing = true;
+    $(id + "Value").textContent = $(id).value + "%";
+  };
+  $(id).onchange = () => saveLightSetting("state_brightness", {[state]: Number($(id).value)});
+}
 function deviceQuery() {
   return "/api/device?model=" + encodeURIComponent(selectedHardwareModel) +
     (selectedDeviceId === null ? "" : "&device_id=" + encodeURIComponent(selectedDeviceId));
@@ -121,7 +136,7 @@ function scanQuery() { return "/api/wifi-networks?device_id=" + encodeURICompone
 const hardwareMode = () => document.body.dataset.mode === "hardware";
 function updateBusy() {
   renderTestCountdown();
-  for (const id of ["deviceBrightness", "deviceReduced"])
+  for (const id of ["deviceBrightness", "deviceReduced", ...Object.values(stateBrightnessInputs)])
     $(id).disabled = selectionLoading || lightWriting || !selectedDeviceId;
   document.querySelectorAll("[data-device-model]").forEach(button => {
     button.disabled = false;
@@ -258,10 +273,15 @@ async function refreshMaintenance() {
         liveDevice = data.device || {};
         pairedDevice = Boolean(selectedDeviceId);
         if (appearanceRevision === lightRevision && !lightWriting && !lightEditing) {
-          const appearance = data.light_settings || {brightness: 20, reduced: false};
+          const appearance = data.light_settings || {brightness: isYeelight() ? 50 : 20, reduced: false};
           $("deviceBrightness").value = appearance.brightness;
           $("deviceBrightnessValue").textContent = appearance.brightness + "%";
           $("deviceReduced").checked = appearance.reduced;
+          for (const [state, id] of Object.entries(stateBrightnessInputs)) {
+            const value = appearance.state_brightness?.[state] ?? (state === "working" ? 20 : 50);
+            $(id).value = value;
+            $(id + "Value").textContent = value + "%";
+          }
           $("deviceBrightnessNote").hidden = !selectedDeviceId || appearance.brightness !== 0;
         }
         $("deviceLightHint").hidden = Boolean(selectedDeviceId);
@@ -270,10 +290,11 @@ async function refreshMaintenance() {
         $("deviceInstances").append(fresh);
         for (const item of data.devices || []) {
           const option = el("option", item.name + " · " + item.device_id + " · " + (item.online ? "已连接" : "离线"));
-          option.value = item.device_id; $("deviceInstances").append(option);
+          option.dataset.userContent = ""; option.value = item.device_id; $("deviceInstances").append(option);
         }
         $("deviceInstances").value = selectedDeviceId;
-        $("selectedDeviceState").textContent = liveDevice.online ? "此设备已连接，正在同步 AI 状态。" : "此设备尚未连接；其他已连接设备继续同步。";
+        $("selectedDeviceState").textContent = liveDevice.online ? "此设备已连接，正在同步 AI 状态。" : "";
+        $("selectedDeviceState").hidden = !liveDevice.online;
         if (isYeelight() && restoreSelectedPort) { $("yeelightHost").value = data.yeelight_host || ""; restoreSelectedPort = false; }
         if (restoreSelectedPort && data.selected_port && Array.from($("usbPort").options).some(option => option.value === data.selected_port)) {
           $("usbPort").value = data.selected_port; restoreSelectedPort = false;
@@ -330,7 +351,7 @@ function renderWifiScan(data) {
     for (const network of data.networks || []) {
       const option = el("button", network.ssid + " · " + network.signal + " dBm");
       option.type = "button";
-      option.value = network.ssid;
+      option.dataset.userContent = ""; option.value = network.ssid;
       option.setAttribute("role", "option");
       option.onclick = () => { $("wifiSsid").value = network.ssid; closeWifiChoices(); };
       $("wifiNetworks").append(option);
@@ -439,8 +460,9 @@ document.addEventListener("flame-mode", (event) => {
     liveDevice = event.detail.devices.find(item => item.device_id === selectedDeviceId) || {};
     pairedDevice = Boolean(selectedDeviceId);
     for (const count of document.querySelectorAll("[data-model-count]")) {
-      const online = event.detail.devices.filter(item => item.hardware_model === count.dataset.modelCount && item.online).length;
-      count.textContent = online ? online + " 台在线" : "未连接";
+      const devices = event.detail.devices.filter(item => item.hardware_model === count.dataset.modelCount);
+      const online = devices.filter(item => item.online).length;
+      count.textContent = devices.length ? `在线 ${online} · 离线 ${devices.length - online}` : "未添加设备";
       count.dataset.online = String(Boolean(online));
     }
   } else {

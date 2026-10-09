@@ -2,6 +2,7 @@
 import sys
 from PySide6.QtCore import QObject, QTimer, Signal, Qt
 from PySide6.QtWidgets import QSystemTrayIcon
+from .localization import t
 
 
 class SystemNotifications:
@@ -80,7 +81,8 @@ class NotificationConsumer(QObject):
             def completed(status, item=message):
                 self.receipt.emit({"event_id": item["event_id"], "claim": item["claim"], "status": status})
             try:
-                self.backend.submit(message, completed)
+                localized = {**message, **{key: t(message[key]) for key in ("title", "body") if key in message}}
+                self.backend.submit(localized, completed)
             except Exception:
                 completed("failed")
 

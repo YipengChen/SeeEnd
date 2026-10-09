@@ -11,11 +11,7 @@
       <header>
         <div class="brand-block">
         <div class="brand">
-          <svg viewBox="0 0 30 40" aria-hidden="true">
-            <path
-              d="M17 0C20 11 6 13 7 23C2 18 3 14 3 14C-5 30 5 40 15 40C30 40 35 24 22 14C23 24 15 25 16 18C20 9 20 5 17 0Z"
-            /></svg
-          >SeeEnd <span class="version" id="appVersion">DESKTOP</span>
+          SeeEnd <span class="version" id="appVersion">DESKTOP</span>
         </div>
         <div class="brand-tagline">让完成，被看见</div>
         </div>
@@ -23,7 +19,7 @@
           <a class="btn" href="/tuning">火焰调参</a>
           <span class="badge" id="deviceBadge">正在读取模式</span>
         </div>
-      </header>
+      <label class="language-switch">中文 / English <select id="languageChoice" aria-label="界面语言 / Language"><option value="zh-CN">中文</option><option value="en">English</option></select></label></header>
       <nav class="tabs" aria-label="主要功能">
         <button class="tab active" data-tab="home">灯光与任务</button
         ><button class="tab" data-tab="device">我的设备</button
@@ -37,8 +33,8 @@
         <section class="card mode-card" aria-label="运行模式">
           <div class="title">运行模式 <span class="tag">自动记住选择</span></div>
           <div class="mode-options">
-            <button class="btn" data-mode="virtual" aria-pressed="false" disabled>虚拟模式</button>
-            <button class="btn" data-mode="hardware" aria-pressed="false" disabled>硬件模式</button>
+            <button class="btn" data-mode="virtual" aria-pressed="false" disabled>虚拟提示</button>
+            <button class="btn" data-mode="hardware" aria-pressed="false" disabled>硬件提示</button>
           </div>
           <p id="modeHint" class="muted">屏幕烛火随任务变化，无需连接设备。</p>
         </section>
@@ -61,7 +57,7 @@
             <h2 id="displayTitle">准备连接</h2>
             <p id="displayHint">正在连接本地 Hub</p>
             <div class="stats">
-              <span><b id="active">0</b>进行中</span
+              <span><b id="active">0</b>任务进行中</span
               ><span><b id="queued">0</b>待提示</span>
             </div>
             <div class="scene-bottom" id="sceneKind">实时任务 · 屏幕提醒</div>
@@ -73,11 +69,11 @@
               </div>
               <div class="testgrid">
                 <button class="test" data-state="idle">
-                  <span>○</span>待机</button
+                  <span>○</span>当前无任务</button
                 ><button class="test" data-state="working">
-                  <span>◌</span>工作中</button
+                  <span>◌</span>任务进行中</button
                 ><button class="test" data-state="done">
-                  <span>✦</span>已完成</button
+                  <span>✦</span>任务已完成</button
                 ><button class="test" data-state="error">
                   <span>∿</span>失败提示
                 </button>
@@ -87,7 +83,7 @@
                   <div style="font-size: 11px; margin-bottom: 5px">
                     体验一次完整等待
                   </div>
-                  <div class="muted">10 秒灯效演示 · 工作中 5 秒 → 已完成 5 秒</div>
+                  <div class="muted">10 秒灯效演示 · 任务进行中 5 秒 → 任务已完成 5 秒</div>
                   <div class="muted" id="overviewCountdown" hidden></div>
                 </div>
                 <button class="btn primary" id="demo">开始演示 ↗</button>
@@ -206,12 +202,28 @@
           <h1>选择你的设备</h1>
           <p class="sub">选择型号，添加或管理设备。已连接的设备会同步 AI 任务状态。</p>
           <div class="device-model-grid">
+            <button class="device-model-card" data-device-model="yeelight-yltd003" data-name="Yeelight 屏幕挂灯 Pro" data-size="RGB 背光 · Wi-Fi 局域网" data-light-hint="仅控制 RGB 背光；每台灯具的任务提醒颜色与亮度独立保存，待机或静默时熄灭背光。前方照明沿用灯具设置。">
+              <span class="device-model-image" data-kind="rgb"><img src="/device-icons/yeelight-yltd003.svg" alt="Yeelight 屏幕挂灯与彩色背光" width="96" height="112" /></span>
+              <span class="device-model-info">
+                <span class="device-model-brand">YEELIGHT</span><strong>Yeelight 屏幕挂灯 Pro</strong>
+                <span class="device-model-detail">YLTD003 · RGB 背光</span><span class="device-model-connection">Wi-Fi 局域网</span>
+                <span class="device-model-footer"><span class="device-model-count" data-model-count="yeelight-yltd003">未添加设备</span><span class="device-model-arrow" aria-hidden="true">→</span></span>
+              </span>
+            </button>
+            <button class="device-model-card" data-device-model="yeelight-yldp005" data-name="Yeelight W3 彩色灯泡" data-size="W3 彩色灯泡 · RGB · Wi-Fi 局域网" data-light-hint="整颗灯泡用于任务提醒；每台灯具的任务提醒颜色与亮度独立保存，待机或静默时熄灭灯泡。">
+              <span class="device-model-image" data-kind="rgb"><img src="/device-icons/yeelight-yldp005.svg" alt="Yeelight W3 彩色智能灯泡" width="96" height="112" /></span>
+              <span class="device-model-info">
+                <span class="device-model-brand">YEELIGHT</span><strong>Yeelight W3 彩色灯泡</strong>
+                <span class="device-model-detail">YLDP005 · RGB</span><span class="device-model-connection">Wi-Fi 局域网</span>
+                <span class="device-model-footer"><span class="device-model-count" data-model-count="yeelight-yldp005">未添加设备</span><span class="device-model-arrow" aria-hidden="true">→</span></span>
+              </span>
+            </button>
             <button class="device-model-card" data-device-model="ai-flame-v01" data-name="AI Flame 0.1" data-size="9 × 16">
               <span class="device-model-image" data-kind="matrix"><img src="/device-icons/ai-flame-v01.svg" alt="9列16行暖黄色 LED 灯板" width="96" height="112" /></span>
               <span class="device-model-info">
                 <span class="device-model-brand">AI FLAME</span><strong>AI Flame 0.1</strong>
                 <span class="device-model-detail">9 × 16 · 暖黄色灯板</span><span class="device-model-connection">USB / Wi-Fi</span>
-                <span class="device-model-footer"><span class="device-model-count" data-model-count="ai-flame-v01">未连接</span><span class="device-model-arrow" aria-hidden="true">→</span></span>
+                <span class="device-model-footer"><span class="device-model-count" data-model-count="ai-flame-v01">未添加设备</span><span class="device-model-arrow" aria-hidden="true">→</span></span>
               </span>
             </button>
             <button class="device-model-card" data-device-model="ai-flame-v02" data-name="AI Flame 0.2" data-size="7 × 15">
@@ -219,23 +231,7 @@
               <span class="device-model-info">
                 <span class="device-model-brand">AI FLAME</span><strong>AI Flame 0.2</strong>
                 <span class="device-model-detail">7 × 15 · 暖黄色灯板</span><span class="device-model-connection">USB / Wi-Fi</span>
-                <span class="device-model-footer"><span class="device-model-count" data-model-count="ai-flame-v02">未连接</span><span class="device-model-arrow" aria-hidden="true">→</span></span>
-              </span>
-            </button>
-            <button class="device-model-card" data-device-model="yeelight-yltd003" data-name="Yeelight YLTD003" data-size="RGB 背光 · Wi-Fi 局域网" data-light-hint="背光：工作中蓝色呼吸，完成绿色，异常 / 待输入橙色。待机或静默时熄灭背光，前方照明沿用灯具设置。">
-              <span class="device-model-image" data-kind="rgb"><img src="/device-icons/yeelight-yltd003.svg" alt="Yeelight 屏幕挂灯与彩色背光" width="96" height="112" /></span>
-              <span class="device-model-info">
-                <span class="device-model-brand">YEELIGHT</span><strong>Yeelight YLTD003</strong>
-                <span class="device-model-detail">屏幕挂灯 Pro · RGB 背光</span><span class="device-model-connection">Wi-Fi 局域网</span>
-                <span class="device-model-footer"><span class="device-model-count" data-model-count="yeelight-yltd003">未连接</span><span class="device-model-arrow" aria-hidden="true">→</span></span>
-              </span>
-            </button>
-            <button class="device-model-card" data-device-model="yeelight-yldp005" data-name="Yeelight YLDP005" data-size="W3 彩色灯泡 · RGB · Wi-Fi 局域网" data-light-hint="灯泡：工作中蓝色呼吸，完成绿色，异常 / 待输入橙色。待机或静默时熄灭灯泡，连接期间整颗灯泡用于任务提醒。">
-              <span class="device-model-image" data-kind="rgb"><img src="/device-icons/yeelight-yldp005.svg" alt="Yeelight W3 彩色智能灯泡" width="96" height="112" /></span>
-              <span class="device-model-info">
-                <span class="device-model-brand">YEELIGHT</span><strong>Yeelight YLDP005</strong>
-                <span class="device-model-detail">W3 彩色灯泡 · RGB</span><span class="device-model-connection">Wi-Fi 局域网</span>
-                <span class="device-model-footer"><span class="device-model-count" data-model-count="yeelight-yldp005">未连接</span><span class="device-model-arrow" aria-hidden="true">→</span></span>
+                <span class="device-model-footer"><span class="device-model-count" data-model-count="ai-flame-v02">未添加设备</span><span class="device-model-arrow" aria-hidden="true">→</span></span>
               </span>
             </button>
           </div>
@@ -250,17 +246,6 @@
           <p class="muted">任务状态通过屏幕烛火呈现，设备查找与连接已关闭。</p>
           <button id="backToModes" class="btn">前往总览切换模式</button>
         </section>
-        <section class="card" id="deviceLightSettings">
-          <div class="title">灯光表现 <span class="tag">仅此设备</span></div>
-          <p class="muted">每台设备独立保存，离线时也可调整。</p>
-          <div class="range">
-            <div class="row"><label for="deviceBrightness">灯光亮度 · 上限 25%</label><span id="deviceBrightnessValue">20%</span></div>
-            <input id="deviceBrightness" type="range" min="0" max="25" value="20" disabled />
-          </div>
-          <label class="check"><input id="deviceReduced" type="checkbox" disabled />减少动态效果</label>
-          <p class="muted" id="deviceBrightnessNote" hidden>亮度为 0%，此设备的灯光提醒已关闭。</p>
-          <p class="muted" id="deviceLightHint">先连接并添加设备，即可设置此设备的灯光表现。</p>
-        </section>
         <div id="hardwareControls" hidden>
         <div class="top">
           <div>
@@ -271,13 +256,12 @@
           <span class="tag" id="deviceModelDimensions">暖黄色灯板 · 9 × 16</span>
         </div>
         <section id="yeelightControls" class="card" hidden>
-          <div class="title">Yeelight 局域网连接</div>
-          <p class="muted" id="yeelightSetup">先在 Yeelight App 中将灯具 接入 2.4 GHz Wi-Fi，并开启「局域网控制」。电脑与灯具需在同一局域网。</p>
+          <div class="title">连接准备</div>
+          <p class="muted" id="yeelightSetup">在 Yeelight APP 中配置灯具，接入2.4 GHz WiFi，开启「局域网控制」。此电脑需与灯具在同一局域网内。</p>
           <button class="btn" id="discoverYeelight" data-maintenance>搜索 YLTD003</button>
           <label>发现的灯具<select id="yeelightDiscovered"><option value="">可搜索，或手动填写 IP</option></select></label>
           <label>灯具 IP 地址<input id="yeelightHost" type="text" placeholder="例如 192.168.1.100" autocomplete="off" /></label>
           <button class="btn primary" id="connectYeelight" data-maintenance>连接灯具</button>
-          <p class="muted" id="yeelightLightHint">背光：工作中蓝色呼吸，完成绿色，异常 / 待输入橙色。待机或静默时熄灭背光，前方照明沿用灯具设置。</p>
         </section>
         <div class="device-grid">
           <section class="card">
@@ -355,6 +339,27 @@
               仅通过 USB 保存网络配置，不重装灯光程序。首次使用请先在设备维护中安装灯光程序。
             </p>
           </section>
+        </div>
+        </div>
+        <section class="card" id="deviceLightSettings">
+          <div class="title" id="deviceLightTitle">灯光表现 <span class="tag">仅此设备</span></div>
+          <div class="range" id="deviceBrightnessRow">
+            <div class="row"><label for="deviceBrightness" id="deviceBrightnessLabel">灯光亮度 · 上限 25%</label><span id="deviceBrightnessValue">20%</span></div>
+            <input id="deviceBrightness" type="range" min="0" max="25" value="20" disabled />
+          </div>
+          <div id="yeelightStateBrightness" hidden>
+            <div class="title">任务提醒颜色与亮度</div>
+            <p class="muted" id="yeelightLightHint">仅控制 RGB 背光；每台灯具的任务提醒颜色与亮度独立保存，待机或静默时熄灭背光。前方照明沿用灯具设置。</p>
+            <div class="range"><div class="row"><label for="yeelightWorkingBrightness">任务进行中亮度</label><span id="yeelightWorkingBrightnessValue">20%</span></div><input id="yeelightWorkingBrightness" type="range" min="0" max="100" value="20" disabled /></div>
+            <div class="range"><div class="row"><label for="yeelightDoneBrightness">任务已完成亮度</label><span id="yeelightDoneBrightnessValue">50%</span></div><input id="yeelightDoneBrightness" type="range" min="0" max="100" value="50" disabled /></div>
+            <div class="range"><div class="row"><label for="yeelightErrorBrightness">需关注 / 等待输入亮度</label><span id="yeelightErrorBrightnessValue">50%</span></div><input id="yeelightErrorBrightness" type="range" min="0" max="100" value="50" disabled /></div>
+          </div>
+          <label class="check" id="deviceReducedRow"><input id="deviceReduced" type="checkbox" disabled />减少动态效果</label>
+          <p class="muted" id="deviceBrightnessNote" hidden>亮度为 0%，此设备的灯光提醒已关闭。</p>
+          <p class="muted" id="deviceLightHint">先连接并添加设备，即可设置此设备的灯光表现。</p>
+        </section>
+        <div id="hardwareMaintenanceControls" hidden>
+        <div class="device-grid">
           <section class="card" id="matrixMaintenance">
             <div class="title">
               ③ 设备维护与恢复 <span class="tag">使用 APP 内置文件</span>
@@ -438,6 +443,38 @@
             <button class="btn" data-trigger="local-script">
               测试 HTTP API
             </button>
+          </section>
+          <section class="card">
+            <div class="title">AI 网页共用桥接</div>
+            <p class="muted">仅支持 Chrome 系列浏览器。安装并启用扩展后，点击「连接 Chrome」。</p>
+            <p class="muted">
+              启动本机桥接进程，检查消息帧、网页事件格式与 HTTP
+              通路。支持 ChatGPT、Claude、Gemini、DeepSeek、千问、豆包、元宝、Kimi、智谱清言；
+              真实对话的页面识别与完成提醒需在对应网页中验证。
+            </p>
+            <div class="actions">
+              <button class="btn" data-trigger="chatgpt-web">
+                测试 ChatGPT</button
+              ><button class="btn" data-install="chatgpt-web">
+                安装 / 修复 Chrome 桥接</button
+              ><a class="btn" href="/api/browser-extension/download" download
+                >下载浏览器扩展</a
+              >
+            </div>
+            <p class="muted">
+              下载后解压，在 Chrome 扩展管理页面加载已解压的扩展；再刷新对应 AI
+              网页。升级时重新加载扩展并安装 / 修复桥接。各平台可在「灯光与任务」独立开关。
+            </p>
+            <div class="actions">
+              <button class="btn" data-trigger="gemini-web">测试 Gemini</button>
+              <button class="btn" data-trigger="claude-web">测试 Claude</button>
+              <button class="btn" data-trigger="deepseek-web">测试 DeepSeek</button>
+              <button class="btn" data-trigger="doubao-web">测试豆包</button>
+              <button class="btn" data-trigger="qianwen-web">测试千问</button>
+              <button class="btn" data-trigger="kimi-web">测试 Kimi</button>
+              <button class="btn" data-trigger="yuanbao-web">测试元宝</button>
+              <button class="btn" data-trigger="zhipu-web">测试智谱清言</button>
+            </div>
           </section>
           <section class="card" data-cli="codex">
             <div class="title">Codex</div>
@@ -536,37 +573,6 @@
             </div>
             <p class="muted">事件自测检查模拟事件到设备的通路。真实客户端的状态识别需另行发起对话验证。</p>
           </section>
-          <section class="card">
-            <div class="title">AI 网页共用桥接</div>
-            <p class="muted">
-              启动本机桥接进程，检查消息帧、网页事件格式与 HTTP
-              通路。支持 ChatGPT、Claude、Gemini、DeepSeek、千问、豆包、元宝、Kimi、智谱清言；
-              真实对话的页面识别与完成提醒需在对应网页中验证。
-            </p>
-            <div class="actions">
-              <button class="btn" data-trigger="chatgpt-web">
-                测试 ChatGPT</button
-              ><button class="btn" data-install="chatgpt-web">
-                安装 / 修复 Chrome 桥接</button
-              ><a class="btn" href="/api/browser-extension/download" download
-                >下载浏览器扩展</a
-              >
-            </div>
-            <p class="muted">
-              下载后解压，在 Chrome 扩展管理页面加载已解压的扩展；再刷新对应 AI
-              网页。升级时重新加载扩展并安装 / 修复桥接。各平台可在「灯光与任务」独立开关。
-            </p>
-            <div class="actions">
-              <button class="btn" data-trigger="deepseek-web">测试 DeepSeek</button>
-              <button class="btn" data-trigger="claude-web">测试 Claude</button>
-              <button class="btn" data-trigger="gemini-web">测试 Gemini</button>
-              <button class="btn" data-trigger="qianwen-web">测试千问</button>
-              <button class="btn" data-trigger="doubao-web">测试豆包</button>
-              <button class="btn" data-trigger="yuanbao-web">测试元宝</button>
-              <button class="btn" data-trigger="kimi-web">测试 Kimi</button>
-              <button class="btn" data-trigger="zhipu-web">测试智谱清言</button>
-            </div>
-          </section>
         </div>
         <section class="card test-result">
           <div class="title">
@@ -596,5 +602,5 @@
     </div>
     <script type="module" src="/app.js"></script>
     <script type="module" src="/devices.js"></script>
-  </body>
+  <script type="module" src="/i18n.js"></script></body>
 </html>

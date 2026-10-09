@@ -1,15 +1,17 @@
 # Build on each target OS. Runtime credentials are deliberately excluded.
 from pathlib import Path
 import sys
+import os
 import tomllib
 from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 root = Path(SPECPATH).parent
 version = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
-hidden = collect_submodules("mpremote") + collect_submodules("esptool")
+hidden = collect_submodules("mpremote")
 data = [
     (str(root / "LICENSE"), "."),
     (str(root / "THIRD_PARTY_NOTICES.md"), "."),
+    (str(root / "LIBRARY_REPLACEMENT.md"), "."),
     (str(root / "aiflame/assets"), "aiflame/assets"),
     (str(root / "aiflame/devices/firmware"), "aiflame/devices/firmware"),
     (str(root / "aiflame/devices/wifi_protocol.py"), "aiflame/devices"),
@@ -23,7 +25,8 @@ data = [
     ),
 ]
 data.append((str(root / "aiflame/integrations/cli_tools/opencode_bundle"), "aiflame/integrations/cli_tools/opencode_bundle"))
-data += collect_data_files("esptool")
+data.append((os.environ["SEEEND_ESPTOOL_BUNDLE"], "third_party/esptool"))
+data.append((os.environ["SEEEND_THIRD_PARTY_LICENSES"], "third_party_licenses"))
 a = Analysis(
     [str(root / "app.py")],
     pathex=[str(root)],
@@ -33,6 +36,10 @@ a = Analysis(
     hookspath=[],
     runtime_hooks=[],
     excludes=[
+        "esptool",
+        "readline",
+        "zmq",
+        "IPython",
         "matplotlib",
         "numpy",
         "pandas",
@@ -50,6 +57,9 @@ a = Analysis(
 # Directory data collection must not ship local Python caches or OS metadata.
 a.datas = [entry for entry in a.datas if "__pycache__" not in Path(entry[0]).parts
            and not entry[0].endswith((".pyc", ".pyo", ".DS_Store"))]
+# PDF preview is not used; do not pull QtWebEngine's PDF module into the app.
+a.binaries = [entry for entry in a.binaries
+              if not any(name in Path(entry[0]).name for name in ("libqpdf", "Qt6Pdf"))]
 pyz = PYZ(a.pure)
 exe = EXE(
     pyz,

@@ -16,17 +16,8 @@ from PySide6.QtGui import (
     QRadialGradient,
 )
 from PySide6.QtSvg import QSvgRenderer
-from PySide6.QtWidgets import (
-    QCheckBox,
-    QComboBox,
-    QFrame,
-    QHBoxLayout,
-    QLabel,
-    QPushButton,
-    QSizePolicy,
-    QVBoxLayout,
-    QWidget,
-)
+from PySide6.QtWidgets import QHBoxLayout, QSizePolicy, QVBoxLayout
+from aiflame.desktop.localization import QCheckBox, QComboBox, QFrame, QLabel, QPushButton, QWidget
 
 ICONS = {
     "home": '<rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/>',
@@ -156,10 +147,10 @@ class DeviceModelCard(QPushButton):
             child.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
         self.set_connection_count(0)
 
-    def set_connection_count(self, count):
-        self.connection_count.setText(f"{count} 台在线" if count else "未连接")
-        restyle(self.connection_count, "online", bool(count))
-        self.setAccessibleName(f"选择 {self.model['name']}，{self.model['card_description']}，已连接 {count} 台")
+    def set_connection_count(self, online, offline=0):
+        self.connection_count.setText(f"在线 {online} · 离线 {offline}" if online + offline else "未添加设备")
+        restyle(self.connection_count, "online", bool(online))
+        self.setAccessibleName(f"选择 {self.model['name']}，{self.model['card_description']}，在线 {online} 台，离线 {offline} 台")
 
 
 class Toggle(QCheckBox):

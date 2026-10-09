@@ -11,23 +11,18 @@ COLORS = {"working": 0x4A90E2, "done": 0x52C788, "error": 0xFF9F43}
 
 def light_flow(desired, settings):
     state = desired["state"]
-    brightness = settings["brightness"]
+    color_state = state if state in COLORS else "error"
+    brightness = settings.get("state_brightness", {}).get(color_state, settings["brightness"])
     if state == "idle" or not brightness:
         return None
-    color = COLORS.get(state, COLORS["error"])
-    renewable = (state == "working" and not desired.get("preview")) or desired.get("holding")
+    color = int(settings["colors"][color_state].lstrip("#"), 16) if settings.get("colors", {}).get(color_state) else COLORS[color_state]
+    renewable = (state == "working" and not desired.get("preview") and not desired.get("device_test")) or desired.get("holding")
     duration = 30000 if renewable else max(50, desired["duration_ms"])
-    peak = max(1, min(25, brightness if state != "working" else round(brightness * .6)))
-    if settings["reduced"]:
-        return ([1, 2, f"50,1,{color},{peak}"] if duration < 100 else
-                [2, 2, f"50,1,{color},{peak},{duration - 50},7,0,0"])
-    # Slow breathing; flow count is the number of transitions, not cycles.
-    step = 1500 if state == "working" else 2000 if state == "done" else 900
-    count = max(1, duration // step)
-    step = max(50, duration // count)
-    low = max(1, round(peak * .35))
-    expression = f"{step},1,{color},{peak},{step},1,{color},{low}"
-    return [count, 2, expression]  # action=2 switches the rear light off on expiry.
+    peak = max(1, min(100, brightness))
+    # Use the protocol's minimum transition, then hold the exact target.
+    # Native expiry still turns the light off if the app connection is lost.
+    return ([1, 2, f"50,1,{color},{peak}"] if duration < 100 else
+            [2, 2, f"50,1,{color},{peak},{duration - 50},7,0,0"])
 
 
 class YeelightTransport(threading.Thread):
@@ -57,7 +52,7 @@ class YeelightTransport(threading.Thread):
                 current = self.engine.desired()
                 if (current["key"] != desired["key"] or current["state"] != desired["state"]
                         or current.get("holding", False) != desired.get("holding", False)
-                        or any(self.engine.settings[field] != settings[field] for field in ("brightness", "reduced"))):
+                        or any(self.engine.settings.get(field) != settings.get(field) for field in ("brightness", "reduced", "colors", "state_brightness"))):
                     return None
                 if method in (self.method("start_cf"), self.method("set_scene")):
                     flow = light_flow(current, settings)
@@ -116,9 +111,11 @@ class YeelightTransport(threading.Thread):
                     with self.lock:
                         desired = self.engine.desired().copy()
                         settings = self.engine.settings.copy()
-                    key = (desired["key"], desired["state"], settings["brightness"], settings["reduced"], desired.get("holding", False))
+                    key = (desired["key"], desired["state"], settings["brightness"], settings["reduced"],
+                           tuple(sorted(settings.get("colors", {}).items())),
+                           tuple(sorted(settings.get("state_brightness", {}).items())), desired.get("holding", False))
                     now = time.monotonic()
-                    renewable = (desired["state"] == "working" and not desired.get("preview")) or desired.get("holding")
+                    renewable = (desired["state"] == "working" and not desired.get("preview") and not desired.get("device_test")) or desired.get("holding")
                     if key != signature or (renewable and now >= refresh):
                         response = self.display(desired, settings)
                         if response is None:
@@ -131,7 +128,7 @@ class YeelightTransport(threading.Thread):
                         heartbeat = time.monotonic() + 5
                     elif now >= heartbeat:
                         response = self.command("get_prop", [self.method("power")])
-                        expected_power = "off" if desired["state"] == "idle" else "on"
+                        expected_power = "off" if light_flow(desired, settings) is None else "on"
                         if response["result"] != [expected_power]:
                             signature = None
                         with self.lock:

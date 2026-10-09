@@ -5,6 +5,7 @@ from PySide6.QtGui import QGuiApplication, QIcon, QPainter, QPixmap
 from PySide6.QtSvg import QSvgRenderer
 
 from .components import ICONS
+from .localization import t, set_language
 
 
 def light_status(data):
@@ -31,9 +32,9 @@ def _light_status(data):
         return "quiet", "静默时段"
     state = data["display"]["state"]
     title = {
-        "idle": "待机",
-        "working": "工作中",
-        "done": "已完成",
+        "idle": "当前无任务",
+        "working": "任务进行中",
+        "done": "任务已完成",
         "error": "需关注",
     }.get(state)
     if title and data["display"].get("simulated"):
@@ -142,6 +143,8 @@ class TrayIndicator(QObject):
         if self.closed:
             return
         self.data = data
+        if data:
+            set_language(data["settings"].get("language", "zh-CN"))
         self.refresh_icon()
         self.state_changed.emit(data)
 
@@ -153,6 +156,7 @@ class TrayIndicator(QObject):
         if self.closed:
             return
         state, title = light_status(self.data)
+        title = t(title)
         key = state, self.hints.colorScheme() == Qt.ColorScheme.Dark
         if key != self.icon_key:
             if key not in self.icons:
@@ -161,7 +165,7 @@ class TrayIndicator(QObject):
             self.icon_key = key
         if title != self.title:
             self.tray.setToolTip("SeeEnd · " + title)
-            self.status_action.setText("灯光 · " + title)
+            self.status_action.setText("灯光 · " + light_status(self.data)[1])
             self.title = title
 
     def shutdown(self):

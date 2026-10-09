@@ -10,19 +10,19 @@ import sys
 import time
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from live_client import DashboardClient
+from live_client import DashboardClient, hardware_targets, hardware_applied, requested_devices
+from aiflame.devices.models import DEFAULT_MODEL
 from aiflame.integrations.chatgpt_web.host import WEB_SOURCES
 
 
 def main():
+    device_ids = requested_devices()
     client = DashboardClient()
     call = client.call
 
     original = call("/api/status")
-    assert original["device"]["online"], "Connect the ESP32 first"
-    assert not original["settings"]["paused"] and not original["emergency"], (
-        "Resume the Hub first"
-    )
+    targets = hardware_targets(original, device_ids)
+    print("Physical targets: " + ", ".join(targets), flush=True)
     report = []
     call("/api/settings", {"duration": 3})
     try:
@@ -36,8 +36,9 @@ def main():
                     "Another test interrupted verification"
                 )
                 assert current["state"] != "failed", source + ": " + current["message"]
+                snapshot = call("/api/status")
                 if current["state"] == "succeeded" and any(
-                    e["state"] == "done" and e["status"] == "applied"
+                    e["state"] == "done" and hardware_applied(snapshot, targets, e["id"])
                     for e in current["delivery"]
                 ):
                     break
@@ -46,14 +47,16 @@ def main():
             report.append(
                 {
                     "source": source,
+                    "device_ids": list(targets),
                     "adapter": "passed",
                     "completion_ack": "applied",
-                    "delivery": current["delivery"],
+                    "delivery": [row for row in snapshot["deliveries"] if row["event"] in current["events"]],
                 }
             )
             print(source + ": adapter + hardware completion ACK PASS", flush=True)
             time.sleep(3.3)
-        download = client.download("/api/firmware/download")
+        # This checks the matrix download API even when the connected lamp is Yeelight.
+        download = client.download("/api/firmware/download?model=" + DEFAULT_MODEL)
         assert download.startswith(b"PK")
         print("Firmware download: ZIP PASS", flush=True)
     finally:

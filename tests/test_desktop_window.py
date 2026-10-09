@@ -1,18 +1,17 @@
 """Window restore behavior shared by Dock, tray, and single-instance IPC."""
 
 import os
+from importlib.util import find_spec
 import unittest
 from unittest.mock import Mock, patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-try:
+HAS_QT = find_spec("PySide6") is not None
+if HAS_QT:
     from PySide6.QtCore import QCoreApplication, QEvent, Qt
     from PySide6.QtWidgets import QApplication, QStackedWidget, QWidget
     from aiflame.desktop.window import DesktopWindow, WindowRestorer
-    HAS_QT = True
-except ImportError:
-    HAS_QT = False
 
 
 @unittest.skipUnless(HAS_QT, "Install the desktop extra to test window restoration")
@@ -73,6 +72,18 @@ class WindowTests(unittest.TestCase):
         self.assertEqual(self.window.size(), before)
         self.assertEqual(self.pages.currentIndex(), 2)
         self.activate.assert_called_once()
+
+    def test_reopen_preserves_maximized_window_and_current_page(self):
+        self.window.showMaximized()
+        self.app.processEvents()
+        self.window.close()
+        self.assertTrue(self.window.isHidden())
+        self.restorer.request()
+        self.app.processEvents()
+        self.assertTrue(self.window.isVisible())
+        self.assertTrue(self.window.isMaximized())
+        self.assertFalse(self.window.isFullScreen())
+        self.assertEqual(self.pages.currentIndex(), 2)
 
     def test_maintenance_prevents_close_and_shutdown_cancels_pending_restore(self):
         self.hub.devices.busy.return_value = True

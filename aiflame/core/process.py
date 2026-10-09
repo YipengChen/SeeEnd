@@ -3,14 +3,19 @@
 import os
 import subprocess
 import sys
+from pathlib import Path
 from aiflame.core.paths import PROJECT
 
 
 def command(mode, *args):
+    if mode == "--esptool":
+        if getattr(sys, "frozen", False):
+            root = Path(getattr(sys, "_MEIPASS", Path(sys.executable).parent))
+            tool = root / "third_party/esptool" / ("esptool.exe" if os.name == "nt" else "esptool")
+            return [str(tool)] + list(args)
+        return [sys.executable, "-m", "esptool"] + list(args)
     executable = sys.executable
     if getattr(sys, "frozen", False) and os.name == "nt":
-        from pathlib import Path
-
         executable = str(Path(executable).with_name("SeeEnd Helper.exe"))
     if getattr(sys, "frozen", False):
         prefix = [executable]

@@ -2,6 +2,7 @@
 
 import json
 import os
+from importlib.util import find_spec
 from pathlib import Path
 import tempfile
 import time
@@ -9,16 +10,14 @@ import unittest
 from unittest.mock import Mock, patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-try:
+HAS_QT = find_spec("PySide6") is not None
+if HAS_QT:
     from PySide6.QtCore import QCoreApplication, QEvent, Qt
     from PySide6.QtGui import QAction, QImage
     from PySide6.QtWidgets import QApplication, QSystemTrayIcon
     from aiflame.desktop.tray import TrayIndicator, status_icon
     from aiflame.desktop.widgets import Dashboard
 
-    HAS_QT = True
-except ImportError:
-    HAS_QT = False
 
 from aiflame.core.events import make_event
 from aiflame.hub.server import Hub
@@ -127,10 +126,10 @@ class TrayTests(unittest.TestCase):
         self.wait(lambda: self.indicator.icon_key[0] == "idle")
         with patch.object(self.widget, "render") as render:
             for state, seq, title in (
-                ("working", 1, "工作中"),
-                ("done", 2, "已完成"),
+                ("working", 1, "任务进行中"),
+                ("done", 2, "任务已完成"),
                 ("error", 3, "需关注"),
-                ("idle", 4, "待机"),
+                ("idle", 4, "当前无任务"),
             ):
                 with self.hub.lock:
                     self.hub.engine.clear_prompts("expired")
@@ -186,7 +185,7 @@ class TrayTests(unittest.TestCase):
         with patch.object(self.tray, "setIcon") as change_icon:
             self.refresh("idle")
             change_icon.assert_not_called()
-        self.assertEqual(self.tray.toolTip(), "SeeEnd · 待机")
+        self.assertEqual(self.tray.toolTip(), "SeeEnd · 当前无任务")
 
     def test_adapter_diagnostics_are_labeled_in_tray(self):
         with self.hub.lock:
@@ -258,7 +257,8 @@ class TrayTests(unittest.TestCase):
                 "paused",
                 "off",
                 "quiet",
-                "offline",
+                "unavailable",
+                "maintenance",
             ):
                 rendered = (
                     status_icon(state, dark)

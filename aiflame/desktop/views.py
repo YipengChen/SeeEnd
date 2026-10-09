@@ -1,16 +1,19 @@
 """Native page composition. Operations and state live in Dashboard."""
 
 from PySide6.QtCore import Qt, QTime, QSize
-from PySide6.QtGui import QKeySequence, QShortcut
+from PySide6.QtGui import QColor, QIcon, QPixmap, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QButtonGroup,
-    QCheckBox,
-    QComboBox,
-    QFrame,
     QHBoxLayout,
     QGridLayout,
     QHeaderView,
+    QVBoxLayout,
+)
+from aiflame.desktop.localization import (
+    QCheckBox,
+    QComboBox,
+    QFrame,
     QLineEdit,
     QPlainTextEdit,
     QProgressBar,
@@ -21,7 +24,6 @@ from PySide6.QtWidgets import (
     QStackedWidget,
     QTableWidget,
     QTimeEdit,
-    QVBoxLayout,
     QWidget,
 )
 
@@ -30,7 +32,7 @@ from aiflame.devices.models import MODELS, DEFAULT_MODEL
 from aiflame.devices.base_firmware import BOARD, VERSION as BASE_VERSION
 from aiflame.integrations.registry import SOURCES
 from aiflame.integrations.cli_tools.providers import CLI_SOURCES
-from aiflame.integrations.chatgpt_web.host import WEB_SOURCES
+from aiflame.integrations.chatgpt_web.host import WEB_SOURCES, WEB_URLS
 from aiflame.integrations.desktop_clients.providers import DESKTOP_SOURCES
 from .components import DeviceModelCard, NetworkComboBox, Disclosure, FlameVisual, Toggle, brand_icon, card, icon, label, separator
 
@@ -81,16 +83,14 @@ class DashboardViews:
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
         sidebar = QWidget()
+        self.sidebar = sidebar
         sidebar.setObjectName("sidebar")
         sidebar.setFixedWidth(198)
         rail = QVBoxLayout(sidebar)
         rail.setContentsMargins(18, 30, 18, 22)
         rail.setSpacing(7)
         brand = QHBoxLayout()
-        mark = label()
-        mark.setPixmap(icon("flame", "#c85b2b", 30).pixmap(30, 30))
-        mark.setFixedSize(32, 38)
-        brand.addWidget(mark)
+        brand.setContentsMargins(12, 0, 0, 0)
         brand_copy = QVBoxLayout()
         brand_copy.setSpacing(2)
         brand_copy.addWidget(label("SeeEnd", role="brand"))
@@ -103,8 +103,6 @@ class DashboardViews:
         self.nav_group = QButtonGroup(self)
         self.nav_group.setExclusive(True)
         for index, (title, glyph, *_) in enumerate(PAGES):
-            if index == 5:
-                rail.addStretch(1)
             button = self.button(
                 rail,
                 "  " + title,
@@ -123,9 +121,7 @@ class DashboardViews:
             shortcut = QShortcut(QKeySequence(f"Ctrl+{index + 1}"), self)
             shortcut.activated.connect(lambda i=index: self.navigate(i))
             self.shortcuts.append(shortcut)
-        self.version_label = label(f"v{__version__}", role="tagline")
-        self.version_label.setContentsMargins(14, 7, 0, 0)
-        rail.addWidget(self.version_label)
+        rail.addStretch(1)
         root.addWidget(sidebar)
         main = QWidget()
         column = QVBoxLayout(main)
@@ -134,10 +130,10 @@ class DashboardViews:
         topbar = QWidget()
         topbar.setObjectName("topbar")
         bar = QHBoxLayout(topbar)
-        bar.setContentsMargins(30, 14, 30, 14)
+        bar.setContentsMargins(30, 30, 30, 14)
         self.breadcrumb = label("总览", role="pageTitle")
         self.breadcrumb.setWordWrap(False)
-        bar.addWidget(self.breadcrumb)
+        bar.addWidget(self.breadcrumb, alignment=Qt.AlignmentFlag.AlignTop)
         bar.addStretch()
         self.device_status = QFrame()
         self.device_status.setObjectName("deviceStatus")
@@ -152,17 +148,19 @@ class DashboardViews:
         self.device_connection_icon.hide()
         status.addWidget(self.device_connection_icon)
         bar.addWidget(self.device_status)
+        topbar.hide()
         column.addWidget(topbar)
         self.hardware_notice = QFrame()
         self.hardware_notice.setObjectName("hardwareNotice")
-        warning = QHBoxLayout(self.hardware_notice)
-        warning.setContentsMargins(30, 10, 30, 10)
+        warning = QVBoxLayout(self.hardware_notice)
+        warning.setContentsMargins(12, 12, 12, 12)
+        warning.setSpacing(6)
         self.hardware_notice_text = label("尚未连接设备，硬件灯光暂不可用。")
-        warning.addWidget(self.hardware_notice_text, 1)
+        warning.addWidget(self.hardware_notice_text)
         self.hardware_notice_action = self.button(
             warning, "连接设备", lambda: self.navigate(1), variant="quiet"
         )
-        column.addWidget(self.hardware_notice)
+        rail.addWidget(self.hardware_notice)
         self.hardware_notice.hide()
         self.tabs = QStackedWidget()
         column.addWidget(self.tabs, 1)
@@ -184,7 +182,8 @@ class DashboardViews:
             layout.setContentsMargins(30, 26, 30, 26)
             layout.setSpacing(18)
             builder(layout)
-            layout.addStretch()
+            if builder != self.home:
+                layout.addStretch()
             scroll.setWidget(widget)
             self.tabs.addWidget(scroll)
         self.statusbar = QWidget()
@@ -223,7 +222,9 @@ class DashboardViews:
 
     def home(self, layout):
         mode_card = card(layout)
-        mode_card.setContentsMargins(18, 14, 18, 14)
+        mode_card.setContentsMargins(22, 20, 22, 20)
+        mode_card.setSpacing(14)
+        mode_card.parentWidget().setMinimumHeight(176)
         heading = QHBoxLayout()
         heading.addWidget(label("运行模式", role="title"))
         heading.addStretch()
@@ -234,8 +235,8 @@ class DashboardViews:
         self.mode_group.setExclusive(True)
         self.mode_buttons = {}
         for mode, title, glyph in (
-            ("virtual", "虚拟模式", "flame"),
-            ("hardware", "硬件模式", "device"),
+            ("virtual", "虚拟提示", "flame"),
+            ("hardware", "硬件提示", "device"),
         ):
             button = self.button(
                 choices, title, lambda m=mode: self.choose_mode(m),
@@ -261,57 +262,41 @@ class DashboardViews:
         self.notice_box.hide()
         top = QVBoxLayout()
         top.setSpacing(18)
-        layout.addLayout(top)
+        layout.addLayout(top, 1)
         scene = card(top, name="scene")
         scene.setSpacing(10)
         self.home_top = top
         self.scene_frame = scene.parentWidget()
+        self.scene_frame.setMinimumHeight(500)
         scene.parentWidget().setMinimumWidth(300)
         top.setStretch(0, 6)
         scene_header = QHBoxLayout()
         self.scene_title = label("虚拟烛火", role="title")
         scene_header.addWidget(self.scene_title)
         scene_header.addStretch()
-        self.scene_badge = label("实时状态", role="badge")
-        scene_header.addWidget(self.scene_badge)
         scene.addLayout(scene_header)
         self.flame = FlameVisual()
         scene.addWidget(self.flame, 1)
-        self.display_title = label("待机")
+        self.display_title = label("当前无任务")
         self.display_title.setStyleSheet("font-size: 24px; font-weight: 500;")
         self.display_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         scene.addWidget(self.display_title)
         self.display_hint = label("", True)
         self.display_hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
         scene.addWidget(self.display_hint)
-        preview = QVBoxLayout()
-        preview.setSpacing(6)
-        preview_action = QHBoxLayout()
-        preview_action.addStretch()
+        preview = QHBoxLayout()
+        preview.addStretch()
+        self.preview_caption = label("", True)
+        preview.addWidget(self.preview_caption)
+        self.preview_caption.hide()
         self.preview_button = self.button(
-            preview_action,
+            preview,
             "灯效演示",
             self.start_preview,
             variant="scene",
             glyph="play",
         )
-        preview_action.addStretch()
-        preview.addLayout(preview_action)
-        self.preview_caption = label("", True)
-        self.preview_caption.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        preview.addWidget(self.preview_caption)
-        self.preview_caption.hide()
         scene.addLayout(preview)
-        scene.addSpacing(4)
-        stats = QHBoxLayout()
-        self.counts = label("进行中  0    /    待提醒  0", True)
-        self.counts.setWordWrap(False)
-        stats.addWidget(self.counts)
-        stats.addStretch()
-        self.delivery = label("等待连接", True)
-        self.delivery.setWordWrap(False)
-        stats.addWidget(self.delivery)
-        scene.addLayout(stats)
         aside = QVBoxLayout()
         aside.setSpacing(14)
         top.addLayout(aside, 5)
@@ -324,24 +309,37 @@ class DashboardViews:
         )
         self.home_sources_button.setAccessibleName("应用接入")
         self.home_sources_row = QWidget()
-        source_icons = QHBoxLayout(self.home_sources_row)
-        source_icons.setContentsMargins(0, 0, 0, 0)
-        source_icons.setSpacing(6)
+        source_groups = QVBoxLayout(self.home_sources_row)
+        source_groups.setContentsMargins(0, 0, 0, 0)
+        source_groups.setSpacing(10)
+        source_groups.setAlignment(Qt.AlignmentFlag.AlignTop)
         self.home_source_icons = {}
-        brands = {"codex": "Codex", **CLI_SOURCES, **{
-            source.removesuffix("-web"): name for source, name in WEB_SOURCES.items()
-        }}
-        for brand, name in brands.items():
-            button = self.button(
-                source_icons, "", lambda: self.navigate(2), variant="brand",
-            )
-            button.setIcon(brand_icon(brand))
-            button.setIconSize(QSize(24, 24))
-            button.setFixedSize(32, 32)
-            button.setAccessibleName(name + " · 查看应用接入")
-            button.hide()
-            self.home_source_icons[brand] = button
-        source_icons.addStretch()
+        self.home_source_groups = {}
+        categories = (
+            ("网页应用", WEB_SOURCES),
+            ("编程工具", {"codex": "Codex", **CLI_SOURCES}),
+            ("桌面客户端", DESKTOP_SOURCES),
+        )
+        for title, sources in categories:
+            group = QWidget()
+            group_layout = QVBoxLayout(group)
+            group_layout.setContentsMargins(0, 0, 0, 0)
+            group_layout.setSpacing(3)
+            group_layout.addWidget(label(title, True))
+            source_icons = QHBoxLayout()
+            source_icons.setSpacing(6)
+            for source, name in sources.items():
+                button = self.button(source_icons, "", lambda s=source: self.open_web_app(s) if s in WEB_URLS else self.navigate(2), variant="brand")
+                button.setIcon(brand_icon(source))
+                button.setIconSize(QSize(24, 24))
+                button.setFixedSize(32, 32)
+                button.setAccessibleName(title + " · " + name + (" · 打开网页" if source in WEB_URLS else " · 查看应用接入"))
+                button.hide()
+                self.home_source_icons[source] = button
+            source_icons.addStretch()
+            group_layout.addLayout(source_icons)
+            source_groups.addWidget(group)
+            self.home_source_groups[title] = (group, tuple(sources))
         quick.addWidget(self.home_sources_row)
         self.home_sources_empty = label("尚未开启应用接入", True)
         quick.addWidget(self.home_sources_empty)
@@ -349,6 +347,9 @@ class DashboardViews:
         self.home_sources_empty.hide()
         recent = card(aside)
         self.recent_frame = recent.parentWidget()
+        self.recent_frame.setMinimumHeight(360)
+        aside.setStretch(1, 1)
+        recent.setSpacing(8)
         heading = QHBoxLayout()
         heading.addWidget(label("最近动态", role="title"))
         heading.addStretch()
@@ -360,18 +361,30 @@ class DashboardViews:
         self.recent_empty = label("暂无记录", True)
         recent.addWidget(self.recent_empty)
         self.recent_rows = []
-        for _ in range(3):
-            row = QVBoxLayout()
+        self.recent_row_frames = []
+        self.recent_list = QVBoxLayout()
+        self.recent_list.setSpacing(0)
+        self.recent_gaps = []
+        recent.addLayout(self.recent_list, 1)
+        for index in range(4):
+            frame = QFrame()
+            frame.setObjectName("recentEvent")
+            frame.setProperty("last", index == 3)
+            frame.setFixedHeight(58)
+            row = QVBoxLayout(frame)
+            row.setContentsMargins(0, 6, 0, 8)
             row.setSpacing(4)
             summary = QHBoxLayout()
             outcome = QHBoxLayout()
             when, source, state, result = (
                 label("", True),
-                label(),
-                label(),
+                label("", role="recentSource"),
+                label("", role="recentState"),
                 label("", True),
             )
-            when.setWordWrap(False)
+            for item in (when, source, state, result):
+                item.setWordWrap(False)
+            result.setAlignment(Qt.AlignmentFlag.AlignRight)
             summary.addWidget(source, 1)
             summary.addWidget(when)
             outcome.addWidget(state)
@@ -379,9 +392,14 @@ class DashboardViews:
             outcome.addWidget(result)
             row.addLayout(summary)
             row.addLayout(outcome)
-            recent.addLayout(row)
+            self.recent_list.addWidget(frame)
+            self.recent_row_frames.append(frame)
             self.recent_rows.append((when, source, state, result))
-        aside.addStretch()
+            if index < 3:
+                self.recent_list.addSpacing(8)
+                gap_index = self.recent_list.count() - 1
+                self.recent_gaps.append((gap_index, self.recent_list.itemAt(gap_index).spacerItem()))
+        self.recent_list.addStretch()
 
     def devices(self, layout):
         self.device_view_epoch = 0
@@ -411,44 +429,39 @@ class DashboardViews:
         layout.addWidget(self.device_selector)
         self.device_details = QWidget()
         details = QVBoxLayout(self.device_details)
+        self.device_details_layout = details
+        self.yeelight_layout_active = False
         details.setContentsMargins(0, 0, 0, 0)
         details.setSpacing(18)
         heading = QHBoxLayout()
         self.device_back_button = self.button(heading, "← 选择其他设备", self.show_device_selector, variant="quiet")
         heading.addStretch()
         details.addLayout(heading)
+        model_heading = QHBoxLayout()
+        model_heading.setSpacing(16)
         self.device_model_title = label("AI Flame 0.1", role="pageTitle")
-        details.addWidget(self.device_model_title)
+        self.device_model_title.setWordWrap(False)
+        model_heading.addWidget(self.device_model_title)
         self.device_model_description = label("9 × 16 LED · USB / Wi-Fi", True)
-        details.addWidget(self.device_model_description)
-        instance_row = QHBoxLayout()
-        instance_row.addWidget(label("配置设备"))
+        self.device_model_description.setWordWrap(False)
+        model_heading.addWidget(self.device_model_description)
+        model_heading.addStretch()
+        details.addLayout(model_heading)
+        self.device_instance_panel = QWidget()
+        instance_row = QHBoxLayout(self.device_instance_panel)
+        instance_row.setContentsMargins(0, 0, 0, 0)
         self.device_instances = QComboBox()
         self.device_instances.setAccessibleName("选择具体设备或添加同型号设备")
         self.device_instances.addItem("添加此型号设备…", "")
         self.device_instances.currentIndexChanged.connect(self.choose_device_instance)
         instance_row.addWidget(self.device_instances, 1)
-        details.addLayout(instance_row)
+        details.addWidget(self.device_instance_panel)
         self.build_device_details(details)
         layout.addWidget(self.device_details)
         self.device_details.hide()
 
     def build_device_details(self, layout):
-        light = card(layout, "灯光表现", "仅作用于当前设备，离线时也可保存。")
-        self.brightness, self.brightness_value = self.brightness_row(light)
-        self.brightness.setToolTip("亮度上限 25%；设为 0% 只关闭此设备的提醒。")
-        self.brightness_note = label("亮度为 0%，此设备的灯光提醒已关闭。", True)
-        light.addWidget(self.brightness_note)
-        self.brightness_note.hide()
-        row = QHBoxLayout()
-        row.addWidget(label("减少动态效果", role="title"), 1)
-        self.device_reduced = Toggle()
-        self.device_reduced.setAccessibleName("此设备减少动态效果")
-        self.device_reduced.toggled.connect(lambda value: self.device_light_setting("reduced", value))
-        row.addWidget(self.device_reduced)
-        light.addLayout(row)
-        self.device_light_hint = label("先连接并添加设备，即可设置此设备的灯光表现。", True)
-        light.addWidget(self.device_light_hint)
+        details = layout
         virtual = card(layout, "当前使用虚拟模式", "任务状态通过屏幕烛火呈现，设备查找与连接已关闭。")
         self.virtual_device_card = virtual.parentWidget()
         self.button(virtual, "前往总览切换模式", lambda: self.navigate(0), variant="primary")
@@ -458,29 +471,40 @@ class DashboardViews:
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(18)
         self.hardware_controls.hide()
-        self.device_empty_notice = label("未连接设备，可先使用屏幕提醒。", True)
-        layout.addWidget(self.device_empty_notice)
         top = QVBoxLayout()
         top.setSpacing(18)
+        self.device_connections_layout = top
         layout.addLayout(top)
-        yeelight = card(top, "Yeelight 局域网连接", "先在 Yeelight App 中接入 2.4 GHz Wi-Fi，开启「局域网控制」，电脑与灯具需在同一局域网。")
+        yeelight = card(top, "连接准备", "在 Yeelight APP 中配置灯具，接入2.4 GHz WiFi，开启「局域网控制」。此电脑需与灯具在同一局域网内。")
         self.yeelight_card = yeelight.parentWidget()
+        yeelight.setAlignment(Qt.AlignmentFlag.AlignTop)
+        self.yeelight_history_layout = QVBoxLayout()
+        self.yeelight_history_layout.setSpacing(12)
+        yeelight.addLayout(self.yeelight_history_layout)
+        self.yeelight_history_heading = QWidget()
+        history_heading = QHBoxLayout(self.yeelight_history_heading)
+        history_heading.setContentsMargins(0, 0, 0, 0)
+        history_heading.addWidget(label("连接设备", role="title"))
+        history_heading.addStretch()
+        self.yeelight_history_layout.addWidget(self.yeelight_history_heading)
+        add = card(yeelight, subtitle="先搜索局域网中的灯具；未找到时，可以手动输入 IP 地址。")
+        self.yeelight_add_panel = add.parentWidget()
         row = QHBoxLayout()
-        yeelight.addLayout(row)
+        add.addLayout(row)
         self.yeelight_discover_button = self.button(row, "搜索 YLTD003", lambda: self.device_action("discover"), self.maintenance_buttons)
         self.yeelight_choices = QComboBox()
         self.yeelight_choices.setAccessibleName("搜索到的 Yeelight 灯具")
-        self.yeelight_choices.addItem("可搜索，或手动填写 IP", "")
+        self.yeelight_choices.addItem("搜索后选择灯具…", "")
         self.yeelight_choices.currentIndexChanged.connect(self.choose_yeelight_address)
         row.addWidget(self.yeelight_choices, 1)
         self.yeelight_host = QLineEdit()
         self.yeelight_host.setPlaceholderText("灯具 IP，例如 192.168.1.100")
         self.yeelight_host.setAccessibleName("Yeelight 灯具 IP 地址")
         self.yeelight_host.textChanged.connect(lambda _: self.update_busy())
-        yeelight.addWidget(self.yeelight_host)
-        self.yeelight_connect_button = self.button(yeelight, "连接灯具", lambda: self.device_action("connect", transport="yeelight", host=self.yeelight_host.text().strip()), self.maintenance_buttons, "primary")
-        self.yeelight_light_hint = label("", True)
-        yeelight.addWidget(self.yeelight_light_hint)
+        ip_row = QHBoxLayout()
+        ip_row.addWidget(self.yeelight_host, 1)
+        add.addLayout(ip_row)
+        self.yeelight_connect_button = self.button(ip_row, "添加并连接", lambda: self.device_action("connect", transport="yeelight", host=self.yeelight_host.text().strip()), self.maintenance_buttons, "primary")
         self.yeelight_card.hide()
         connection = card(top, "USB 连接")
         self.matrix_connection_card = connection.parentWidget()
@@ -508,7 +532,9 @@ class DashboardViews:
         self.usb_connect_button = button
         self.pairing = label("正在读取设备信息…", True)
         connection.addWidget(self.pairing)
-        progress = card(top, "设备状态")
+        progress = card(top)
+        self.device_status_layout = progress
+        self.device_status_card = progress.parentWidget()
         top.removeWidget(progress.parentWidget())
         top.insertWidget(0, progress.parentWidget())
         self.device_summary = label("正在检查设备", role="title")
@@ -522,16 +548,22 @@ class DashboardViews:
         progress.addLayout(summary)
         self.device_version = label("连接后读取固件版本", True)
         progress.addWidget(self.device_version)
+        self.device_job_feedback = QWidget()
+        feedback = QVBoxLayout(self.device_job_feedback)
+        feedback.setContentsMargins(0, 0, 0, 0)
         self.job_message = label("", True)
         self.job_message.hide()
-        progress.addWidget(self.job_message)
+        feedback.addWidget(self.job_message)
         self.progress = QProgressBar()
         self.progress.setTextVisible(False)
         self.progress.setAccessibleName("设备操作进度")
-        progress.addWidget(self.progress)
+        feedback.addWidget(self.progress)
+        progress.addWidget(self.device_job_feedback)
         self.progress.hide()
         device_actions = QHBoxLayout()
         progress.addLayout(device_actions)
+        self.yeelight_reconnect_button = self.button(device_actions, "连接此设备", lambda: self.device_action("connect", transport="yeelight", host=self.yeelight_host.text().strip()), self.maintenance_buttons, "primary")
+        self.yeelight_reconnect_button.hide()
         self.try_light_button = self.button(
             device_actions,
             "试亮此设备",
@@ -540,6 +572,8 @@ class DashboardViews:
             "primary",
         )
         self.disconnect_button = self.button(device_actions, "断开此设备", lambda: self.device_action("disconnect"), self.maintenance_buttons)
+        self.yeelight_delete_button = self.button(device_actions, "删除此设备", self.delete_current_device, self.maintenance_buttons)
+        self.yeelight_delete_button.hide()
         self.device_test_caption = label("", True)
         device_actions.addWidget(self.device_test_caption)
         self.device_test_caption.hide()
@@ -621,6 +655,108 @@ class DashboardViews:
         form.addWidget(
             label("通过 USB 仅保存网络配置，灯光程序保持不变。首次使用请先在设备维护中安装灯光程序。", True)
         )
+        layout = details
+        light = card(layout)
+        self.device_light_title = label("灯光表现", role="title")
+        light.addWidget(self.device_light_title)
+        self.device_brightness_panel = QWidget()
+        brightness_layout = QVBoxLayout(self.device_brightness_panel)
+        brightness_layout.setContentsMargins(0, 0, 0, 0)
+        self.brightness, self.brightness_value = self.brightness_row(brightness_layout)
+        light.addWidget(self.device_brightness_panel)
+        self.brightness.setToolTip("亮度上限 25%；设为 0% 只关闭此设备的提醒。")
+        self.brightness_note = label("亮度为 0%，此设备的灯光提醒已关闭。", True)
+        light.addWidget(self.brightness_note)
+        self.brightness_note.hide()
+        self.device_reduced_panel = QWidget()
+        row = QHBoxLayout(self.device_reduced_panel)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.addWidget(label("减少动态效果", role="title"), 1)
+        self.device_reduced = Toggle()
+        self.device_reduced.setAccessibleName("此设备减少动态效果")
+        self.device_reduced.toggled.connect(lambda value: self.device_light_setting("reduced", value))
+        row.addWidget(self.device_reduced)
+        light.addWidget(self.device_reduced_panel)
+        self.device_light_hint = label("先连接并添加设备，即可设置此设备的灯光表现。", True)
+        light.addWidget(self.device_light_hint)
+        self.yeelight_colors_panel = QWidget()
+        colors = QVBoxLayout(self.yeelight_colors_panel)
+        colors.setContentsMargins(0, 0, 0, 0)
+        colors.setSpacing(18)
+        heading = QHBoxLayout()
+        heading.setSpacing(16)
+        heading.addWidget(label("任务提醒颜色与亮度", role="title"), 0, Qt.AlignmentFlag.AlignVCenter)
+        heading.addStretch()
+        self.yeelight_color_reset = self.button(heading, "恢复默认颜色与亮度", self.reset_yeelight_colors)
+        self.yeelight_color_reset.setObjectName("yeelightReset")
+        header = QVBoxLayout()
+        header.setSpacing(4)
+        header.addLayout(heading)
+        self.yeelight_light_hint = label("", True)
+        header.addWidget(self.yeelight_light_hint)
+        header.addSpacing(6)
+        colors.addLayout(header)
+        self.yeelight_color_choices = {}
+        self.yeelight_color_buttons = {}
+        self.yeelight_brightness_controls = {}
+        self.yeelight_brightness_labels = {}
+        palette = (("天空蓝", "#4A90E2"), ("薄荷绿", "#52C788"), ("琥珀橙", "#FF9F43"),
+                   ("珊瑚红", "#FF6B6B"), ("玫瑰粉", "#FF72B6"), ("薰衣草紫", "#A78BFA"),
+                   ("靛蓝", "#6366F1"), ("湖水青", "#22D3EE"), ("柠檬黄", "#FACC15"), ("暖白", "#FFE7C2"))
+        for number, (state, title) in enumerate((("working", "任务进行中"), ("done", "任务已完成"), ("error", "需关注 / 等待输入"))):
+            if number:
+                separator(colors)
+            section = QVBoxLayout()
+            section.setSpacing(10)
+            section.addWidget(label(title, role="lightStateTitle"))
+            fields = QGridLayout()
+            fields.setHorizontalSpacing(14)
+            fields.setVerticalSpacing(8)
+            fields.setColumnMinimumWidth(0, 40)
+            fields.setColumnStretch(1, 1)
+            fields.setColumnMinimumWidth(2, 96)
+            fields.addWidget(label("颜色", True), 0, 0)
+            choice = QComboBox()
+            choice.setObjectName("yeelightColorChoice")
+            choice.setFixedHeight(36)
+            choice.setAccessibleName(title + "颜色")
+            for name, value in palette:
+                swatch = QPixmap(16, 16)
+                swatch.fill(QColor(value))
+                choice.addItem(name + " · " + value, value)
+                choice.setItemIcon(choice.count() - 1, QIcon(swatch))
+            choice.currentIndexChanged.connect(lambda _, key=state: self.yeelight_color_changed(key))
+            fields.addWidget(choice, 0, 1)
+            self.yeelight_color_choices[state] = choice
+            color_row = QHBoxLayout()
+            button = self.button(color_row, "自定义…", lambda key=state: self.choose_yeelight_color(key))
+            button.setObjectName("yeelightColorCustom")
+            button.setFixedSize(96, 36)
+            self.yeelight_color_buttons[state] = button
+            fields.addLayout(color_row, 0, 2)
+            fields.addWidget(label("亮度", True), 1, 0)
+            control = QSlider(Qt.Orientation.Horizontal)
+            control.setRange(0, 100)
+            control.setValue(20 if state == "working" else 50)
+            control.setAccessibleName(title + "亮度")
+            value_label = label(f"{control.value()}%", role="lightValue")
+            value_label.setFixedWidth(40)
+            value_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+            control.valueChanged.connect(lambda value, key=state: self.yeelight_brightness_changed(key, value))
+            fields.addWidget(control, 1, 1)
+            fields.addWidget(value_label, 1, 2, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+            self.yeelight_brightness_controls[state] = control
+            self.yeelight_brightness_labels[state] = value_label
+            section.addLayout(fields)
+            colors.addLayout(section)
+        light.addWidget(self.yeelight_colors_panel)
+        self.yeelight_colors_panel.hide()
+        self.hardware_maintenance_controls = QWidget()
+        layout.addWidget(self.hardware_maintenance_controls)
+        layout = QVBoxLayout(self.hardware_maintenance_controls)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(18)
+        self.hardware_maintenance_controls.hide()
         maintenance = card(layout)
         self.matrix_maintenance_card = maintenance.parentWidget()
         advanced = Disclosure("设备维护与恢复", maintenance)
@@ -674,15 +810,26 @@ class DashboardViews:
         name = short_name or policy.name.replace("（实验）", "").replace(
             " 任务状态", ""
         )
-        mark = label()
-        mark.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        if source in WEB_URLS:
+            mark = self.button(row, "", lambda s=source: self.open_web_app(s), variant="brand")
+            mark.setIcon(brand_icon(source))
+            mark.setIconSize(QSize(30, 30))
+            mark.setAccessibleName(name + " · 打开网页")
+            mark.setToolTip(WEB_URLS[source])
+        else:
+            mark = label()
+            mark.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            mark.setPixmap(brand_icon(source).pixmap(30, 30))
+            mark.setAccessibleName(name + " 图标")
+            row.addWidget(mark)
         mark.setFixedSize(36, 36)
-        mark.setPixmap(brand_icon(source).pixmap(30, 30))
-        mark.setAccessibleName(name + " 图标")
-        row.addWidget(mark)
         copy = QVBoxLayout()
         copy.setSpacing(3)
-        copy.addWidget(label(name, role="title"))
+        if source in WEB_URLS:
+            title = self.button(copy, name, lambda s=source: self.open_web_app(s), variant="webSourceTitle")
+            title.setToolTip(WEB_URLS[source])
+        else:
+            copy.addWidget(label(name, role="title"))
         status = label("等待同步", True)
         self.source_status[source] = status
         copy.addWidget(status)
@@ -699,11 +846,43 @@ class DashboardViews:
     def sources(self, layout):
         sources = card(layout)
         sources.setSpacing(8)
-        sources.addWidget(label("编程工具", role="sectionTitle"))
-        sources.addWidget(label("① 连接　→　② 在工具中发一条新任务　→　③ 检查\n自动备份并保留原配置；工具提示信任时，确认后再发任务。", True))
         self.integration_guides, self.integration_plans, self.integration_copy_buttons = {}, {}, {}
         self.integration_connect_buttons = {}
         self.cli_messages, self.cli_config_dirs, self.cli_profiles = {}, {}, {}
+        row = QHBoxLayout()
+        row.setContentsMargins(0, 0, 0, 0)
+        row.addWidget(label("网页应用", role="sectionTitle"))
+        row.addStretch()
+        actions_column = QVBoxLayout()
+        actions_column.setContentsMargins(0, 4, 0, 0)
+        actions = QHBoxLayout()
+        actions.setContentsMargins(0, 0, 0, 0)
+        actions_column.addLayout(actions)
+        row.addLayout(actions_column)
+        self.button(
+            actions,
+            "下载浏览器扩展",
+            lambda: self.download(
+                "/api/browser-extension/download", "SeeEnd-Web-extension.zip"
+            ),
+        )
+        self.button(
+            actions,
+            "连接 Chrome",
+            lambda: self.install_integration("chatgpt-web"),
+            self.source_action_buttons,
+        )
+        sources.addLayout(row)
+        sources.addWidget(label("仅支持 Chrome 系列浏览器。安装并启用扩展后，点击「连接 Chrome」。", True))
+        self.browser_message = label("", True)
+        sources.addWidget(self.browser_message)
+        self.browser_message.hide()
+        for source, name in WEB_SOURCES.items():
+            self.source_row(sources, source, name + " 网页")
+
+        separator(sources, "sourceDivider")
+        sources.addWidget(label("编程工具", role="sectionTitle"))
+        sources.addWidget(label("① 连接　→　② 在工具中发一条新任务　→　③ 检查\n自动备份并保留原配置；工具提示信任时，确认后再发任务。", True))
         self.source_row(sources, "codex", "Codex")
         row = QHBoxLayout()
         sources.addLayout(row)
@@ -775,31 +954,6 @@ class DashboardViews:
 
         separator(sources, "sourceDivider")
         row = QHBoxLayout()
-        row.addWidget(label("网页应用", role="sectionTitle"))
-        row.addWidget(label("实验", role="badge"))
-        row.addStretch()
-        self.button(
-            row,
-            "下载浏览器扩展",
-            lambda: self.download(
-                "/api/browser-extension/download", "SeeEnd-Web-extension.zip"
-            ),
-        )
-        self.button(
-            row,
-            "连接 Chrome",
-            lambda: self.install_integration("chatgpt-web"),
-            self.source_action_buttons,
-        )
-        sources.addLayout(row)
-        self.browser_message = label("", True)
-        sources.addWidget(self.browser_message)
-        self.browser_message.hide()
-        for source, name in WEB_SOURCES.items():
-            self.source_row(sources, source, name + " 网页")
-
-        separator(sources, "sourceDivider")
-        row = QHBoxLayout()
         row.addWidget(label("桌面客户端", role="sectionTitle"))
         row.addWidget(label("实验", role="badge"))
         row.addStretch()
@@ -868,7 +1022,7 @@ class DashboardViews:
             ),
             (
                 "网页应用",
-                "所有网页共用一份浏览器扩展。下载并解压，在 Chrome 扩展页开启开发者模式、加载已解压的扩展，再点击「连接 Chrome」并刷新 AI 网页。网页接入处于实验阶段，请用真实新任务确认。",
+                "所有网页共用一份浏览器扩展。下载并解压，在 Chrome 扩展页开启开发者模式、加载已解压的扩展，再点击「连接 Chrome」并刷新 AI 网页。请用真实新任务确认网页接入。",
             ),
             (
                 "桌面客户端",
@@ -876,7 +1030,7 @@ class DashboardViews:
             ),
             (
                 "灯光与测试",
-                "在「我的设备」设置每台灯具的亮度与动态效果，亮度上限为 25%；设为 0% 只关闭对应灯具，任务仍会记录。暂停、静默后不补播；模拟诊断和手动试亮不计入真实任务验证。",
+                "在「我的设备」设置每台灯具的灯光表现，Yeelight 亮度上限为 100%，AI Flame 为 25%；设为 0% 只关闭对应灯具，任务仍会记录。暂停、静默后不补播；模拟诊断和手动试亮不计入真实任务验证。",
             ),
         ):
             instructions.addWidget(label(title, role="title"))
@@ -1023,11 +1177,22 @@ class DashboardViews:
         activity.addWidget(self.history_count)
         details = card(layout, "记录详情")
         self.event_detail_box = details.parentWidget()
-        self.event_detail = label("", True)
+        self.event_detail = label("")
+        self.event_detail.setTextFormat(Qt.TextFormat.RichText)
+        self.event_detail.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         details.addWidget(self.event_detail)
         self.event_detail_box.hide()
 
     def testing(self, layout):
+        appearance = card(layout, "界面语言 / Language")
+        self.language_choice = QComboBox()
+        self.language_choice.addItem("中文", "zh-CN")
+        self.language_choice.addItem("English", "en")
+        self.language_choice.setAccessibleName("界面语言 / Language")
+        self.language_choice.currentIndexChanged.connect(
+            lambda index: self.setting("language", self.language_choice.itemData(index))
+        )
+        appearance.addWidget(self.language_choice)
         help_box = card(layout, "常见问题")
         self.help_disclosures = []
         for title, content in (
@@ -1087,14 +1252,16 @@ class DashboardViews:
         row = QHBoxLayout()
         manual.content.addLayout(row)
         for state, name in (
-            ("idle", "待机"),
-            ("working", "工作中"),
-            ("done", "已完成"),
+            ("idle", "当前无任务"),
+            ("working", "任务进行中"),
+            ("done", "任务已完成"),
             ("error", "需关注"),
         ):
             self.button(row, name, lambda s=state: self.manual(s), self.manual_buttons)
         self.manual_hint = label("", True)
         manual.content.addWidget(self.manual_hint)
+        reset = card(layout, "重置 APP", "清除本机缓存、活动记录、设备配对、提醒偏好和应用接入配置，恢复初始状态。不会修改其他应用的文件或设备固件；应用接入需要重新配置。")
+        self.reset_button = self.button(reset, "重置 APP", self.reset_app)
         information = card(layout)
         self.privacy_disclosure = Disclosure("隐私与后台运行", information)
         privacy = self.privacy_disclosure.content

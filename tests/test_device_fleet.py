@@ -1,5 +1,6 @@
 """Parallel transports, receipt isolation and maintenance of one lamp."""
 import io
+from copy import deepcopy
 import json
 from pathlib import Path
 import tempfile
@@ -8,6 +9,7 @@ import time
 import unittest
 from unittest.mock import Mock, patch
 
+from aiflame.devices.light_settings import COLOR_DEFAULTS
 from aiflame.core.engine import Engine
 from aiflame.core.events import make_event, EventError
 from aiflame.devices.registry import migrate_devices
@@ -125,13 +127,13 @@ class FleetTests(unittest.TestCase):
 
     def test_legacy_settings_migrate_once_and_offline_edit_survives_restart(self):
         self.engine.update_settings({"brightness": 0, "reduced": True})
-        config = {"devices": {"legacy": {"device_id": "legacy", "hardware_model": "yeelight-yldp005", "connection_paused": True}}}
+        config = {"devices": {"legacy": {"device_id": "legacy", "hardware_model": "ai-flame-v01", "connection_paused": True}}}
         fleet = FleetTransportManager(self.engine.flame, self.lock, config)
         service = FleetDeviceService(config, self.temp.name, fleet, self.lock)
-        self.assertEqual(service.status("yeelight-yldp005", "legacy")["light_settings"], {"brightness": 0, "reduced": True})
+        self.assertEqual(service.status("ai-flame-v01", "legacy")["light_settings"], {"brightness": 0, "reduced": True})
         self.engine.flame.transport = fleet
         self.assertTrue(self.engine.flame.brightness_off())
-        service.update_light_settings({"hardware_model": "yeelight-yldp005", "device_id": "legacy", "settings": {"brightness": 7}})
+        service.update_light_settings({"hardware_model": "ai-flame-v01", "device_id": "legacy", "settings": {"brightness": 7}})
         self.assertFalse(self.engine.flame.brightness_off())
         saved = json.loads((Path(self.temp.name) / "credentials.json").read_text())
         restarted = FleetTransportManager(self.engine.flame, self.lock, saved)
@@ -173,8 +175,22 @@ class FleetTests(unittest.TestCase):
 
     def test_selection_and_scoped_disconnect_leave_other_worker_running(self):
         workers = {key: connection.worker for key, connection in self.fleet.connections.items()}
-        result = self.service.start({"action": "select_model", "hardware_model": "ai-flame-v02"})
-        self.assertEqual(result["state"], "succeeded")
+        self.config["devices"]["one"]["wifi_device_secret"] = "one-secret"
+        self.config["devices"]["two"]["wifi_device_secret"] = "two-secret"
+        original = deepcopy(self.config)
+        sessions = self.fleet.sessions()
+        credentials = Path(self.temp.name) / "credentials.json"
+        saved_before = credentials.read_bytes()
+        for model in ("ai-flame-v02", "ai-flame-v01"):
+            result = self.service.start({"action": "select_model", "hardware_model": model})
+            self.assertEqual(result["state"], "succeeded")
+            self.assertEqual(self.config, original)
+            self.assertEqual(credentials.read_bytes(), saved_before)
+            self.assertEqual(self.fleet.sessions(), sessions)
+            self.assertTrue(all(manager.worker is workers[key] for key, manager in self.fleet.connections.items()))
+        with self.assertRaises(EventError):
+            self.service.start({"action": "select_model", "hardware_model": "missing"})
+        self.assertEqual(self.config, original)
         self.assertTrue(all(worker.is_alive() and not worker.stopping.is_set() for worker in workers.values()))
         self.service.start({"action": "disconnect", "hardware_model": "ai-flame-v01", "device_id": "one"})
         self.wait(lambda: not self.service.busy())
@@ -262,6 +278,31 @@ class FleetTests(unittest.TestCase):
             self.fleet.outputs["two"].light_test["expires"] = self.engine.flame.clock() - 1
         self.wait(lambda: self.fleet.outputs["two"].last_display_key == shared["key"])
 
+    def test_light_plays_working_then_done_and_returns_to_shared_state(self):
+        with self.lock:
+            now = [100.0]
+            with patch.object(self.engine.flame, "clock", lambda: now[0]):
+                shared = self.engine.flame.desired().copy()
+                self.fleet.test_light("two")
+                output = self.fleet.outputs["two"]
+                working_key = output.desired()["key"]
+                for elapsed, state, duration, remaining in (
+                    (0, "working", 5000, 10000),
+                    (4, "working", 1000, 6000),
+                    (5, "done", 5000, 5000),
+                    (9, "done", 1000, 1000),
+                ):
+                    now[0] = 100 + elapsed
+                    desired = output.desired()
+                    self.assertEqual(desired["state"], state)
+                    self.assertEqual(desired["duration_ms"], duration)
+                    self.assertEqual(desired["remaining_ms"], remaining)
+                    self.assertEqual(desired["key"] == working_key, state == "working")
+                    self.assertEqual(self.fleet.outputs["one"].desired(), shared)
+                now[0] = 110
+                self.assertEqual(output.desired(), shared)
+                self.assertIsNone(output.light_test)
+
     def test_pending_light_ack_is_cancelled_when_real_task_arrives(self):
         with self.lock:
             self.fleet.test_light("two")
@@ -290,6 +331,50 @@ class FleetTests(unittest.TestCase):
             with self.assertRaises(EventError):
                 self.fleet.test_light("two")
 
+    def test_delete_yeelight_stops_only_target_and_persists_removal(self):
+        self.fleet.records['two']['hardware_model'] = 'yeelight-yltd003'
+        self.emit('working')
+        self.wait(lambda: self.fleet.confirmed(self.engine.flame.desired()['key']))
+        other = self.fleet.connections['one'].worker
+        target = self.fleet.connections['two'].worker
+        result = self.service.delete({'hardware_model': 'yeelight-yltd003', 'device_id': 'two'})
+        self.assertFalse(target.is_alive())
+        self.assertIs(self.fleet.connections['one'].worker, other)
+        self.assertTrue(other.is_alive())
+        self.assertNotIn('two', self.fleet.records)
+        self.assertNotIn('two', self.fleet.connections)
+        self.assertNotIn('two', self.fleet.outputs)
+        self.assertEqual(result['selected_device_id'], '')
+        self.assertTrue(self.engine.flame.device['online'])
+        saved = json.loads((Path(self.temp.name) / 'credentials.json').read_text())
+        self.assertEqual(set(saved['devices']), {'one'})
+        self.assertEqual(set(FleetTransportManager(self.engine.flame, self.lock, saved).records), {'one'})
+        self.fleet.records['one']['hardware_model'] = 'yeelight-yldp005'
+        self.service.delete({'hardware_model': 'yeelight-yldp005', 'device_id': 'one'})
+        self.assertFalse(other.is_alive())
+        self.assertFalse(self.engine.flame.device['online'])
+        self.assertEqual(self.engine.flame.device['device_count'], 0)
+        self.assertEqual(self.fleet.records, {})
+
+    def test_failed_delete_keeps_record_and_resumes_target_connection(self):
+        self.fleet.records['two']['hardware_model'] = 'yeelight-yltd003'
+        other = self.fleet.connections['one'].worker
+        with patch('aiflame.devices.fleet.write_private', side_effect=OSError('disk full')), \
+             patch('aiflame.transports.manager.YeelightTransport',
+                   lambda output, lock, record: FakeLamp(output, lock, 'fixture', record['device_id'])):
+            with self.assertRaises(OSError):
+                self.service.delete({'hardware_model': 'yeelight-yltd003', 'device_id': 'two'})
+            self.wait(lambda: self.fleet.outputs['two'].device['online'])
+        self.assertIn('two', self.config['devices'])
+        self.assertIs(self.fleet.connections['one'].worker, other)
+        for body in ({'hardware_model': 'ai-flame-v01', 'device_id': 'one'},
+                     {'hardware_model': 'yeelight-yldp005', 'device_id': 'two'},
+                     {'hardware_model': 'yeelight-yltd003', 'device_id': ''},
+                     {'hardware_model': 'yeelight-yltd003', 'device_id': 'unknown'}):
+            with self.subTest(body=body), self.assertRaises(EventError):
+                self.service.delete(body)
+        self.assertEqual(set(self.fleet.records), {'one', 'two'})
+
     def test_legacy_profiles_migrate_by_identity_without_enabling_paused_devices(self):
         old = {"device_id": "a", "hardware_model": "ai-flame-v01", "port": "A", "wifi_device_secret": "latest",
                "hardware_profiles": {"ai-flame-v01": {"device_id": "a", "wifi_device_secret": "old"},
@@ -299,3 +384,135 @@ class FleetTests(unittest.TestCase):
         self.assertEqual(records["a"]["wifi_device_secret"], "latest")
         self.assertTrue(records["b"]["connection_paused"])
         self.assertIs(migrate_devices(old), records)
+
+
+class FleetReceiptTests(unittest.TestCase):
+    """Control ACKs and time explicitly; no transport threads or physical devices."""
+    def setUp(self):
+        self.now = 1000.0
+        self.engine = Engine(":memory:", clock=lambda: self.now, sources=SOURCES)
+        self.addCleanup(self.engine.db.close)
+        self.engine.update_settings({"mode": "hardware"})
+        self.fleet = FleetTransportManager(self.engine.flame, threading.RLock(), {"devices": {
+            "one": {"device_id": "one", "hardware_model": "ai-flame-v01"},
+            "two": {"device_id": "two", "hardware_model": "ai-flame-v02"}}})
+        self.engine.flame.transport = self.fleet
+        for key, output in self.fleet.outputs.items():
+            output.device.update(online=True, session_id="session-" + key, connected_at=1)
+
+    def emit(self, state, task="task", seq=1, source="manual", **extra):
+        event = make_event(source, task, state, seq)
+        event.update(extra)
+        self.engine.accept(event, source)
+        return event["event_id"]
+
+    def receipts(self, event_id):
+        return {row["output"]: row["status"] for row in self.engine.router.snapshot()
+                if row["event"] == event_id}
+
+    def ack(self, key):
+        output = self.fleet.outputs[key]
+        output.applied(output.desired(), {"result": "applied", "command_id": key})
+
+    def test_admission_records_each_online_offline_disabled_and_muted_target(self):
+        for key, fields in (("offline", {}), ("disabled", {"connection_paused": True}),
+                            ("muted", {"light_settings": {"brightness": 0, "reduced": False}})):
+            record = {"device_id": key, "hardware_model": "ai-flame-v01", **fields}
+            self.fleet.records[key] = record
+            self.fleet.connection(key, record)
+        event_id = self.emit("working")
+        receipts = self.receipts(event_id)
+        self.assertEqual({key: status for key, status in receipts.items() if key.startswith("flame:")},
+                         {"flame:one": "queued", "flame:two": "queued", "flame:offline": "offline",
+                          "flame:disabled": "disabled", "flame:muted": "muted"})
+
+    def test_partial_ack_summary_keeps_each_target_identity_and_status(self):
+        event_id = self.emit("done")
+        self.ack("one")
+        event = next(row for row in self.engine.snapshot()["events"] if row["id"] == event_id)
+        self.assertEqual([(row["device_id"], row["name"], row["status"])
+                          for row in event["delivery_summary"]["devices"]],
+                         [("one", "AI Flame 0.1", "applied"), ("two", "AI Flame 0.2", "queued")])
+        self.assertFalse(self.engine.snapshot()["display"]["device_confirmed"])
+
+    def test_idle_and_cancelled_acks_are_recorded_for_each_device(self):
+        for state in ("idle", "cancelled"):
+            with self.subTest(state=state):
+                self.emit("working", task=state)
+                event_id = self.emit(state, task=state, seq=2)
+                self.ack("one")
+                self.assertEqual(self.receipts(event_id)["flame:one"], "applied")
+                self.assertEqual(self.receipts(event_id)["flame:two"], "queued")
+                self.ack("two")
+                self.assertEqual(self.receipts(event_id)["flame:two"], "applied")
+
+    def test_new_task_state_settles_unconfirmed_targets_without_erasing_ack_history(self):
+        event_id = self.emit("working")
+        self.ack("one")
+        self.emit("done", seq=2)
+        receipts = self.receipts(event_id)
+        self.assertEqual(receipts["flame"], "applied")
+        self.assertEqual(receipts["flame:one"], "applied")
+        self.assertEqual(receipts["flame:two"], "superseded")
+
+    def test_done_before_start_ack_settles_start_and_rejects_its_late_ack(self):
+        started = self.emit("working")
+        old = self.fleet.outputs["one"].desired()
+        completed = self.emit("done", seq=2)
+        for output in self.fleet.outputs.values():
+            output.applied(old, {"result": "applied", "command_id": "late-start"})
+        self.assertEqual({status for key, status in self.receipts(started).items()
+                          if key.startswith("flame")}, {"superseded"})
+        self.assertEqual({status for key, status in self.receipts(completed).items()
+                          if key.startswith("flame")}, {"queued"})
+
+    def test_pausing_confirmed_completion_preserves_ack_and_settles_other_lamp(self):
+        event_id = self.emit("done")
+        self.ack("one")
+        self.engine.update_settings({"paused": True})
+        self.assertEqual(self.engine.desired()["state"], "idle")
+        receipts = self.receipts(event_id)
+        self.assertEqual(receipts["flame"], "applied")
+        self.assertEqual(receipts["flame:one"], "applied")
+        self.assertEqual(receipts["flame:two"], "suppressed")
+
+    def test_prompt_deadline_expires_only_targets_without_ack(self):
+        event_id = self.emit("done")
+        self.ack("one")
+        self.now += self.engine.settings["duration"] + 1
+        self.assertEqual(self.engine.desired()["state"], "idle")
+        receipts = self.receipts(event_id)
+        self.assertEqual(receipts["flame"], "applied")
+        self.assertEqual(receipts["flame:one"], "applied")
+        self.assertEqual(receipts["flame:two"], "expired")
+
+    def test_recent_fifty_events_keep_all_receipts_beyond_old_row_limit(self):
+        ids = [self.emit("working", task="task-" + str(index)) for index in range(51)]
+        snapshot = self.engine.snapshot()
+        self.assertEqual({event["id"] for event in snapshot["events"]}, set(ids[1:]))
+        self.assertGreater(len(snapshot["deliveries"]), 150)
+        for event in snapshot["events"]:
+            self.assertEqual({row["device_id"] for row in event["delivery_summary"]["devices"]}, {"one", "two"})
+        self.assertNotIn(ids[0], {row["event"] for row in snapshot["deliveries"]})
+
+    def test_unacknowledged_held_prompt_expires_instead_of_remaining_queued(self):
+        self.engine.update_settings({"hold_until_activity": True})
+        event_id = self.emit("done", ttl_ms=1000)
+        self.assertTrue(self.engine.desired()["holding"])
+        self.now += 1.1
+        self.assertEqual(self.engine.desired()["state"], "idle")
+        self.assertIsNone(self.engine.current)
+        self.assertEqual({status for key, status in self.receipts(event_id).items()
+                          if key.startswith("flame")}, {"expired"})
+
+    def test_reconnecting_all_original_sessions_ends_held_prompt_without_replay(self):
+        self.engine.update_settings({"hold_until_activity": True})
+        event_id = self.emit("done")
+        self.assertTrue(self.engine.desired()["holding"])
+        for output in self.fleet.outputs.values():
+            output.device.update(session_id="rebooted", connected_at=2)
+        self.assertEqual(self.engine.desired()["state"], "idle")
+        self.assertIsNone(self.engine.current)
+        self.assertTrue(all(output.desired()["state"] == "idle" for output in self.fleet.outputs.values()))
+        self.assertEqual({status for key, status in self.receipts(event_id).items()
+                          if key.startswith("flame")}, {"ended_on_reconnect"})

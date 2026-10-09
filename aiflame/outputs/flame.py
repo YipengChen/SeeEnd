@@ -1,6 +1,20 @@
 """Fire light output: scheduling, display preferences, device state and acknowledgements."""
 import datetime as dt
+import json
 from aiflame.core.events import EventError
+
+
+def demo_display(key, elapsed):
+    """Shared ten-second sequence for synchronized and per-device demos."""
+    if elapsed >= 10:
+        return None
+    state = "working" if elapsed < 5 else "done"
+    return {
+        "key": f"{key}:{state}",
+        "state": state,
+        "duration_ms": max(1, int(((5 if elapsed < 5 else 10) - elapsed) * 1000)),
+        "remaining_ms": max(1, int((10 - elapsed) * 1000)),
+    }
 
 
 class FlameOutput:
@@ -63,7 +77,34 @@ class FlameOutput:
         self.core.tick()
 
     def mark(self, event_id, status):
-        self.core.router.record(event_id, self.name, status)
+        previous = self.db.execute("SELECT status FROM events WHERE id=?", (event_id,)).fetchone()
+        # Ending a displayed prompt cannot undo an acknowledgement already received.
+        if not (previous and previous["status"] == "applied" and status in
+                ("suppressed", "superseded", "expired", "ended_on_reconnect", "dropped")):
+            self.core.router.record(event_id, self.name, status)
+        if status not in ("queued", "applied", "screen"):
+            self.settle_targets(event_id, status)
+
+    def settle_targets(self, event_id, status):
+        rows = self.db.execute("SELECT output, detail FROM deliveries WHERE event=? AND output LIKE 'flame:%' AND status='queued'", (event_id,)).fetchall()
+        for row in rows:
+            self.core.router.record(event_id, row["output"], status, row["detail"])
+
+    def record_targets(self, event_id, result):
+        from aiflame.devices.models import hardware_model, DEFAULT_MODEL
+        from aiflame.devices.light_settings import light_settings
+        for key, record in getattr(self.transport, "records", {}).items():
+            output = self.transport.outputs.get(key)
+            status = result
+            if result == "queued":
+                status = ("screen" if self.settings["mode"] != "hardware" else
+                          "disabled" if record.get("connection_paused") else
+                          "muted" if light_settings(record)["brightness"] == 0 else
+                          "offline" if not output or not output.device.get("online") else "queued")
+            elif result == "suppressed" and light_settings(record)["brightness"] == 0:
+                status = "muted"
+            detail = json.dumps({"name": hardware_model(record.get("hardware_model", DEFAULT_MODEL))["name"]}, ensure_ascii=False)
+            self.core.router.record(event_id, "flame:" + key, status, detail)
 
     def validate_target(self, event):
         target = event.get("device_id")
@@ -81,8 +122,16 @@ class FlameOutput:
     def accept(self, event):
         key = (event["source_id"], event["task_id"])
         eid, now = event["event_id"], self.clock()
+        # An older state of this task is no longer eligible for an ACK.
+        old = self.db.execute("SELECT id, status FROM events WHERE source=? AND task=? AND id!=? AND (status='queued' OR EXISTS(SELECT 1 FROM deliveries WHERE event=events.id AND output LIKE 'flame:%' AND status='queued'))", (*key, eid)).fetchall()
+        for row in old:
+            if row["status"] == "queued":
+                self.mark(row["id"], "superseded")
+            else:
+                self.settle_targets(row["id"], "superseded")
         if not self.settings["source_enabled"].get(key[0], False):
             self.mark(eid, "unmatched")
+            self.record_targets(eid, "unmatched")
             return "unmatched"
         result = "suppressed" if self.muted() else "queued"
         self.cancel_preview()
@@ -92,9 +141,11 @@ class FlameOutput:
             for item in list(self.queue):
                 if item["key"] == key:
                     self.queue.remove(item)
-                    self.mark(item["id"], "suppressed")
+                    self.mark(item["id"], "superseded")
             if self.current and self.current["key"] == key:
-                self.mark(self.current["id"], "suppressed")
+                # Keep a confirmed receipt as history when its prompt ends.
+                if not self.current["applied"]:
+                    self.mark(self.current["id"], "superseded")
                 self.current = None
         if result == "queued" and event["state"] in ("done", "error", "needs_input"):
             state = "error" if event["state"] == "needs_input" else event["state"]
@@ -118,6 +169,7 @@ class FlameOutput:
                 if victim["id"] == eid:
                     result = "dropped"
         self.mark(eid, result)
+        self.record_targets(eid, result)
         return result
 
     def settings_changed(self):
@@ -193,18 +245,19 @@ class FlameOutput:
         ):
             self.cancel_preview()
             return None
-        state = "working" if elapsed < 5 else "done"
         return {
-            "key": f"preview:{self.preview['id']}:{state}",
-            "state": state,
-            "duration_ms": max(1, int(((5 if elapsed < 5 else 10) - elapsed) * 1000)),
+            **demo_display(f"preview:{self.preview['id']}", elapsed),
             "preview": self.preview["id"],
-            "remaining_ms": max(1, int((10 - elapsed) * 1000)),
         }
 
     def desired(self):
         self.cleanup()
         now = self.clock()
+        # Reconcile queued starts left by older versions or rapid state changes.
+        active_ids = {item["id"] for item in self.active.values()}
+        for row in self.db.execute("SELECT events.id, events.state, events.seq, tasks.seq AS latest FROM events JOIN tasks ON events.source=tasks.source AND events.task=tasks.task WHERE events.status='queued' AND events.state IN ('working','idle','cancelled','timeout','unknown')").fetchall():
+            if row["seq"] < row["latest"] or (row["state"] == "working" and row["id"] not in active_ids):
+                self.mark(row["id"], "superseded")
         # Offline prompts belong to the app. Never replay them on a newly
         # connected lamp, and never manufacture a device acknowledgement.
         if self.device["online"]:
@@ -228,14 +281,21 @@ class FlameOutput:
             return preview
         if self.current:
             if self.current["deadline"] and now >= self.current["deadline"]:
+                self.settle_targets(self.current["id"], "expired")
                 self.current = None
             elif (
                 not self.current["deadline"]
                 and not self.current["applied"]
-                and not self.current.get("holding")
+                and (not self.current.get("holding") or not self.current["screen_only"])
                 and now >= self.current["expiry"]
             ):
                 self.mark(self.current["id"], "expired")
+                self.current = None
+        if self.current and self.current.get("device_sessions") and not self.current["screen_only"]:
+            recipients = self.current["device_sessions"]
+            sessions = (self.transport.enabled_sessions() if hasattr(self.transport, "enabled_sessions") else self.transport.sessions())
+            if not any(sessions.get(key) == token for key, token in recipients.items()):
+                self.mark(self.current["id"], "ended_on_reconnect")
                 self.current = None
         if (
             self.current

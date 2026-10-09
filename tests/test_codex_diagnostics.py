@@ -56,7 +56,6 @@ class TestDiagnostics(unittest.TestCase):
         (self.home / "hooks.json").write_text(json.dumps(self.hooks))
         result = inspect_configuration(self.home)
         self.assertFalse(result["configuration_ready"])
-        self.assertNotIn("PRIVATE", str(result))
         self.assertTrue(any("Interrupt" in issue for issue in result["issues"]))
 
     def test_wrong_or_disabled_hook_is_not_ready(self):

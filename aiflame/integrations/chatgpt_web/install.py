@@ -8,7 +8,7 @@ import shlex
 import sys
 from aiflame.core.paths import PACKAGE, user_data_dir, load_config, write_private
 from aiflame.core.process import command
-from aiflame.integrations.chatgpt_web.host import HOST, WEB_SOURCES, extension_id
+from aiflame.integrations.chatgpt_web.host import HOST, WEB_SOURCES, extension_id, extension_origins
 
 
 def manifest_path(browser, platform=None, home=None, environ=None):
@@ -57,13 +57,17 @@ def install(browser="chrome", uninstall=False, output=None):
         "description": "SeeEnd AI chat websites status bridge",
         "path": str(launcher),
         "type": "stdio",
-        "allowed_origins": ["chrome-extension://" + extension_id() + "/"],
+        "allowed_origins": list(extension_origins()),
     }
     if target.exists():
         previous = json.loads(target.read_text())
         if (
             previous.get("name") != HOST
-            or previous.get("allowed_origins") != manifest["allowed_origins"]
+            or previous.get("type") != "stdio"
+            or previous.get("path") != str(launcher)
+            or not isinstance(previous.get("allowed_origins"), list)
+            or not previous["allowed_origins"]
+            or not set(previous["allowed_origins"]) <= set(manifest["allowed_origins"])
         ):
             raise RuntimeError("同名桥接属于其他配置，未修改")
     if uninstall:

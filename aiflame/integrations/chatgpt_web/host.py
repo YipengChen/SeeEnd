@@ -15,18 +15,27 @@ import uuid
 ROOT = Path(__file__).resolve().parent
 HOST = "com.aiflame.chatgpt"
 MAX_BYTES = 4096
+# Keep the existing development installation usable during store migration.
+LEGACY_EXTENSION_ID = "hifannlfdbbhmmgecknoakpbhfihihbg"
+# Display order: Similarweb worldwide monthly visits, September 2026.
+# Provider-published traffic estimates, not vendor-reported clicks or app MAU.
+# Sources: https://www.similarweb.com/website/<domain>/ (selected month: September 2026)
+# chatgpt.com 5.9B; gemini.google.com 2.6B; claude.ai 1B;
+# chat.deepseek.com 313.1M; doubao.com 154M; qianwen.com 30.1M;
+# kimi.com 25.6M; yuanbao.tencent.com 10.8M; chatglm.cn 5.3M.
 WEB_SOURCES = {
-    "claude-web": "Claude",
-    "gemini-web": "Gemini",
     "chatgpt-web": "ChatGPT",
+    "gemini-web": "Gemini",
+    "claude-web": "Claude",
     "deepseek-web": "DeepSeek",
-    "qianwen-web": "千问",
     "doubao-web": "豆包",
-    "yuanbao-web": "元宝",
+    "qianwen-web": "千问",
     "kimi-web": "Kimi",
+    "yuanbao-web": "元宝",
     "zhipu-web": "智谱清言",
 }
 
+WEB_URLS = {'claude-web': 'https://claude.ai/', 'gemini-web': 'https://gemini.google.com/', 'chatgpt-web': 'https://chatgpt.com/', 'deepseek-web': 'https://chat.deepseek.com/', 'qianwen-web': 'https://www.qianwen.com/', 'doubao-web': 'https://www.doubao.com/chat/', 'yuanbao-web': 'https://yuanbao.tencent.com/', 'kimi-web': 'https://www.kimi.com/', 'zhipu-web': 'https://chatglm.cn/'}
 
 def extension_id(root=ROOT):
     installed = root / "bridge-config.json"
@@ -35,6 +44,13 @@ def extension_id(root=ROOT):
     manifest = json.loads((root / "extension/manifest.json").read_text())
     digest = hashlib.sha256(base64.b64decode(manifest["key"])).hexdigest()[:32]
     return "".join(chr(97 + int(c, 16)) for c in digest)
+
+
+def extension_origins(root=ROOT):
+    return tuple(dict.fromkeys(
+        "chrome-extension://" + item + "/"
+        for item in (extension_id(root), LEGACY_EXTENSION_ID)
+    ))
 
 
 def sanitize(message):
@@ -157,7 +173,7 @@ def main():
 
         msvcrt.setmode(sys.stdin.fileno(), os.O_BINARY)
         msvcrt.setmode(sys.stdout.fileno(), os.O_BINARY)
-    if len(sys.argv) < 2 or sys.argv[1] != "chrome-extension://" + extension_id() + "/":
+    if len(sys.argv) < 2 or sys.argv[1] not in extension_origins():
         return 1
     while True:
         try:

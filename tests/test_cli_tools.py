@@ -173,9 +173,6 @@ class CliToolsTests(unittest.TestCase):
         self.assertEqual(result["signals"]["start"]["received"], 0)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
 class NewAdapterTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
@@ -228,3 +225,7 @@ class NewAdapterTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             install('opencode', config_dir=directory)
         self.assertEqual(path.read_text(), '// foreign')
+
+
+if __name__ == "__main__":
+    unittest.main()

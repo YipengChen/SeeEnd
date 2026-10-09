@@ -13,7 +13,7 @@ async function check() {
     const last = saved[resultKey];
     output.textContent = connection + '\n页面控件：' + (page.recognized ? '已识别' : '未识别，请勿视为支持')
       + '\n生成状态：' + (page.busy ? '正在生成' : '未生成')
-      + '\n任务跟踪：' + (page.active ? '进行中' : page.pending ? '已捕获发送，等待生成控件' : '未跟踪')
+      + '\n任务跟踪：' + (page.active ? '任务进行中' : page.pending ? '已捕获发送，等待生成控件' : '未跟踪')
       + '\n回复结束控件：' + (page.final_controls ? '已识别' : '尚未出现或未识别')
       + '\n输入框状态：' + (page.composer_ready ? '可用' : '不可用或未识别')
       + (page.active ? '\n当前回复跟踪：' + (page.reply_matches_active === null ? '等待回复标识' : page.reply_matches_active ? '匹配' : '不匹配')

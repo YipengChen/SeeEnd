@@ -107,6 +107,59 @@ test("simulated events do not qualify and are visibly marked", () => {
   d.dom.window.close();
 });
 
+test("activity receipts show a compact confirmation count and readable safe tooltip details", () => {
+  const d = dashboard();
+  d.data.events[0].status = "applied";
+  d.data.events[0].delivery_summary = {
+    reason: "设备已确认接收指令",
+    devices: [
+      {device_id: "lamp-one", name: "书桌灯", status: "applied", reason: "设备已确认接收指令"},
+      {device_id: "lamp-two", name: "<img src=x onerror=alert(1)>", status: "offline", reason: "设备已离线，未收到回执"},
+      {device_id: "lamp-three", name: "床头灯", status: "queued", reason: "排队中，等待当前提醒结束"},
+    ],
+  };
+  d.render();
+  const cell = d.get("events").querySelector("tr td:last-child");
+  assert.equal(cell.querySelector(".pill").textContent, "设备已确认");
+  const details = cell.querySelector("[data-delivery-details]");
+  assert.equal(details.textContent, "已确认 1/3 台设备");
+  assert.doesNotMatch(cell.textContent, /书桌灯|lamp-one|未收到回执|排队中|<img/);
+  assert.equal(cell.querySelector("img"), null);
+  assert.equal(cell.title, "处理结果：设备已确认接收指令\n\n设备回执\n书桌灯（lamp-one）\n设备已确认接收指令\n\n<img src=x onerror=alert(1)>（lamp-two）\n设备已离线，未收到回执\n\n床头灯（lamp-three）\n排队中，等待当前提醒结束");
+  d.data.events[0].delivery_summary.devices.forEach(device => device.status = "applied");
+  d.render();
+  assert.equal(d.get("events").querySelector("[data-delivery-details]").textContent, "已确认 3/3 台设备");
+  d.data.events[0].delivery_summary.devices.forEach(device => device.status = "offline");
+  d.render();
+  assert.equal(d.get("events").querySelector("[data-delivery-details]").textContent, "已确认 0/3 台设备");
+  d.dom.window.close();
+});
+
+test("activity records explain missing device receipts and retain legacy status fallback", () => {
+  const d = dashboard();
+  for (const [status, label, reason] of [
+    ["queued", "等待发送", "排队中，当前完成提醒等待键鼠活动结束"],
+    ["screen", "APP 已呈现", "APP 已呈现，未发送到实体设备"],
+    ["superseded", "已被后续状态替代", "后续任务状态已替代此事件，不再发送"],
+    ["interrupted", "进程重启，未重播", "进程重启，未重播"],
+  ]) {
+    Object.assign(d.data.events[0], {status, delivery_summary: {reason, devices: []}});
+    d.render();
+    const cell = d.get("events").querySelector("tr td:last-child");
+    assert.equal(cell.querySelector(".pill").textContent, label);
+    assert.equal(cell.querySelector("[data-delivery-details]"), null);
+    assert.equal(cell.textContent, label);
+    assert.equal(cell.title, "处理结果：" + reason);
+  }
+  delete d.data.events[0].delivery_summary;
+  d.data.events[0].status = "screen";
+  d.render();
+  const cell = d.get("events").querySelector("tr td:last-child");
+  assert.equal(cell.textContent, "APP 已呈现");
+  assert.equal(cell.querySelector("[data-delivery-details]"), null);
+  d.dom.window.close();
+});
+
 test("paired offline keeps screen task and connected lamp exposes actual receipt", () => {
   const d = dashboard();
   d.data.hardware_paired = true;
@@ -126,14 +179,19 @@ test("paired offline keeps screen task and connected lamp exposes actual receipt
 
 test("all source types share a flat list with local brand icons and category dividers", () => {
   const d = dashboard();
-  const extraSources = ["manual", "demo", "local-script", "chatgpt-desktop", "deepseek-web", "qianwen-web", "doubao-web", "yuanbao-web", "kimi-web", "zhipu-web", "chatgpt-web"];
+  const {SITES} = require("../aiflame/integrations/chatgpt_web/extension/providers.js");
+  const brands = JSON.parse(fs.readFileSync("aiflame/assets/web/brands/sources.json", "utf8"));
+  const cliSources = [...d.dom.window.document.querySelectorAll("[data-cli]")].map(card => card.dataset.cli);
+  const desktopSources = [...d.dom.window.document.querySelectorAll('[data-trigger$="-desktop"]')].map(button => button.dataset.trigger);
+  const extraSources = [...new Set([...cliSources, ...desktopSources, ...SITES.map(site => site.id), "manual", "demo", "local-script"])].filter(id => id !== "codex");
   d.data.sources.push(...extraSources.map(id => ({id, name: id, enabled: true, description: "fixture"})));
   d.render();
   const list = d.get("sources");
   assert.equal(list.querySelectorAll(":scope > .source").length, d.data.sources.length);
   assert.equal(list.querySelectorAll(".source-divider").length, 3);
   const images = [...list.querySelectorAll("img")];
-  assert.equal(images.length, 9);
+  assert.equal(images.length, d.data.sources.length - 3);
+  assert.deepEqual(new Set(images.map(image => image.getAttribute("src"))), new Set(Object.keys(brands).map(brand => `/brands/${brand}.png`)));
   for (const image of images) {
     assert.match(image.getAttribute("src"), /^\/brands\/[a-z]+\.png$/);
     assert.ok(fs.existsSync("aiflame/assets/web" + image.getAttribute("src")));
@@ -406,7 +464,7 @@ test("hardware model cards gate configuration and route model-specific operation
   assert.equal(d.context.calls.some(c => c.path === '/api/ports'), false);
   const cards = d.dom.window.document.querySelectorAll('[data-device-model]');
   assert.equal(cards.length, 4);
-  await cards[1].onclick();
+  await d.dom.window.document.querySelector('[data-device-model="ai-flame-v02"]').onclick();
   assert.equal(d.get('deviceSelector').hidden, true);
   assert.equal(d.get('deviceDetails').hidden, false);
   assert.equal(d.get('deviceModelTitle').textContent, 'AI Flame 0.2');
@@ -415,7 +473,7 @@ test("hardware model cards gate configuration and route model-specific operation
   assert.equal(d.context.calls.find(c => c.body?.action === 'install').body.hardware_model, 'ai-flame-v02');
   nav.click();
   assert.equal(d.get('deviceDetails').hidden, true);
-  await cards[0].onclick();
+  await d.dom.window.document.querySelector('[data-device-model="ai-flame-v01"]').onclick();
   assert.equal(d.get('deviceModelTitle').textContent, 'AI Flame 0.1');
   d.get('backToDeviceModels').click();
   assert.equal(d.get('deviceSelector').hidden, false);
@@ -594,7 +652,12 @@ for (const modelId of ["yeelight-yltd003", "yeelight-yldp005"]) test(`${modelId}
   d.dom.window.document.querySelector('[data-tab="device"]').click();
   await d.dom.window.document.querySelector(`[data-device-model="${modelId}"]`).onclick();
   assert.equal(d.get('yeelightControls').hidden, false);
-  assert.match(d.get('discoverYeelight').textContent, modelId.endsWith('yldp005') ? /YLDP005/ : /YLTD003/);
+  assert.equal(d.get('deviceModelDimensions').textContent,
+    d.dom.window.document.querySelector(`[data-device-model="${modelId}"] .device-model-detail`).textContent);
+  assert.equal(d.get('deviceBrightness').max, '100');
+  assert.equal(d.get('deviceBrightness').value, '50');
+  assert.equal(d.get('deviceReducedRow').hidden, true);
+  assert.match(d.get('discoverYeelight').textContent, modelId.endsWith('yldp005') ? /W3 彩色灯泡/ : /屏幕挂灯 Pro/);
   assert.match(d.get('yeelightLightHint').textContent, modelId.endsWith('yldp005') ? /整颗灯泡/ : /前方照明/);
   for (const id of ['matrixConnection', 'matrixWifi', 'matrixMaintenance']) assert.equal(d.get(id).hidden, true);
   assert.equal(d.context.calls.some(call => call.path === '/api/ports'), false);
@@ -629,8 +692,15 @@ test("compact model cards keep product details while live counts update", () => 
     {hardware_model: 'yeelight-yltd003', online: false},
   ]}}));
   const count = card.querySelector('[data-model-count]');
-  assert.equal(count.textContent, '2 台在线');
+  assert.equal(count.textContent, '在线 2 · 离线 0');
   assert.equal(count.dataset.online, 'true');
+  assert.equal(d.dom.window.document.querySelector('[data-model-count="yeelight-yltd003"]').textContent, '在线 0 · 离线 1');
+  assert.equal(d.dom.window.document.querySelector('[data-model-count="ai-flame-v01"]').textContent, '未添加设备');
+  d.dom.window.document.dispatchEvent(new d.dom.window.CustomEvent('flame-mode', {detail: {mode: 'hardware', devices: [
+    {hardware_model: 'yeelight-yldp005', online: true},
+    {hardware_model: 'yeelight-yldp005', online: false},
+  ]}}));
+  assert.equal(count.textContent, '在线 1 · 离线 1');
   assert.equal(card.querySelector('strong').textContent, title);
   assert.equal(card.querySelector('.device-model-detail').textContent, detail);
   d.dom.window.close();
@@ -700,5 +770,25 @@ test('check request failures are explicit rather than claiming configuration suc
   vm.runInContext(`api = async () => {throw Error('Hub 未连接');};`, d.context);
   await card.querySelector('[data-cli-check]').onclick();
   assert.equal(card.querySelector('[data-cli-status]').textContent, '检查未完成：Hub 未连接');
+  d.dom.window.close();
+});
+
+test("web source icons and titles open matching apps without changing source switches", () => {
+  const d = dashboard();
+  const urls = JSON.parse(fs.readFileSync('aiflame/integrations/chatgpt_web/extension/manifest.json')).content_scripts.flatMap(script => script.matches);
+  const ids = ['claude-web', 'gemini-web', 'chatgpt-web', 'deepseek-web', 'qianwen-web', 'doubao-web', 'yuanbao-web', 'kimi-web', 'zhipu-web'];
+  d.data.sources = ids.map(id => ({id, name: id, description: '', enabled: false}));
+  d.render();
+  assert.deepEqual([...d.get('sources').querySelectorAll('.source-info b')].map(node => node.textContent),
+    ['chatgpt-web', 'gemini-web', 'claude-web', 'deepseek-web', 'doubao-web', 'qianwen-web', 'kimi-web', 'yuanbao-web', 'zhipu-web']);
+  for (const row of d.get('sources').querySelectorAll('.source')) {
+    const links = row.querySelectorAll('a');
+    assert.equal(links.length, 2);
+    assert.equal(links[0].href, links[1].href);
+    assert.equal(links[0].target, '_blank');
+    assert.equal(links[0].rel, 'noopener noreferrer');
+    assert.ok(urls.some(pattern => links[0].href.startsWith(pattern.replace('*', ''))));
+    assert.equal(row.querySelector('input').checked, false);
+  }
   d.dom.window.close();
 });

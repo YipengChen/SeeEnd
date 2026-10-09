@@ -667,13 +667,16 @@ class HTTPTests(unittest.TestCase):
         self.assertEqual(error.exception.code, 400)
 
     def test_assets_and_download_exclude_credentials(self):
+        brands = json.loads((Path(__file__).resolve().parents[1] / "aiflame/assets/web/brands/sources.json").read_text())
         for path in (
             "/",
             "/style.css",
-            *[f"/brands/{brand}.png" for brand in ("codex", "chatgpt", "deepseek", "qianwen", "doubao", "yuanbao", "kimi", "zhipu")],
+            *[f"/brands/{brand}.png" for brand in brands],
             "/app.js",
             "/devices.js",
             "/shared.js",
+            "/i18n.js",
+            "/locales/en.json",
             "/api/firmware/download",
             "/api/browser-extension/download",
         ):
@@ -682,6 +685,9 @@ class HTTPTests(unittest.TestCase):
                 self.assertNotIn(b"cookie-secret", body)
                 self.assertNotIn(b"api-secret", body)
                 self.assertEqual(response.status, 200)
+                if path.startswith("/brands/"):
+                    self.assertEqual(response.headers.get_content_type(), "image/png")
+                    self.assertTrue(body.startswith(b"\x89PNG\r\n\x1a\n"))
 
     def test_firmware_download_includes_verified_base_and_no_pairing_data(self):
         from aiflame.devices import base_firmware
@@ -720,21 +726,26 @@ class HTTPTests(unittest.TestCase):
             self.assertEqual(error.exception.code, 403)
             error.exception.close()
 
-    def test_integration_install_requires_dashboard_and_uses_fixed_installer(self):
-        with patch("aiflame.integrations.codex.install.install") as installer:
+    def test_integration_install_requires_dashboard_and_passes_resolved_directory(self):
+        directory = Path(self.temp.name) / "codex-config"
+        with (
+            patch("aiflame.integrations.codex.install.install") as installer,
+            patch("aiflame.integrations.cli_tools.guidance.directory_for", return_value=directory) as resolve_directory,
+        ):
             with self.request(
                 "/api/integrations/install", {"source": "codex"}
             ) as response:
                 self.assertIn("Hooks", json.load(response)["message"])
-            installer.assert_called_once_with()
-        with self.assertRaises(urllib.error.HTTPError) as error:
-            self.request(
-                "/api/integrations/install",
-                {"source": "codex"},
-                {"Cookie": "", "Authorization": "Bearer api-secret"},
-            )
-        self.assertEqual(error.exception.code, 403)
-        error.exception.close()
+            with self.assertRaises(urllib.error.HTTPError) as error:
+                self.request(
+                    "/api/integrations/install",
+                    {"source": "codex"},
+                    {"Cookie": "", "Authorization": "Bearer api-secret"},
+                )
+            self.assertEqual(error.exception.code, 403)
+            error.exception.close()
+            resolve_directory.assert_called_once_with("codex", None)
+            installer.assert_called_once_with(home=directory, uninstall=False)
 
     def test_credentials_cannot_be_read_from_status(self):
         for path in ("/api/status", "/api/device", "/api/trigger-test"):

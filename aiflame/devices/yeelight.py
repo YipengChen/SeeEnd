@@ -8,6 +8,10 @@ from aiflame.devices.models import YEELIGHT_MODELS, hardware_model
 
 DISCOVERY_ADDRESS = ("239.255.255.250", 1982)
 CONTROL_PORT = 55443
+# W3 (colorb, fw_ver 7) can accept TCP before its command handler is ready.
+# Queries sent immediately may be silently lost; a bounded settle period avoids
+# this on both the maintenance connection and the persistent transport.
+CONNECTION_READY_DELAY = .5
 REQUEST = (b'M-SEARCH * HTTP/1.1\r\nHOST: 239.255.255.250:1982\r\n'
            b'MAN: "ssdp:discover"\r\nST: wifi_bulb\r\n\r\n')
 
@@ -89,8 +93,21 @@ class YeelightClient:
         self.seq = 0
 
     def open(self):
-        self.sock = socket.create_connection((self.host, CONTROL_PORT), 2)
+        try:
+            self.sock = socket.create_connection((self.host, CONTROL_PORT), 2)
+        except TimeoutError:
+            raise TimeoutError(f"无法连接灯具 {self.host}:55443：连接超时，请检查同一局域网、路由器设备隔离及局域网控制开关") from None
+        except ConnectionRefusedError:
+            raise ConnectionRefusedError(f"灯具 {self.host}:55443 拒绝连接，请在 Yeelight APP 中开启局域网控制，或断电重启灯具后重试") from None
+        except OSError as error:
+            raise OSError(f"无法连接灯具 {self.host}:55443：{error}") from None
         self.sock.settimeout(.2)
+        if self.stopping:
+            if self.stopping.wait(CONNECTION_READY_DELAY):
+                self.close()
+                raise OSError("服务已停止")
+        else:
+            time.sleep(CONNECTION_READY_DELAY)
         return self
 
     def command(self, method, params):
@@ -121,7 +138,7 @@ class YeelightClient:
             self.buffer.extend(block)
             if len(self.buffer) > 16384:
                 raise ValueError("Yeelight 回执过长")
-        raise TimeoutError("Yeelight 未回执，请检查局域网控制开关")
+        raise TimeoutError(f"已连接灯具 {self.host}:55443，但 {method} 指令在 2 秒内未收到回执。请在 Yeelight APP 中关闭再开启局域网控制，或断电重启灯具后重试")
 
     def close(self):
         if self.sock:

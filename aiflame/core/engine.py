@@ -10,6 +10,7 @@ from aiflame.outputs.flame import FlameOutput
 from aiflame.outputs.router import OutputRouter
 from aiflame.outputs.desktop import DesktopOutput
 from aiflame.core.verification import verification_summary
+from aiflame.core.delivery import delivery_summary
 
 class Engine:
     def __init__(self, path, clock=time.monotonic, wall=time.time, *, sources=()):
@@ -33,6 +34,7 @@ class Engine:
         """)
         self.settings = {
             **FlameOutput.DEFAULTS,
+            "language": "zh-CN",
             "desktop_notifications": True,
             "source_enabled": {
                 source.id: source.default_enabled for source in self.sources.values()
@@ -99,6 +101,8 @@ class Engine:
         if not isinstance(patch, dict) or set(patch) - set(self.settings):
             raise EventError("设置项不受支持")
         data = {**self.settings, **patch}
+        if data["language"] not in ("zh-CN", "en"):
+            raise EventError("不支持的界面语言")
         self.flame.validate_settings(data)
         if type(data["desktop_notifications"]) is not bool:
             raise EventError("桌面通知设置格式错误")
@@ -285,6 +289,11 @@ class Engine:
         self.tick()
         display = self.display_status()
         verification = verification_summary(self)
+        receipts = self.router.snapshot()
+        events = [dict(row) for row in self.db.execute(
+            "SELECT events.*, (source IN ('manual','demo') OR EXISTS(SELECT 1 FROM self_tests WHERE event=events.id)) AS simulated FROM events ORDER BY created DESC, rowid DESC LIMIT 50")]
+        for event in events:
+            event["delivery_summary"] = delivery_summary(self.flame, event, receipts)
         return {
             "display": display,
             "active_count": len(self.active),
@@ -307,13 +316,8 @@ class Engine:
                 }
                 for source in self.sources.values()
             ],
-            "deliveries": self.router.snapshot(),
-            "events": [
-                dict(r)
-                for r in self.db.execute(
-                    "SELECT events.*, (source IN ('manual','demo') OR EXISTS(SELECT 1 FROM self_tests WHERE event=events.id)) AS simulated FROM events ORDER BY created DESC, rowid DESC LIMIT 50"
-                )
-            ],
+            "deliveries": receipts,
+            "events": events,
             "tasks": [
                 dict(r)
                 for r in self.db.execute(

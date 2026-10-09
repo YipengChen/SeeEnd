@@ -77,7 +77,7 @@ class LocalAPI(QObject):
         )
         request = urllib.request.Request(self.base + path, data=body, headers=headers)
         try:
-            timeout = 35 if path in ("/api/integrations/install", "/api/integrations/uninstall") else 5
+            timeout = 35 if path in ("/api/integrations/install", "/api/integrations/uninstall", "/api/reset", "/api/device/delete") else 5
             with opener.open(request, timeout=timeout) as response:
                 data = response.read(32 * 1024 * 1024 + 1)
             if len(data) > 32 * 1024 * 1024:

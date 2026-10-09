@@ -1,17 +1,16 @@
 """Desktop startup ownership and cleanup, without user services or hardware."""
 
 import os
+from importlib.util import find_spec
 import unittest
 from unittest.mock import Mock, patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-try:
+HAS_QT = find_spec("PySide6") is not None
+if HAS_QT:
     from PySide6.QtCore import QCoreApplication, QEvent
     from PySide6.QtWidgets import QApplication, QWidget
     from aiflame.desktop import app as shell
-    HAS_QT = True
-except ImportError:
-    HAS_QT = False
 
 
 @unittest.skipUnless(HAS_QT, "Install desktop dependencies to test the app shell")

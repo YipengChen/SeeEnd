@@ -1,11 +1,11 @@
 // Shared dashboard UI helpers; imported explicitly by each page controller.
 export const $ = (id) => document.getElementById(id);
 export const names = {
-  idle: "待机",
-  working: "工作中",
+  idle: "当前无任务",
+  working: "任务进行中",
   needs_input: "等待输入",
   timeout: "已超时",
-  done: "已完成",
+  done: "任务已完成",
   error: "失败",
   cancelled: "已取消",
   unknown: "状态未知",
@@ -20,7 +20,22 @@ export const results = {
   lease_expired: "工作状态超时",
   dropped: "队列已淘汰",
   ended_on_reconnect: "重连后不补播",
+  superseded: "已被后续状态替代",
+  interrupted: "进程重启，未重播",
 };
+export function appendDeliverySummary(cell, summary) {
+  if (!summary) return;
+  const devices = summary.devices || [];
+  const name = (device) => device.name && device.name !== device.device_id
+    ? `${device.name}（${device.device_id}）` : device.device_id;
+  const receiptDetails = devices.map((device) => `${name(device)}\n${device.reason}`).join("\n\n");
+  cell.title = `处理结果：${summary.reason || ""}` + (devices.length ? `\n\n设备回执\n${receiptDetails}` : "");
+  if (!devices.length) return;
+  const confirmed = devices.filter((device) => device.status === "applied").length;
+  const details = el("div", `已确认 ${confirmed}/${devices.length} 台设备`, "muted");
+  details.dataset.deliveryDetails = "";
+  cell.append(details);
+}
 export function tell(text, error = false) {
   $("message").textContent = text;
   $("message").classList.toggle("error", error);

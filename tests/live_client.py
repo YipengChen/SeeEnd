@@ -1,9 +1,54 @@
 """Shared authenticated dashboard client for opt-in hardware verification."""
 
 import http.cookiejar
+import argparse
 import json
 import urllib.error
 import urllib.request
+
+
+def requested_devices():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--device-id", action="append", help="Physical target ID; repeat for multiple lamps. Defaults to all enabled lamps.")
+    return parser.parse_args().device_id
+
+
+def hardware_targets(snapshot, device_ids=None):
+    """Freeze intended physical sessions before sending any manual test tasks."""
+    assert snapshot["settings"]["mode"] == "hardware", "Switch to hardware mode first"
+    assert not snapshot["settings"]["paused"] and not snapshot["emergency"], "Resume the Hub first"
+    assert snapshot.get("display", {}).get("key") != "muted", "Disable quiet hours before hardware verification"
+    rows = {row["device_id"]: row for row in snapshot.get("devices", [])}
+    ids = device_ids if device_ids is not None else [
+        key for key, row in rows.items()
+        if not row["connection_paused"] and row["light_settings"]["brightness"] > 0
+    ]
+    assert ids, "Enable and connect at least one physical lamp"
+    assert len(set(ids)) == len(ids), "Target IDs must be unique"
+    targets = {}
+    for key in ids:
+        assert key in rows, "Unknown target: " + key
+        row = rows[key]
+        assert row.get("online") and not row["connection_paused"], "Connect target: " + key
+        assert row["light_settings"]["brightness"] > 0, "Increase target brightness: " + key
+        targets[key] = (row.get("session_id"), row.get("connected_at"))
+    return targets
+
+
+def targets_connected(snapshot, targets):
+    rows = {row["device_id"]: row for row in snapshot.get("devices", [])}
+    return snapshot["settings"]["mode"] == "hardware" and all(
+        key in rows and rows[key].get("online") and not rows[key]["connection_paused"]
+        and rows[key]["light_settings"]["brightness"] > 0
+        and (rows[key].get("session_id"), rows[key].get("connected_at")) == token
+        for key, token in targets.items()
+    )
+
+
+def hardware_applied(snapshot, targets, event_id):
+    applied = {row["output"] for row in snapshot.get("deliveries", [])
+               if row["event"] == event_id and row["status"] == "applied"}
+    return targets_connected(snapshot, targets) and all("flame:" + key in applied for key in targets)
 
 
 class DashboardClient:

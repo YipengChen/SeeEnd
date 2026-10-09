@@ -24,6 +24,7 @@ def existing_hub():
 
 
 def main():
+    from aiflame.desktop.localization import t
     from PySide6.QtCore import QEvent
     from PySide6.QtWidgets import (
         QApplication,
@@ -41,7 +42,7 @@ def main():
                 and self.hub.devices.busy()
             ):
                 QMessageBox.information(
-                    None, "设备维护中", "固件操作正在进行，请等待完成后退出。"
+                    None, t("设备维护中"), t("固件操作正在进行，请等待完成后退出。")
                 )
                 event.ignore()
                 return True
@@ -56,7 +57,7 @@ def main():
             return 0
         return run_primary(app, instance)
     except RuntimeError as error:
-        QMessageBox.critical(None, "无法启动 SeeEnd", str(error))
+        QMessageBox.critical(None, t("无法启动 SeeEnd"), t(str(error)))
         return 1
     finally:
         instance.close()
@@ -71,8 +72,9 @@ def run_primary(app, instance):
 
 
 def _run_primary(app, instance, resources):
-    from PySide6.QtGui import QAction, QIcon
-    from PySide6.QtWidgets import QMenu, QMessageBox, QSystemTrayIcon
+    from aiflame.desktop.localization import QAction, QSystemTrayIcon, set_language, t
+    from PySide6.QtGui import QIcon
+    from PySide6.QtWidgets import QMenu, QMessageBox
     from aiflame.desktop.widgets import Dashboard
     from aiflame.desktop.tray import TrayIndicator
     from aiflame.desktop.window import DesktopWindow, WindowRestorer
@@ -89,11 +91,13 @@ def _run_primary(app, instance, resources):
             hub.start()
         except OSError:
             QMessageBox.critical(
-                None, "无法启动", "本地端口 8765 被旧版或另一份 Hub 占用，请退出该 Hub（包括调参启动器）后重新打开 SeeEnd。"
+                None, t("无法启动"), t("本地端口 8765 被旧版或另一份 Hub 占用，请退出该 Hub（包括调参启动器）后重新打开 SeeEnd。")
             )
             return 1
 
     app.hub = hub
+    if hub:
+        set_language(hub.engine.settings.get("language", "zh-CN"))
 
     window = DesktopWindow(hub)
     resources.callback(window.deleteLater)
@@ -131,7 +135,7 @@ def _run_primary(app, instance, resources):
     def quit_app():
         if hub and hub.devices.busy():
             show()
-            QMessageBox.information(window, "设备维护中", "请等待固件操作结束后退出。")
+            QMessageBox.information(window, t("设备维护中"), t("请等待固件操作结束后退出。"))
             return
         window.quitting = True
         app.quit()
@@ -151,6 +155,21 @@ def _run_primary(app, instance, resources):
         show()
 
     help_action.triggered.connect(open_help)
+    license_action = QAction("许可与第三方组件 / Licenses", menu)
+
+    def open_licenses():
+        from PySide6.QtCore import QUrl
+        from PySide6.QtGui import QDesktopServices
+        from aiflame.core.paths import PROJECT
+        QMessageBox.information(window, "SeeEnd · Licenses",
+            "SeeEnd © 2026 Yipeng Chen · 专有许可 / Proprietary license\n\n"
+            "使用 Qt / PySide6 LGPL 动态库；允许按 LGPL 替换库和调试修改。\n"
+            "Uses LGPL Qt/PySide libraries; library replacement and debugging are permitted.\n\n"
+            "完整许可和替换说明位于软件资源目录。\n"
+            "Full licenses and replacement instructions are in the app resources.")
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(PROJECT)))
+
+    license_action.triggered.connect(open_licenses)
 
     def sync_tray(data):
         pause_action.setEnabled(data is not None)
@@ -168,6 +187,7 @@ def _run_primary(app, instance, resources):
     menu.addAction(pause_action)
     menu.addSeparator()
     menu.addAction(help_action)
+    menu.addAction(license_action)
     menu.addAction(exit_action)
     tray.setContextMenu(menu)
     if sys.platform != "darwin":
@@ -185,8 +205,10 @@ def _run_primary(app, instance, resources):
     menu_bar.addAction(show_action)
     menu_bar.addAction(pause_action)
     menu_bar.addAction(help_action)
+    menu_bar.addAction(license_action)
     menu_bar.addAction(exit_action)
 
     app.aboutToQuit.connect(resources.close)
+    window.showMaximized()
     restorer.request()
     return app.exec()

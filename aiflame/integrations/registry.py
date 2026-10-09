@@ -33,7 +33,7 @@ SOURCES = (
     *(
         SourcePolicy(
             source,
-            name + " 网页（实验）",
+            name + " 网页",
             "共用浏览器扩展 · 需安装本机桥接及刷新网页",
             authenticated=True,
             requires_start=True,

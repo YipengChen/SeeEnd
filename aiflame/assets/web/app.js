@@ -1,10 +1,15 @@
-import { $, api, el, tell, names, results } from "./shared.js";
+import { $, api, el, tell, names, results, appendDeliverySummary } from "./shared.js";
 
 let model = null,
   manualTask = null,
   manualSeq = 0,
   pending = false,
   generation = 0;
+
+const webUrls = {"claude-web": "https://claude.ai/", "gemini-web": "https://gemini.google.com/", "chatgpt-web": "https://chatgpt.com/", "deepseek-web": "https://chat.deepseek.com/", "qianwen-web": "https://www.qianwen.com/", "doubao-web": "https://www.doubao.com/chat/", "yuanbao-web": "https://yuanbao.tencent.com/", "kimi-web": "https://www.kimi.com/", "zhipu-web": "https://chatglm.cn/"};
+
+// Same September 2026 Similarweb monthly-visit order as WEB_SOURCES.
+const webSourceOrder = ["chatgpt-web", "gemini-web", "claude-web", "deepseek-web", "doubao-web", "qianwen-web", "kimi-web", "yuanbao-web", "zhipu-web"];
 
 const verificationTitles = {
   needs_input: "任务等待输入或授权，请在来源应用继续", unknown: "尚不能确定任务结果，请检查来源应用",
@@ -44,6 +49,7 @@ function overviewCountdown() {
 }
 function render(data) {
   model = data;
+  document.dispatchEvent(new CustomEvent("seeend-language", {detail: data.settings.language ?? "zh-CN"}));
   const previewState = overviewState(data);
   overviewCountdown();
   $("appVersion").textContent = "DESKTOP · " + data.app_version;
@@ -61,8 +67,9 @@ function render(data) {
     ? "设备维护中，硬件灯光暂不可用。" : "尚未连接设备，硬件灯光暂不可用。";
   $("virtualDevice").hidden = hardware;
   $("hardwareControls").hidden = !hardware;
+  $("hardwareMaintenanceControls").hidden = !hardware;
   $("modeHint").textContent = hardware
-    ? "连接火焰灯接收任务提醒，屏幕同步显示状态。"
+    ? "连接设备接收任务提醒，屏幕也会同步设备状态。"
     : "屏幕烛火随任务变化，不查找或连接设备。";
   for (const button of document.querySelectorAll("[data-mode]")) {
     button.setAttribute("aria-pressed", String(button.dataset.mode === document.body.dataset.mode));
@@ -99,9 +106,9 @@ function render(data) {
   $("displayTitle").textContent = data.settings.paused
       ? "暂时安静"
       : {
-          idle: "安静等候",
-          working: "正在进行，慢慢来",
-          done: "完成了，回来看看",
+          idle: "当前无任务",
+          working: "任务进行中",
+          done: "任务已完成",
           error: "需要你看一眼",
         }[mode];
   $("displayHint").textContent = (data.brightness_off ?? data.settings.brightness === 0)
@@ -138,12 +145,12 @@ function render(data) {
   for (const key of ["paused", "quiet_enabled", "hold_until_activity", "desktop_notifications"])
     $(key).checked = data.settings[key];
   $("sources").replaceChildren();
-  const group = (id) => ["codex", "claude-code", "deepseek-harness", "qoder", "gemini-cli", "opencode"].includes(id) ? 0 : id.endsWith("-web") ? 1 : id.endsWith("-desktop") ? 2 : 3;
-  const groupTitles = ["编程工具", "AI 网页", "桌面客户端", "本地 API 与测试来源"];
+  const group = (id) => ["codex", "claude-code", "deepseek-harness", "qoder", "gemini-cli", "opencode"].includes(id) ? 1 : id.endsWith("-web") ? 0 : id.endsWith("-desktop") ? 2 : 3;
+  const groupTitles = ["AI 网页", "编程工具", "桌面客户端", "本地 API 与测试来源"];
   const brands = new Set(["codex", "claude", "qoder", "gemini", "opencode", "chatgpt", "deepseek", "qianwen", "doubao", "yuanbao", "kimi", "zhipu"]);
   const brandAliases = {"claude-code": "claude", "deepseek-harness": "deepseek", "gemini-cli": "gemini"};
   let previousGroup = null;
-  for (const source of [...data.sources].sort((a, b) => group(a.id) - group(b.id))) {
+  for (const source of [...data.sources].sort((a, b) => group(a.id) - group(b.id) || (group(a.id) === 0 ? webSourceOrder.indexOf(a.id) - webSourceOrder.indexOf(b.id) : 0))) {
     const currentGroup = group(source.id);
     if (currentGroup !== previousGroup) {
       if (previousGroup !== null) $("sources").append(el("hr", "", "source-divider"));
@@ -157,7 +164,16 @@ function render(data) {
       mark.className = "source-icon brand-icon";
       mark.src = "/brands/" + brand + ".png";
       mark.alt = "";
-      row.append(mark);
+      if (webUrls[source.id]) {
+        const link = document.createElement("a");
+        link.href = webUrls[source.id];
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+        link.className = "source-web-link";
+        link.setAttribute("aria-label", source.name + " · 打开网页");
+        link.append(mark);
+        row.append(link);
+      } else row.append(mark);
     } else {
       row.append(el("div", source.id === "local-script" ? ">_" : source.id === "demo" ? "▷" : "✧", "source-icon"));
     }
@@ -165,7 +181,17 @@ function render(data) {
     const description =
       source.description +
       " · " + (verificationTitles[data.verification?.[source.id]?.status] || "测试不计入真实验证");
-    info.append(el("b", source.name), el("small", description));
+    const title = el("b", source.name);
+    if (webUrls[source.id]) {
+      const link = document.createElement("a");
+      link.href = webUrls[source.id];
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      link.className = "source-web-link";
+      link.append(title);
+      info.append(link);
+    } else info.append(title);
+    info.append(el("small", description));
     row.append(info);
     const check = document.createElement("input");
     check.type = "checkbox";
@@ -221,6 +247,7 @@ function render(data) {
     );
     const td = document.createElement("td");
     td.append(el("span", results[event.status] || event.status, "pill"));
+    appendDeliverySummary(td, event.delivery_summary);
     tr.append(td);
     $("events").append(tr);
   }

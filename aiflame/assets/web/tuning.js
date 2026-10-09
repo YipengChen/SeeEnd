@@ -52,7 +52,7 @@ window.addEventListener('pagehide',()=>{active=false;if(session)fetch('/api/tuni
 async function refresh(){
   const data=await api('/api/tuning');devices=data.devices;const selected=$('device').value;
   if(!fields.length){fields=data.fields;params=defaults();render();$('count').textContent=`${visibleFields().length} 项核心参数`;tell('连接硬件后，点击开始实时调参。');}
-  $('device').replaceChildren(...devices.map(d=>{const option=el('option',`${d.name} · ${d.id}`);option.value=d.id;return option;}));if(devices.some(d=>d.id===selected))$('device').value=selected;
+  $('device').replaceChildren(...devices.map(d=>{const option=el('option',`${d.name} · ${d.id}`);option.dataset.userContent="";option.value=d.id;return option;}));if(devices.some(d=>d.id===selected))$('device').value=selected;
   if(active&&!devices.some(d=>d.id===activeDevice)){active=false;session=null;key=null;tell('调试设备已移除，请重新选择设备。',true);}
   const d=devices.find(d=>d.id===$('device').value);
   if(active&&!busy&&!dirty&&d?.key===key&&d.confirmed)tell('● 硬件已确认 · 正在实时呈现');

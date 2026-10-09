@@ -14,9 +14,10 @@ def main():
     if mode == "--mpremote":
         from mpremote.main import main as run
     elif mode == "--esptool":
-        import esptool
+        import subprocess
+        from aiflame.core.process import command
 
-        return esptool._main()
+        return subprocess.call(command("--esptool", *args))
     elif mode == "--codex-hook":
         from aiflame.integrations.codex.hook import main as run
     elif mode == "--cli-hook":

@@ -56,7 +56,7 @@ class CliHttpTests(unittest.TestCase):
             code, _ = self.client.request("/api/integrations/install", body)
             self.assertEqual(code, 400)
 
-    def test_three_helpers_reach_hub_without_counting_as_real_tasks(self):
+    def test_all_cli_helpers_reach_hub_without_counting_as_real_tasks(self):
         enabled = dict(self.hub.engine.settings["source_enabled"])
         enabled.update({source: True for source in CLI_SOURCES})
         self.client.call("/api/settings", {"source_enabled": enabled})
@@ -83,9 +83,14 @@ class CliHttpTests(unittest.TestCase):
     @unittest.skipUnless(os.environ.get("AIFLAME_TEST_FROZEN_HELPER"), "Supply a built App helper to test packaging")
     def test_frozen_helpers_deliver_real_lifecycle(self):
         executable = os.environ["AIFLAME_TEST_FROZEN_HELPER"]
+        enabled = {**self.hub.engine.settings["source_enabled"],
+                   **{source: True for source in CLI_SOURCES}}
+        self.client.call("/api/settings", {"source_enabled": enabled, "duration": 3})
         for source in CLI_SOURCES:
-            kinds = ("BeforeAgent", "AfterAgent") if source == "gemini-cli" else ("TurnStart", "TurnEnd") if source == "opencode" else ("UserPromptSubmit", "Stop")
-            for kind in kinds:
+            kinds = (("BeforeAgent", "AfterAgent") if source == "gemini-cli"
+                     else ("TurnStart", "TurnEnd") if source in ("opencode", "deepseek-harness")
+                     else ("UserPromptSubmit", "Stop"))
+            for kind, state in zip(kinds, ("working", "done")):
                 payload = {"hook_event_name": kind, "session_id": "frozen-" + source,
                            "turn_id": "1", **({"reason": "completed"} if kind == "TurnEnd" else {})}
                 result = subprocess.run([executable, "--cli-hook", source, "--port", str(self.hub.port)],
@@ -93,10 +98,24 @@ class CliHttpTests(unittest.TestCase):
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertEqual(result.stdout, "{}\n" if source == "gemini-cli" else "")
                 self.assertEqual(result.stderr, "")
+                deadline = time.monotonic() + 10
+                while True:
+                    status = self.client.call("/api/status")
+                    events = [event for event in status["events"]
+                              if event["source"] == source and event["state"] == state]
+                    if events and events[0]["status"] == "screen":
+                        break
+                    self.assertLess(time.monotonic(), deadline, status)
+                    time.sleep(0.02)
+                self.assertEqual(status["display"]["state"], state)
+                self.assertFalse(events[0]["simulated"])
             row = next(row for row in self.client.call("/api/cli-integrations")["integrations"]
                        if row["source_id"] == source)
             self.assertEqual(row["signals"]["start"]["received"], 1)
             self.assertEqual(row["signals"]["complete"]["received"], 1)
+            self.assertEqual(status["verification"][source]["status"], "verified")
+            self.assertEqual(status["verification"][source]["complete_tasks"], 1)
+            self.assertEqual(status["verification"][source]["delivery"], "screen")
 
 
 if __name__ == "__main__":

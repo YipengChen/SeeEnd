@@ -55,21 +55,22 @@ def write_private(path, value):
         Path(name).unlink(missing_ok=True)
 
 
-def load_config():
+def new_config():
     import uuid
+
+    from aiflame.integrations.registry import SOURCES
+    return {"hub_id": str(uuid.uuid4()), "dashboard": secrets.token_urlsafe(32),
+            "tokens": {source.id: secrets.token_urlsafe(32) for source in SOURCES if source.authenticated},
+            "device_id": "", "port": "", "transport": "usb", "devices": {}}
+
+
+def load_config():
 
     path = ensure_runtime() / "credentials.json"
     if path.exists():
         config = json.loads(path.read_text(encoding="utf-8"))
     else:
-        config = {
-            "hub_id": str(uuid.uuid4()),
-            "dashboard": secrets.token_urlsafe(32),
-            "tokens": {},
-            "device_id": "",
-            "port": "",
-            "transport": "usb",
-        }
+        config = new_config()
     changed = not path.exists()
     from aiflame.integrations.registry import SOURCES
 

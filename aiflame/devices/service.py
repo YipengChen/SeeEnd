@@ -336,7 +336,9 @@ else:
                     raise RuntimeError("灯具身份与所选设备不一致，请选择添加新设备")
                 client = YeelightClient(info["host"])
                 try:
+                    self.update(45, "已识别灯具，正在连接控制端口 " + info["host"] + ":55443")
                     client.open()
+                    self.update(65, "控制端口已接通，正在等待灯具状态回执")
                     response = client.command("get_prop", channel_properties(model["id"]))
                     if len(response["result"]) != 3 or response["result"][0] not in ("on", "off"):
                         raise RuntimeError("灯具未提供所选型号的 RGB 控制")

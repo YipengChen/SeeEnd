@@ -1,5 +1,7 @@
 """Restore one existing window from Dock, tray, or another desktop launch."""
 
+from aiflame.desktop.localization import t
+
 from PySide6.QtCore import QEvent, QObject, Qt, QTimer
 from PySide6.QtWidgets import QMainWindow, QMessageBox
 
@@ -14,7 +16,7 @@ class DesktopWindow(QMainWindow):
     def closeEvent(self, event):
         if self.hub and self.hub.devices.busy():
             QMessageBox.information(
-                self, "设备维护中", "固件操作正在进行，请等待完成后退出。"
+                self, t("设备维护中"), t("固件操作正在进行，请等待完成后退出。")
             )
             event.ignore()
         elif self.background_available and not self.quitting:

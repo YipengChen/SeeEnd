@@ -1,0 +1,26 @@
+[
+  {
+    "name": "qtbase",
+    "version": "6.11.0",
+    "license": "LGPL-3.0-only",
+    "url": "https://download.qt.io/official_releases/qt/6.11/6.11.0/submodules/qtbase-everywhere-src-6.11.0.tar.xz",
+    "archive": "qtbase-everywhere-src-6.11.0.tar.xz",
+    "sha256": "231ad85979864d914dc9568a1b71c91d6cf20d7b2021d059103bf0eb51cb755e"
+  },
+  {
+    "name": "pyside6",
+    "version": "6.11.0",
+    "license": "LGPL-3.0-only",
+    "url": "https://download.qt.io/official_releases/QtForPython/pyside6/PySide6-6.11.0-src/pyside-setup-everywhere-src-6.11.0.tar.xz",
+    "archive": "pyside-setup-everywhere-src-6.11.0.tar.xz",
+    "sha256": "48d5c44d7c3ed861055d5491486e6a220ef5006573cae01a5fae3fb69d786336"
+  },
+  {
+    "name": "qtsvg",
+    "version": "6.11.0",
+    "license": "LGPL-3.0-only",
+    "url": "https://download.qt.io/official_releases/qt/6.11/6.11.0/submodules/qtsvg-everywhere-src-6.11.0.tar.xz",
+    "archive": "qtsvg-everywhere-src-6.11.0.tar.xz",
+    "sha256": "dfa8d653be07087d9407ed4a4ebae847f8953e0b7abd829f089803ab652a30e6"
+  }
+]

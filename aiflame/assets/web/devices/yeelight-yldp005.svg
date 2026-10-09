@@ -1,10 +1,14 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="210" height="210" viewBox="0 0 210 210">
 <defs><linearGradient id="color" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#d7eaff"/><stop offset=".42" stop-color="#9dceee"/><stop offset=".72" stop-color="#a8e2c0"/><stop offset="1" stop-color="#ffce98"/></linearGradient><linearGradient id="body" x2="1" y2="0"><stop stop-color="#d5d6d9"/><stop offset=".5" stop-color="#f6f6f4"/><stop offset="1" stop-color="#bbbfc4"/></linearGradient></defs>
-<ellipse cx="105" cy="192" rx="33" ry="5" fill="#e4dfd4"/>
-<path d="M64 96c-12-12-16-23-16-37 0-29 24-47 57-47s57 18 57 47c0 14-4 25-16 37z" fill="url(#color)"/>
-<path d="M64 96h82l-14 42c-3 10-10 15-17 17H95c-7-2-14-7-17-17z" fill="url(#body)"/>
-<path d="M88 153h34v25c0 9-7 13-17 13s-17-4-17-13z" fill="#868d97"/>
-<path d="M88 158h34m-34 7h34m-34 7h34m-32 7h30" stroke="#c3c8ce" stroke-width="4"/>
-<path d="M56 65c0-24 21-39 48-40" stroke="#fff" stroke-opacity=".65" stroke-width="7" fill="none" stroke-linecap="round"/>
-<text x="105" y="128" text-anchor="middle" fill="#90949a" font-family="sans-serif" font-size="9">Yeelight</text>
+<ellipse cx="105" cy="197" rx="30" ry="4" fill="#e4dfd4"/>
+<!-- W3 has a softly squared diffuser and a tapered housing, not a globe. -->
+<path d="M60 76l-3-39c-1-12 6-19 18-22 17-5 43-5 60 0 12 3 19 10 18 22l-3 39c-23 4-67 4-90 0z" fill="url(#color)"/>
+<path d="M60 76c23 4 67 4 90 0l-8 47c-2 11-8 17-13 25l-3 16c-11 4-31 4-42 0l-3-16c-5-8-11-14-13-25z" fill="url(#body)"/>
+<path d="M84 162c12 3 30 3 42 0v5c-12 4-30 4-42 0z" fill="#d2b5ec"/>
+<path d="M87 167h36v20c0 6-8 9-18 9s-18-3-18-9z" fill="#858b93"/>
+<path d="M88 171l34-2m-34 9l34-2m-34 9l34-2m-32 9l30-2" stroke="#c5c9ce" stroke-width="4" stroke-linecap="round"/>
+<path d="M97 195h16l-3 5h-10z" fill="#686c72"/>
+<path d="M66 39c-1-9 4-15 14-17 12-3 26-4 37-3" stroke="#fff" stroke-opacity=".6" stroke-width="5" fill="none" stroke-linecap="round"/>
+<path d="M70 87l5 29c2 12 8 17 13 24" stroke="#fff" stroke-opacity=".38" stroke-width="5" fill="none" stroke-linecap="round"/>
+<path d="M97 108l8 4 8-4v10l-4 2v-6l-4 2-4-2v6l-4-2z" fill="#a8aaad"/>
 </svg>

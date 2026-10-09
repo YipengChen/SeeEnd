@@ -37,6 +37,9 @@ class Hub:
         self.port = port
         self.stopping = threading.Event()
         self.operation_lock = threading.RLock()
+        self.request_guard = threading.RLock()
+        self.active_posts = 0
+        self.resetting = False
         self.runtime = runtime or ensure_runtime()
         self.config = config if config is not None else load_config()
         self.lock = threading.RLock()
@@ -125,6 +128,21 @@ class Hub:
         self.transport.stop()
         with self.lock:
             self.engine.db.close()
+
+    def reset_app(self):
+        from aiflame.hub.reset import reset_app
+        with self.request_guard:
+            if self.resetting or self.active_posts:
+                raise EventError("请等待当前操作结束后重置 APP", 409)
+            self.resetting = True
+        try:
+            with self.operation_lock:
+                if self.stopping.is_set() or self.devices.busy() or self.tests.busy():
+                    raise EventError("请等待设备操作或诊断结束后重置 APP", 409)
+                return reset_app(self)
+        finally:
+            with self.request_guard:
+                self.resetting = False
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -219,13 +237,15 @@ class Handler(BaseHTTPRequestHandler):
                 "/tuning.css": "tuning.css",
                 "/app.js": "app.js",
                 "/shared.js": "shared.js",
+                "/i18n.js": "i18n.js",
+                "/locales/en.json": "locales/en.json",
                 "/style.css": "style.css",
                 "/devices.js": "devices.js",
             }
             assets.update({f"/device-icons/{model['id']}.svg": f"devices/{model['id']}.svg" for model in MODELS})
             assets.update({
                 f"/brands/{brand}.png": f"brands/{brand}.png"
-                for brand in ("codex", "chatgpt", "deepseek", "qianwen", "doubao", "yuanbao", "kimi", "zhipu")
+                for brand in ("codex", "claude", "qoder", "gemini", "opencode", "chatgpt", "deepseek", "qianwen", "doubao", "yuanbao", "kimi", "zhipu")
             })
             if self.path in assets:
                 file = PACKAGE / "assets/web" / assets[self.path]
@@ -329,7 +349,7 @@ class Handler(BaseHTTPRequestHandler):
                             },
                             "settings": {
                                 key: c.engine.settings[key]
-                                for key in ("paused", "brightness", "mode")
+                                for key in ("paused", "brightness", "mode", "language")
                             },
                             "emergency": c.engine.emergency,
                             "muted": c.engine.muted(),
@@ -404,6 +424,20 @@ class Handler(BaseHTTPRequestHandler):
         return body
 
     def do_POST(self):
+        if self.path == "/api/reset":
+            return self._do_POST()
+        with self.c.request_guard:
+            if self.c.resetting:
+                self.reply(503, {"error": "APP 正在重置，请稍后重试"})
+                return
+            self.c.active_posts += 1
+        try:
+            return self._do_POST()
+        finally:
+            with self.c.request_guard:
+                self.c.active_posts -= 1
+
+    def _do_POST(self):
         try:
             self.validate_host()
             identity = self.identity()
@@ -434,6 +468,11 @@ class Handler(BaseHTTPRequestHandler):
                 return
             if identity != "dashboard":
                 raise EventError("需要控制台会话", 403)
+            if self.path == "/api/reset":
+                if set(body) != {"confirm"} or body["confirm"] is not True:
+                    raise EventError("请先确认重置 APP")
+                self.reply(200, c.reset_app(), cookie=True)
+                return
             if self.path == "/api/tuning":
                 from aiflame.hub.tuning import update
                 with c.lock:
@@ -536,6 +575,12 @@ class Handler(BaseHTTPRequestHandler):
                     if c.devices.busy() or c.tests.busy():
                         raise EventError("请等待设备维护或诊断结束", 409)
                     self.reply(202, c.transport.test_light(body["device_id"]))
+                return
+            if self.path == "/api/device/delete":
+                with c.operation_lock:
+                    if c.tests.busy():
+                        raise EventError("请等待触发测试结束", 409)
+                    self.reply(200, c.devices.delete(body))
                 return
             if self.path == "/api/device":
                 with c.operation_lock:

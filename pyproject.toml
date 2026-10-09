@@ -4,10 +4,10 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "seeend"
-version = "0.8.3"
+version = "0.8.4"
 description = "SeeEnd: local AI task notifications with optional AI Flame hardware"
 readme = "README.md"
-license = "GPL-3.0-only"
+license = "LicenseRef-SeeEnd-Proprietary"
 license-files = ["LICENSE", "THIRD_PARTY_NOTICES.md"]
 requires-python = ">=3.11"
 dependencies = ["pyserial==3.5", "mpremote==1.29.0", "esptool==5.4.0"]
@@ -28,4 +28,4 @@ include = ["aiflame*"]
 namespaces = false
 
 [tool.setuptools.package-data]
-aiflame = ["assets/*.svg", "assets/*.png", "assets/*.ico", "assets/*.icns", "assets/web/*", "assets/web/brands/*", "assets/web/devices/*.svg", "devices/firmware/*.py", "devices/firmware/base/*", "integrations/chatgpt_web/extension/*", "integrations/cli_tools/deepseek_bundle/*", "integrations/cli_tools/opencode_bundle/*"]
+aiflame = ["assets/*.svg", "assets/*.png", "assets/*.ico", "assets/*.icns", "assets/web/*", "assets/web/locales/*.json", "assets/web/brands/*", "assets/web/devices/*.svg", "devices/firmware/*.py", "devices/firmware/base/*", "integrations/chatgpt_web/extension/*", "integrations/cli_tools/deepseek_bundle/*", "integrations/cli_tools/opencode_bundle/*"]

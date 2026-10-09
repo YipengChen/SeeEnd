@@ -1,6 +1,7 @@
 """Native dashboard controller with bounded polling and stable controls."""
 
 import csv
+from html import escape
 from collections import deque
 from datetime import datetime
 from pathlib import Path
@@ -10,18 +11,21 @@ from urllib.parse import urlencode
 
 from PySide6.QtCore import Qt, QSignalBlocker, QTime, QTimer, Signal
 from PySide6.QtGui import QColor
-from PySide6.QtWidgets import QBoxLayout, QFileDialog, QTableWidgetItem, QWidget
+from PySide6.QtWidgets import QBoxLayout, QFileDialog, QToolTip, QMessageBox, QColorDialog
+from aiflame.desktop.localization import QTableWidgetItem, QWidget
 
-from .components import icon, restyle
+from .components import Disclosure, icon, restyle
 from .network import LocalAPI
 from .theme import STYLE
 from .views import DashboardViews, PAGES
-from aiflame.devices.models import YEELIGHT_MODELS, hardware_model
+from .localization import set_language, language, source_text, t
+from aiflame.devices.models import DEFAULT_MODEL, YEELIGHT_MODELS, hardware_model
+from aiflame.core.delivery import REASONS as DELIVERY_REASONS
 
 NAMES = {
-    "idle": "待机",
-    "working": "进行中",
-    "done": "已完成",
+    "idle": "当前无任务",
+    "working": "任务进行中",
+    "done": "任务已完成",
     "error": "需关注",
     "cancelled": "已取消",
     "unknown": "状态未知",
@@ -38,12 +42,14 @@ RESULTS = {
     "lease_expired": "工作状态超时",
     "dropped": "队列已淘汰",
     "ended_on_reconnect": "重连后不补播",
+    "superseded": "已被后续状态替代",
+    "interrupted": "进程重启，未重播",
 }
 VERIFICATION_STATUS = {
     "needs_input": "等待输入",
     "unknown": "状态未知",
     "waiting": "等待新任务",
-    "working": "进行中",
+    "working": "任务进行中",
     "verified": "已收到开始与完成",
     "cancelled": "已取消",
     "error": "异常",
@@ -111,6 +117,7 @@ class Dashboard(DashboardViews, QWidget):
         self.manual_task, self.manual_seq = None, 0
         self.actions = deque()
         self.writing = False
+        self.reset_pending = False
         self.mode_pending = None
         self.generation = 0
         self.job_busy = self.test_busy = False
@@ -210,14 +217,15 @@ class Dashboard(DashboardViews, QWidget):
         path, body, callback, failed = self.actions.popleft()
 
         def received(data):
-            self.tell(
-                data.get(
-                    "message",
-                    "偏好已保存"
-                    if path == "/api/settings"
-                    else "操作已接收，正在同步状态。",
+            if path != "/api/preview" and not (path == "/api/settings" and set(body) == {"mode"}):
+                self.tell(
+                    data.get(
+                        "message",
+                        "偏好已保存"
+                        if path == "/api/settings"
+                        else "操作已接收，正在同步状态。",
+                    )
                 )
-            )
             if callback:
                 callback(data)
             self.next_action()
@@ -228,6 +236,114 @@ class Dashboard(DashboardViews, QWidget):
             self.next_action()
 
         self.api.request(path, received, body, failed=rejected)
+
+    def reset_app(self):
+        if self.reset_pending or not self.reset_button.isEnabled():
+            return
+        self.reset_pending = True
+        self.update_busy()
+        dialog = QMessageBox(QMessageBox.Icon.Warning, t("确定重置 APP 吗？"),
+                             t("清除本机缓存、活动记录、设备配对、提醒偏好和应用接入配置，恢复初始状态。不会修改其他应用的文件或设备固件；应用接入需要重新配置。"),
+                             QMessageBox.StandardButton.NoButton, self)
+        reset = dialog.addButton(t("重置 APP"), QMessageBox.ButtonRole.DestructiveRole)
+        cancel = dialog.addButton(t("取消"), QMessageBox.ButtonRole.RejectRole)
+        dialog.setDefaultButton(cancel)
+        dialog.setEscapeButton(cancel)
+        dialog.exec()
+        if dialog.clickedButton() is not reset:
+            self.reset_pending = False
+            self.update_busy()
+            return
+
+        def failed():
+            self.reset_pending = False
+            self.update_busy()
+
+        self.act("/api/reset", {"confirm": True}, self.reset_finished, failed)
+
+    def reset_finished(self, data):
+        # The response has already refreshed the worker's authenticated cookie.
+        # Invalidate old dashboard snapshots and discard local drafts. Keep the
+        # shared API consumers' callbacks so their polling state can complete.
+        self.generation += 1
+        self.actions.clear()
+        self.brightness_timer.stop()
+        self.pending_device_brightness = None
+        self.hardware_preview_id = None
+        self.stop_preview()
+        self.manual_task, self.manual_seq = None, 0
+        self.mode_pending = None
+        self.job_busy = self.test_busy = False
+        self.reset_pending = False
+        self.chatgpt_permission_pending = False
+        self.codex_action_notice = ""
+        self.clients_supported = True
+        self.device_test_deadlines.clear()
+        self.selected_device_id = None
+        self.selected_device_model = DEFAULT_MODEL
+        self.selected_device_state = {"online": False}
+        self.device_selection_loading = self.port_restore_pending = False
+        self.device_operation_id = self.rendered_yeelight_discovery = None
+        self.wifi_available = self.connection_paused = self.wifi_scan_running = False
+        self.source_values.clear()
+        for edit in [self.ssid, self.password, self.yeelight_host, *self.cli_config_dirs.values(), self.history_search]:
+            with QSignalBlocker(edit):
+                edit.clear()
+        for control in [self.show_password, self.open_network, self.confirm_board, self.confirm_flash]:
+            with QSignalBlocker(control):
+                control.setChecked(False)
+        self.password.setEnabled(True)
+        self.password.setEchoMode(self.password.EchoMode.Password)
+        for choices in [self.wifi_choices, self.yeelight_choices, self.device_instances, *self.cli_profiles.values()]:
+            with QSignalBlocker(choices):
+                choices.clear()
+        with QSignalBlocker(self.device_instances):
+            self.device_instances.addItem("添加此型号设备…", "")
+        for choices in self.cli_profiles.values():
+            with QSignalBlocker(choices):
+                choices.addItem("正在查找已有 Profile…", "")
+        with QSignalBlocker(self.ports):
+            self.ports.clear()
+            self.ports.addItem("点击刷新，查找 USB 设备", "")
+        with QSignalBlocker(self.brightness), QSignalBlocker(self.device_reduced):
+            self.brightness.setValue(data["settings"]["brightness"])
+            self.device_reduced.setChecked(data["settings"]["reduced"])
+        self.brightness_value.setText(f"{data['settings']['brightness']}%")
+        self.brightness_note.hide()
+        self.device_test_caption.hide()
+        self.device_version.setText("连接后读取固件版本")
+        self.pairing.setText("正在读取设备信息…")
+        with QSignalBlocker(self.history_filter):
+            self.history_filter.setCurrentIndex(0)
+        self.integration_plans.clear()
+        for source, guide in self.integration_guides.items():
+            guide.setText("展开后显示实际配置文件、增量修改方式和验证步骤。")
+            self.integration_manual_guides[source].clear()
+            self.integration_snippets[source].clear()
+            self.integration_copy_buttons[source].setEnabled(False)
+            self.integration_copy_buttons[source].setText("复制增量配置 / 命令")
+        for message in [*self.cli_messages.values(), *self.cli_details.values(), self.codex_connection_details]:
+            message.setText("尚未检查。")
+        for message in [self.browser_message, self.client_message, self.chatgpt_permission_hint,
+                        self.test_message, self.test_details, self.job_message, self.wifi_error]:
+            message.clear()
+            message.hide()
+        self.client_details.clear()
+        self.test_details.setText("尚未运行诊断。")
+        self.progress.hide()
+        self.clear_wifi_error()
+        self.wifi_network.setText("连接设备后读取已记忆的网络")
+        self.wifi_scan_hint.setText("点击名称展开列表，由 ESP32 搜索并按信号排序；也可手动输入。")
+        for disclosure in self.findChildren(Disclosure):
+            disclosure.button.setChecked(False)
+        self.history_key = None
+        self.visible_events = []
+        self.ready = True
+        self.open_device_details(DEFAULT_MODEL)
+        self.show_device_selector()
+        self.render(data)
+        self.navigate(0)
+        self.tell("APP 已重置，请重新配置应用接入。")
 
     def setting(self, key, value):
         if self.model:
@@ -266,7 +382,7 @@ class Dashboard(DashboardViews, QWidget):
         self.mode_hint.setText(
             ("正在切换至虚拟模式…" if selected == "virtual" else "正在切换至硬件模式…")
             if self.mode_pending else
-            "连接火焰灯接收任务提醒，屏幕同步显示状态。" if self.hardware_mode()
+            "连接设备接收任务提醒，屏幕也会同步设备状态。" if self.hardware_mode()
             else "屏幕烛火随任务变化，不查找或连接设备。"
         )
 
@@ -290,11 +406,47 @@ class Dashboard(DashboardViews, QWidget):
         if pending:
             self.act("/api/device/light-settings", pending)
 
+    def yeelight_brightness_changed(self, state, value):
+        self.yeelight_brightness_labels[state].setText(f"{value}%")
+        if self.ready and self.model and self.selected_device_id and not self.device_selection_loading:
+            pending = self.pending_device_brightness or {}
+            values = dict(pending.get("settings", {}).get("state_brightness", {}))
+            values[state] = value
+            self.pending_device_brightness = {"hardware_model": self.selected_device_model,
+                                             "device_id": self.selected_device_id,
+                                             "settings": {"state_brightness": values}}
+            self.brightness_timer.start()
+
     def device_light_setting(self, key, value):
+        self.device_light_settings({key: value})
+
+    def device_light_settings(self, settings):
         if self.ready and self.model and self.selected_device_id and not self.device_selection_loading:
             self.flush_device_brightness()
             self.act("/api/device/light-settings", {"hardware_model": self.selected_device_model,
-                     "device_id": self.selected_device_id, "settings": {key: value}})
+                     "device_id": self.selected_device_id, "settings": settings})
+
+    def yeelight_color_changed(self, state):
+        choice = self.yeelight_color_choices[state]
+        if choice.currentData():
+            self.device_light_setting("colors", {state: choice.currentData()})
+
+    def choose_yeelight_color(self, state):
+        choice = self.yeelight_color_choices[state]
+        device_id, model_id = self.selected_device_id, self.selected_device_model
+        color = QColorDialog.getColor(QColor(choice.currentData()), self, t("选择提醒颜色"))
+        if color.isValid() and (device_id, model_id) == (self.selected_device_id, self.selected_device_model):
+            value = color.name().upper()
+            index = choice.findData(value)
+            if index < 0:
+                choice.addItem("自定义 " + value, value)
+                index = choice.findData(value)
+            choice.setCurrentIndex(index)
+
+    def reset_yeelight_colors(self):
+        from aiflame.devices.light_settings import COLOR_DEFAULTS, STATE_BRIGHTNESS_DEFAULTS
+        self.device_light_settings({"colors": dict(COLOR_DEFAULTS),
+                                    "state_brightness": dict(STATE_BRIGHTNESS_DEFAULTS)})
 
     def brightness_off(self):
         return bool(self.model and self.model.get("brightness_off", self.model["settings"]["brightness"] == 0))
@@ -355,11 +507,31 @@ class Dashboard(DashboardViews, QWidget):
 
         self.act("/api/desktop-clients/permissions", {}, received, failed)
 
+    def delete_current_device(self):
+        if (self.device_selection_loading or not self.selected_device_id
+                or self.selected_device_model not in YEELIGHT_MODELS):
+            return
+        device_id, model_id = self.selected_device_id, self.selected_device_model
+        self.flush_device_brightness()
+
+        def received(data):
+            self.device_test_deadlines.pop(device_id, None)
+            if (self.selected_device_id, self.selected_device_model) == (device_id, model_id):
+                self.generation += 1
+                self.device_operation_id = None
+                self.port_restore_pending = False
+                self.yeelight_host.clear()
+                self.render_device(data)
+            self.tell(data["message"])
+            self.poll(force=True)
+
+        self.act("/api/device/delete", {"hardware_model": model_id, "device_id": device_id}, received)
+
     def test_current_device(self):
         if self.device_selection_loading or not self.selected_device_id or not self.detail_device().get("online"):
             self.tell("请先连接当前设备", error=True)
             return
-        reason = ("此设备亮度为 0%，请先提高上方灯光亮度。" if self.brightness.value() == 0 else self.light_block_reason())
+        reason = ("此设备亮度为 0%，请先提高灯光亮度。" if self.brightness.value() == 0 else self.light_block_reason())
         if reason:
             self.tell(reason, error=True)
             return
@@ -411,9 +583,33 @@ class Dashboard(DashboardViews, QWidget):
         model = hardware_model(model_id)
         self.selected_device_model = model_id
         self.device_model_title.setText(model["name"])
-        self.device_model_description.setText(model["description"])
+        self.device_model_description.setText(model["card_description"] if model_id in YEELIGHT_MODELS else model["description"])
         yeelight = model_id in YEELIGHT_MODELS
         self.yeelight_card.setVisible(yeelight)
+        self.yeelight_history_heading.setVisible(yeelight)
+        self.device_instance_panel.show()
+        self.yeelight_colors_panel.setVisible(yeelight)
+        self.device_light_title.setVisible(not yeelight)
+        self.device_brightness_panel.setVisible(not yeelight)
+        self.device_reduced_panel.setVisible(not yeelight)
+        with QSignalBlocker(self.brightness):
+            self.brightness.setMaximum(100 if yeelight else 25)
+        self.brightness.setAccessibleName("灯光亮度，0 至 100 百分比" if yeelight else "灯光亮度，0 至 25 百分比")
+        self.brightness.setToolTip("亮度上限 100%；设为 0% 只关闭此设备的提醒。" if yeelight else "亮度上限 25%；设为 0% 只关闭此设备的提醒。")
+        if yeelight != self.yeelight_layout_active:
+            if yeelight:
+                self.yeelight_history_layout.addWidget(self.device_instance_panel)
+                self.yeelight_history_layout.addWidget(self.device_status_card)
+                self.yeelight_card.layout().addWidget(self.device_job_feedback)
+            else:
+                self.device_details_layout.insertWidget(2, self.device_instance_panel)
+                self.device_connections_layout.insertWidget(0, self.device_status_card)
+                self.device_status_layout.insertWidget(2, self.device_job_feedback)
+            self.yeelight_layout_active = yeelight
+        self.device_status_card.setVisible(not yeelight or bool(self.selected_device_id))
+        self.yeelight_add_panel.setVisible(not self.selected_device_id)
+        self.yeelight_reconnect_button.setVisible(yeelight and bool(self.selected_device_id))
+        self.yeelight_delete_button.setVisible(yeelight and bool(self.selected_device_id))
         if yeelight:
             self.yeelight_discover_button.setText("搜索 " + model["name"].removeprefix("Yeelight "))
             self.yeelight_light_hint.setText(model["light_description"])
@@ -443,6 +639,7 @@ class Dashboard(DashboardViews, QWidget):
         self.open_device_details(model_id)
         self.yeelight_host.clear()
         self.yeelight_choices.clear()
+        self.yeelight_choices.addItem("搜索后选择灯具…", "")
         self.rendered_yeelight_discovery = None
         self.password.clear()
         self.ssid.clear()
@@ -469,6 +666,7 @@ class Dashboard(DashboardViews, QWidget):
         self.selected_device_state = {"online": False}
         self.yeelight_host.clear()
         self.yeelight_choices.clear()
+        self.yeelight_choices.addItem("搜索后选择灯具…", "")
         self.rendered_yeelight_discovery = None
         self.password.clear()
         self.ssid.clear()
@@ -504,16 +702,12 @@ class Dashboard(DashboardViews, QWidget):
                 for index, button in enumerate(self.device_model_buttons.values()):
                     self.device_cards_layout.addWidget(button, index // columns, index % columns)
             compact = self.width() < 1050
+            self.scene_frame.setMaximumHeight(500 if compact else 16777215)
             self.home_top.setDirection(
                 QBoxLayout.Direction.TopToBottom
                 if compact
                 else QBoxLayout.Direction.LeftToRight
             )
-            # Keep the flame and its preview controls fully inside the scene
-            # when the overview stacks vertically on a narrow window.
-            scene_height = max(380, self.scene_frame.layout().minimumSize().height())
-            self.scene_frame.setMinimumHeight(scene_height if compact else 0)
-            self.scene_frame.setMaximumHeight(scene_height if compact else 16777215)
 
     def light_block_reason(self, source="manual"):
         if not self.ready or not self.model:
@@ -534,6 +728,7 @@ class Dashboard(DashboardViews, QWidget):
         return ""
 
     def start_preview(self):
+        QToolTip.hideText()
         if self.preview_phase or self.hardware_preview_id:
             self.stop_preview()
             return
@@ -542,7 +737,10 @@ class Dashboard(DashboardViews, QWidget):
             if not reason and not self.model["device"]["online"]:
                 reason = "请先连接设备，再开始同步灯效演示。"
             if reason:
-                self.tell(reason, error=True)
+                QToolTip.showText(
+                    self.preview_button.mapToGlobal(self.preview_button.rect().topLeft()),
+                    t(reason), self.preview_button, self.preview_button.rect(), 5000,
+                )
                 return
             identifier = str(uuid.uuid4())
             self.hardware_preview_id = identifier
@@ -604,8 +802,6 @@ class Dashboard(DashboardViews, QWidget):
         self.display_hint.clear()
         self.display_hint.hide()
         if self.preview_phase:
-            self.scene_badge.setText("演示 · 仅屏幕")
-            self.scene_badge.show()
             self.flame.set_state(self.preview_phase, True, reduced=reduced)
             self.display_title.setText(NAMES[self.preview_phase])
             return
@@ -613,18 +809,14 @@ class Dashboard(DashboardViews, QWidget):
             self.poll_timer.setInterval(1500)
             self.preview_button.setText("灯效演示")
             self.preview_caption.hide()
-            self.scene_badge.hide()
             self.flame.set_state("idle", reduced=reduced)
-            self.display_title.setText("待机")
+            self.display_title.setText("当前无任务")
             return
         data = self.model
         settings, state = data["settings"], data["display"]["state"]
         preview = data["display"].get("preview")
         if preview and self.hardware_preview_id == preview:
             self.poll_timer.setInterval(150)
-            confirmed = data["display"].get("device_confirmed")
-            self.scene_badge.setText("演示 · 屏幕与设备" if confirmed else "演示 · 正在同步")
-            self.scene_badge.show()
             self.preview_button.setText("退出演示")
             self.preview_caption.setText(
                 f"{max(1, (data['display']['remaining_ms'] + 999) // 1000)} 秒后结束"
@@ -638,8 +830,6 @@ class Dashboard(DashboardViews, QWidget):
             self.poll_timer.setInterval(150 if data["device"].get("connecting") else 1500)
             self.preview_button.setText("灯效演示")
             self.preview_caption.hide()
-        self.scene_badge.setText("测试" if data["display"].get("simulated") else "实时任务")
-        self.scene_badge.setVisible(state != "idle")
         self.flame.set_state(state, reduced=reduced, live=True)
         if self.brightness_off():
             title = "已熄灭"
@@ -648,7 +838,7 @@ class Dashboard(DashboardViews, QWidget):
         elif quiet_now(settings):
             title = "静默中"
         else:
-            title = NAMES.get(state, "待机")
+            title = NAMES.get(state, "当前无任务")
         self.display_title.setText(title)
 
     def render_notice(self):
@@ -708,6 +898,14 @@ class Dashboard(DashboardViews, QWidget):
             self.navigate(1)
 
     def render(self, data):
+        chosen_language = data["settings"].get("language", "zh-CN")
+        if chosen_language != language():
+            set_language(chosen_language)
+            self.history_key = None
+        self.sidebar.setFixedWidth(250 if chosen_language == "en" else 198)
+        self.duration.setFixedWidth(140 if chosen_language == "en" else 105)
+        with QSignalBlocker(self.language_choice):
+            self.language_choice.setCurrentIndex(self.language_choice.findData(chosen_language))
         for item in data.get("devices", []):
             self.device_test_deadlines[item["device_id"]] = time.monotonic() + item.get("test_remaining_ms", 0) / 1000
         self.update_device_test_caption()
@@ -728,8 +926,9 @@ class Dashboard(DashboardViews, QWidget):
         count = device.get("connected_count", int(bool(online)))
         connected_title = f"已连接 {count} 台设备"
         for model_id, button in self.device_model_buttons.items():
-            connected = sum(item.get("online", False) for item in data.get("devices", []) if item.get("hardware_model") == model_id)
-            button.set_connection_count(connected)
+            devices = [item for item in data.get("devices", []) if item.get("hardware_model") == model_id]
+            online_count = sum(bool(item.get("online")) for item in devices)
+            button.set_connection_count(online_count, len(devices) - online_count)
         self.render_mode_choice()
         self.scene_title.setText("灯光状态" if hardware else "虚拟烛火")
         self.hardware_notice.setVisible(hardware and not online and not connecting)
@@ -740,6 +939,7 @@ class Dashboard(DashboardViews, QWidget):
         self.hardware_notice_action.setText("查看进度" if data["maintenance"] else "连接设备")
         self.virtual_device_card.setVisible(not hardware)
         self.hardware_controls.setVisible(hardware)
+        self.hardware_maintenance_controls.setVisible(hardware)
         if not hardware and was_hardware:
             self.ports.clear()
             self.ports.addItem("虚拟模式 · 不查找设备", "")
@@ -768,32 +968,18 @@ class Dashboard(DashboardViews, QWidget):
                 mark.setAccessibleName(connection_name + " 连接")
         self.device_status.setToolTip(connection_name + " 连接" if show_connection else "")
         self.device_summary_icon.setToolTip(connection_name + " 连接" if show_connection else "")
-        self.counts.setText(
-            f"进行中  {data['active_count']}    /    待提醒  {data['queue_count']}"
-        )
-        self.counts.setVisible(bool(data["active_count"] or data["queue_count"]))
-        self.delivery.setVisible(bool(online and data["display"]["state"] != "idle"))
-        self.delivery.setText(
-            "APP 状态"
-            if not device["online"]
-            else "设备已确认"
-            if data["display"].get("device_confirmed")
-            else "等待回执"
-        )
         selected = self.detail_device()
         selected_online = hardware and selected.get("online", False)
         self.device_summary.setText("设备已连接" if selected_online else selected.get("status", "设备尚未连接"))
         self.device_version.setText(
             "灯光固件 " + str(selected.get("firmware_version") or "未知（设备未上报）")
             + " · 协议 " + str(selected.get("protocol_version") or "未知")
-            if selected_online else "连接后读取固件版本"
+            if selected_online else selected.get("last_error") or "连接后读取固件版本"
         )
         self.device_summary_icon.setVisible(selected_online)
         if selected_online:
             selected_transport = "wifi" if selected.get("port", "").startswith("wifi://") else "usb"
             self.device_summary_icon.setPixmap(icon(selected_transport, "#38735b", 18).pixmap(18, 18))
-        self.device_empty_notice.setText("此设备尚未连接；其他已连接设备继续同步 AI 状态。")
-        self.device_empty_notice.setVisible(not selected_online)
         self.render_scene()
         self.render_notice()
         if not self.writing and not self.brightness_timer.isActive():
@@ -815,16 +1001,16 @@ class Dashboard(DashboardViews, QWidget):
                 if settings["quiet_start"] == settings["quiet_end"]
                 else ""
             )
-        enabled_brands = {}
-        for source in data["sources"]:
-            brand = source["id"].removesuffix("-web").removesuffix("-desktop")
-            if source["enabled"] and brand in self.home_source_icons:
-                enabled_brands.setdefault(brand, []).append(source["name"].replace("（实验）", ""))
-        for brand, button in self.home_source_icons.items():
-            button.setVisible(brand in enabled_brands)
-            button.setToolTip("已开启：" + "、".join(enabled_brands.get(brand, [])))
-        self.home_sources_row.setVisible(bool(enabled_brands))
-        self.home_sources_empty.setVisible(not enabled_brands)
+        enabled_sources = {source["id"]: source["name"].replace("（实验）", "")
+                           for source in data["sources"] if source["enabled"]}
+        for source, button in self.home_source_icons.items():
+            button.setVisible(source in enabled_sources)
+            button.setToolTip("已开启：" + enabled_sources.get(source, ""))
+        for group, sources in self.home_source_groups.values():
+            group.setVisible(any(source in enabled_sources for source in sources))
+        visible = any(source in enabled_sources for source in self.home_source_icons)
+        self.home_sources_row.setVisible(visible)
+        self.home_sources_empty.setVisible(not visible)
         for source in data["sources"]:
             sid = source["id"]
             if sid not in self.source_checks:
@@ -844,7 +1030,10 @@ class Dashboard(DashboardViews, QWidget):
             self.source_details[sid].setText(
                 source["name"] + "：" + VERIFICATION_DETAILS.get(detail_status, text)
             )
-        key = [(e["id"], e["status"], e["reason"]) for e in data["events"]]
+        key = (
+            [(e["id"], e["status"], e["reason"], e.get("delivery_summary")) for e in data["events"]],
+            [(r["event"], r["output"], r["status"], r.get("detail")) for r in data.get("deliveries", [])],
+        )
         if key != self.history_key:
             self.history_key = key
             self.render_history()
@@ -865,20 +1054,50 @@ class Dashboard(DashboardViews, QWidget):
             "已取消"
             if event["reason"] == "cancelled"
             else NAMES.get(event["state"], event["state"]),
-            RESULTS.get(event["status"], event["status"]),
+            self.event_delivery_result(event),
         )
 
+    @staticmethod
+    def delivery_device_name(device):
+        return device["name"] + "（" + device["device_id"] + "）"
+
+    def event_delivery_result(self, event):
+        result = RESULTS.get(event["status"], event["status"])
+        devices = (event.get("delivery_summary") or {}).get("devices", [])
+        if not devices:
+            return result
+        confirmed = sum(device["status"] == "applied" for device in devices)
+        count = f"已确认 {confirmed}/{len(devices)} 台设备"
+        return count if event["status"] == "applied" else result + " · " + count
+
+    def event_search_text(self, event):
+        values = list(self.event_values(event))
+        for device in (event.get("delivery_summary") or {}).get("devices", []):
+            values.extend((self.delivery_device_name(device), device["reason"]))
+        return " ".join(values + [t(value) for value in values]).casefold()
+
     def render_recent(self):
-        events = self.model["events"][:3]
+        events = self.model["events"][:len(self.recent_rows)]
         self.recent_empty.setVisible(not events)
+        full = len(events) == len(self.recent_rows)
+        for index, (gap_index, gap) in enumerate(self.recent_gaps):
+            gap.changeSize(0, 8 if index < len(events) - 1 else 0)
+            self.recent_list.setStretch(gap_index, 1 if full else 0)
+        self.recent_list.setStretch(self.recent_list.count() - 1, 0 if full else 1)
+        self.recent_list.invalidate()
         for index, labels in enumerate(self.recent_rows):
-            for item in labels:
-                item.setVisible(index < len(events))
+            self.recent_row_frames[index].setVisible(index < len(events))
             if index < len(events):
-                values = list(self.event_values(events[index]))
+                event = events[index]
+                values = list(self.event_values(event))
                 values[0] = values[0][-8:]
+                detail = values[3]
+                if event["status"] != "applied":
+                    values[3] = RESULTS.get(event["status"], event["status"])
                 for item, value in zip(labels, values):
                     item.setText(value)
+                labels[3].setToolTip(detail)
+                restyle(labels[2], "recentTone", event["state"])
 
     def render_history(self):
         if not self.model:
@@ -889,7 +1108,7 @@ class Dashboard(DashboardViews, QWidget):
             e
             for e in self.model["events"]
             if (kind == "all" or is_test(e) == (kind == "test"))
-            and (not query or query in " ".join(self.event_values(e)).casefold())
+            and (not query or query in self.event_search_text(e))
         ]
         selection = self.history.currentRow()
         selected_id = (
@@ -907,6 +1126,8 @@ class Dashboard(DashboardViews, QWidget):
                     selected_row = row
                 for column, value in enumerate(self.event_values(event)):
                     item = QTableWidgetItem(value)
+                    if column == 3:
+                        item.setToolTip(t(value))
                     if column == 3 and event["status"] == "applied":
                         item.setForeground(QColor("#38735b"))
                     elif column == 2 and event["state"] == "error":
@@ -936,42 +1157,55 @@ class Dashboard(DashboardViews, QWidget):
             return
         self.event_detail_box.show()
         event = self.visible_events[row]
-        help_text = {
-            "screen": "APP 已接收并呈现任务状态，无需硬件。此记录不代表实体灯已确认；连接灯具后请用新任务验证设备回执。",
-            "applied": "已收到事件 → 来源已匹配 → 指令已发送 → 设备已确认。回执代表接受了调度，实际发光请观察实体设备。",
-            "queued": "已收到事件，等待提醒调度。有灯具时可另查设备回执；真实来源验证不要求购买硬件。",
-            "suppressed": "事件因暂停、熄灭、亮度为 0 或静默而未点亮。请在总览查看原因；恢复后不会补播。",
-            "unmatched": "该来源已关闭。请到「应用接入」开启来源，再发起新任务。",
-            "expired": "事件已过期，不再提醒；请保持 APP 运行后发起新任务。",
-            "lease_expired": "来源长时间没有更新状态，已停止工作提示。超时不代表完成。",
-            "dropped": "待提醒队列已满，这条事件已被淘汰。可缩短提示时长，减少积压。",
-            "ended_on_reconnect": "连接恢复后不重复播放旧提示；新任务会按当前设置提醒。",
-        }.get(event["status"], "请检查设备与来源配置，再用一条新任务验证。")
+        def paragraph(text, style):
+            return '<p style="' + style + '">' + escape(text) + '</p>'
+
+        secondary = "font-size:12px; color:#75736b; font-weight:400;"
+        heading = "font-size:14px; font-weight:600; color:#292824; margin-top:18px; margin-bottom:8px;"
+        blocks = [paragraph(" · ".join(self.event_values(event)[:3]), secondary)]
+        blocks.append(paragraph("处理结果：", "font-size:11px; color:#75736b; margin-bottom:4px;"))
+        blocks.append(paragraph(self.event_delivery_result(event),
+                                "font-size:20px; font-weight:600; color:#292824; margin-top:0px; margin-bottom:8px;"))
+        summary = event.get("delivery_summary") or {}
+        if event["status"] != "applied":
+            reason = summary.get("reason") or DELIVERY_REASONS.get(event["status"])
+            if reason:
+                blocks.append(paragraph(reason, secondary))
+        devices = summary.get("devices", [])
+        if devices:
+            blocks.append(paragraph("设备回执", heading))
+            for device in devices:
+                color = "#38735b" if device["status"] == "applied" else "#75736b"
+                blocks.append('<p style="font-size:13px; font-weight:600; color:#292824; margin-top:0px; margin-bottom:10px;">'
+                              + escape(device["name"]) + '<span style="' + secondary + '">（'
+                              + escape(device["device_id"]) + '）</span><br>'
+                              + '<span style="font-size:12px; font-weight:400; color:' + color + ';">'
+                              + escape(device["reason"]) + '</span></p>')
         statuses = {"pending": "等待桌面应用领取", "claimed": "桌面应用处理中", "submitted": "已提交系统（显示取决于系统通知设置）",
                     "denied": "系统通知权限未允许", "unavailable": "系统通知不可用", "failed": "投递失败", "disabled": "已关闭",
                     "not_requested": "本事件无需弹窗", "interrupted": "进程重启，未重播", "unconfirmed": "提交结果未确认", "superseded": "任务状态已变化"}
-        receipts = [f"{ {'flame': '火焰灯', 'desktop': '桌面通知'}.get(r['output'], r['output'])}：{statuses.get(r['status'], RESULTS.get(r['status'], r['status']))}"
-                    for r in self.model.get("deliveries", []) if r["event"] == event["id"]]
-        if receipts:
-            help_text += "\n\n" + "\n".join(receipts)
-        self.event_detail.setText(
-            " · ".join(self.event_values(event)[:3]) + "\n\n" + help_text
-        )
+        notifications = [statuses.get(receipt["status"], RESULTS.get(receipt["status"], receipt["status"]))
+                         for receipt in self.model.get("deliveries", [])
+                         if receipt["event"] == event["id"] and receipt["output"] == "desktop"]
+        if notifications:
+            blocks.append(paragraph("桌面通知", heading))
+            blocks.extend(paragraph(notification, secondary) for notification in notifications)
+        self.event_detail.setText("".join(blocks))
 
     def export_history(self):
         if not self.visible_events:
             self.tell("当前筛选下没有可导出的记录。")
             return
         path, _ = QFileDialog.getSaveFileName(
-            self, "导出当前筛选的记录", "SeeEnd-events.csv", "CSV 文件 (*.csv)"
+            self, t("导出当前筛选的记录"), "SeeEnd-events.csv", t("CSV 文件 (*.csv)")
         )
         if not path:
             return
         try:
             with Path(path).open("w", encoding="utf-8-sig", newline="") as stream:
                 writer = csv.writer(stream)
-                writer.writerow(("时间", "应用 / 来源", "任务状态", "处理结果"))
-                writer.writerows(self.event_values(e) for e in self.visible_events)
+                writer.writerow(t(value) for value in ("时间", "应用 / 来源", "任务状态", "处理结果"))
+                writer.writerows([t(value) for value in self.event_values(e)] for e in self.visible_events)
             self.tell(f"已导出 {len(self.visible_events)} 条记录。")
         except OSError:
             self.on_error("保存失败，请检查所选目录的权限。")
@@ -1067,16 +1301,29 @@ class Dashboard(DashboardViews, QWidget):
             self.tell("请先连接 USB 数据线并选择设备。", error=True)
             return
 
+        self.job_message.setText("正在提交设备操作…")
+        self.job_message.setStyleSheet("")
+        self.job_message.show()
+        self.progress.setValue(0)
+        self.progress.show()
+
         def received(job):
             self.device_operation_id = job.get("id")
             self.render_device({"job": job})
             if callback:
                 callback(job)
 
+        def failed():
+            self.progress.hide()
+            self.job_message.setText(source_text(self.message))
+            self.job_message.setStyleSheet("color: #a0472c;")
+            self.job_message.show()
+
         self.act(
             "/api/device",
             {"action": action, "port": self.ports.currentData() or "", "hardware_model": self.selected_device_model, "device_id": self.selected_device_id or "", **values},
             received,
+            failed,
         )
 
     def scan_wifi(self):
@@ -1177,7 +1424,6 @@ class Dashboard(DashboardViews, QWidget):
             self.yeelight_host.setText(host)
 
     def render_device(self, data):
-        was_job_busy = self.job_busy
         job = data.get("job")
         if (job and job.get("id") == self.device_operation_id and job["state"] == "succeeded"
                 and job.get("hardware_model") == self.selected_device_model and not self.selected_device_id
@@ -1190,16 +1436,40 @@ class Dashboard(DashboardViews, QWidget):
             self.selected_device_id = data["selected_device_id"]
             self.selected_device_state = data.get("device", {"online": False})
             if not self.writing and not self.brightness_timer.isActive() and not self.brightness.isSliderDown():
-                appearance = data.get("light_settings", {"brightness": 20, "reduced": False})
+                appearance = data.get("light_settings", {"brightness": 50 if self.selected_device_model in YEELIGHT_MODELS else 20, "reduced": False})
                 with QSignalBlocker(self.brightness), QSignalBlocker(self.device_reduced):
                     self.brightness.setValue(appearance["brightness"])
                     self.device_reduced.setChecked(appearance["reduced"])
                 self.brightness_value.setText(f"{appearance['brightness']}%")
                 self.brightness_note.setVisible(bool(self.selected_device_id) and appearance["brightness"] == 0)
             self.device_light_hint.setVisible(not self.selected_device_id)
+            from aiflame.devices.light_settings import COLOR_DEFAULTS
+            color_values = data.get("light_settings", {}).get("colors", COLOR_DEFAULTS)
+            from aiflame.devices.light_settings import STATE_BRIGHTNESS_DEFAULTS
+            state_brightness = data.get("light_settings", {}).get("state_brightness", STATE_BRIGHTNESS_DEFAULTS)
+            if not self.writing and not self.brightness_timer.isActive():
+                for state, control in self.yeelight_brightness_controls.items():
+                    if not control.isSliderDown():
+                        value = state_brightness.get(state, STATE_BRIGHTNESS_DEFAULTS[state])
+                        with QSignalBlocker(control):
+                            control.setValue(value)
+                        self.yeelight_brightness_labels[state].setText(f"{value}%")
+            if not self.writing:
+                for state, choice in self.yeelight_color_choices.items():
+                    value = color_values.get(state, COLOR_DEFAULTS[state])
+                    with QSignalBlocker(choice):
+                        index = choice.findData(value)
+                        if index < 0:
+                            choice.addItem("自定义 " + value, value)
+                            index = choice.findData(value)
+                        choice.setCurrentIndex(index)
+            has_history = bool(data.get("devices"))
+            yeelight = self.selected_device_model in YEELIGHT_MODELS
+            self.yeelight_history_heading.setVisible(yeelight)
+            self.device_instance_panel.show()
             with QSignalBlocker(self.device_instances):
                 self.device_instances.clear()
-                self.device_instances.addItem("添加此型号设备…", "")
+                self.device_instances.addItem("尚未添加设备" if yeelight and not has_history else "添加此型号设备…", "")
                 for item in data.get("devices", []):
                     state = "已连接" if item.get("online") else "已断开" if item.get("connection_paused") else "离线"
                     self.device_instances.addItem(item["name"] + " · " + item["device_id"] + " · " + state, item["device_id"])
@@ -1257,11 +1527,6 @@ class Dashboard(DashboardViews, QWidget):
             )
         self.update_busy()
 
-        if (was_job_busy and job and job.get("action") == "select_model"
-                and job["state"] == "succeeded" and self.tabs.currentIndex() == 1
-                and not self.device_details.isHidden()):
-            self.scan_ports()
-
     def trigger(self, source):
         reason = self.light_block_reason(source)
         if reason:
@@ -1279,7 +1544,7 @@ class Dashboard(DashboardViews, QWidget):
             "/api/trigger-test",
             {"source": source},
             received,
-            lambda: self.test_message.setText(self.message.text()),
+            lambda: self.test_message.setText(source_text(self.message)),
         )
 
     def render_test(self, data):
@@ -1306,14 +1571,16 @@ class Dashboard(DashboardViews, QWidget):
             return
         connected = self.ready and self.model is not None
         busy = (
-            self.job_busy
+            self.reset_pending
+            or self.job_busy
             or self.test_busy
             or self.writing
             or bool(self.model and self.model["maintenance"])
         )
+        self.reset_button.setEnabled(connected and not busy)
         hardware = connected and self.hardware_mode() and not self.device_selection_loading
         for button in self.device_model_buttons.values():
-            button.setEnabled(connected)
+            button.setEnabled(connected and not self.reset_pending)
         for button in self.mode_buttons.values():
             button.setEnabled(connected and not busy)
         for button in self.trigger_buttons:
@@ -1334,13 +1601,26 @@ class Dashboard(DashboardViews, QWidget):
         same_usb = usb_online and port == self.ports.currentData()
         available = hardware and not busy and not connecting
         self.yeelight_discover_button.setEnabled(hardware and not busy)
-        self.yeelight_connect_button.setEnabled(available and bool(self.yeelight_host.text().strip()))
+        self.yeelight_connect_button.setEnabled(available and not self.selected_device_id and bool(self.yeelight_host.text().strip()))
+        self.yeelight_reconnect_button.setEnabled(available and not online and bool(self.selected_device_id) and bool(self.yeelight_host.text().strip()))
+        self.yeelight_reconnect_button.setText("设备已连接" if online else "连接此设备")
+        self.device_instances.setEnabled(connected and not busy)
+        color_enabled = connected and not self.writing and not self.device_selection_loading and bool(self.selected_device_id) and self.selected_device_model in YEELIGHT_MODELS
+        for control in [*self.yeelight_color_choices.values(), *self.yeelight_color_buttons.values(),
+                        *self.yeelight_brightness_controls.values(), self.yeelight_color_reset]:
+            control.setEnabled(color_enabled)
+        if self.selected_device_model in YEELIGHT_MODELS:
+            self.yeelight_add_panel.setVisible(not self.selected_device_id)
+            self.device_status_card.setVisible(bool(self.selected_device_id))
+            self.yeelight_reconnect_button.setVisible(bool(self.selected_device_id))
         self.usb_connect_button.setEnabled(available and bool(self.ports.currentData()) and not same_usb)
         self.usb_connect_button.setText("USB 已连接" if same_usb else "切换此设备串口" if usb_online else "此设备改用 USB" if wifi_online else "连接此设备 USB")
         self.wifi_connect_button.setEnabled(available and self.wifi_available and not wifi_online)
         self.wifi_connect_button.setText("Wi-Fi 已连接" if wifi_online else "此设备改用 Wi-Fi" if usb_online else "连接此设备 Wi-Fi")
         self.wifi_connect_button.setToolTip("" if self.wifi_available else "请先通过 USB 配置网络")
         self.disconnect_button.setEnabled(hardware and not busy and not self.connection_paused and (online or connecting or bool(self.selected_device_id)))
+        self.yeelight_delete_button.setEnabled(connected and not busy and not self.device_selection_loading
+                                             and bool(self.selected_device_id) and self.selected_device_model in YEELIGHT_MODELS)
         self.flash_button.setEnabled(
             hardware
             and not busy
@@ -1367,14 +1647,14 @@ class Dashboard(DashboardViews, QWidget):
             connected and not self.writing and self.clients_supported
         )
         for check in self.source_checks.values():
-            check.setEnabled(connected)
+            check.setEnabled(connected and not self.reset_pending)
         for control in [*self.brightness_controls, self.device_reduced]:
             control.setEnabled(connected and not self.writing and not self.device_selection_loading and bool(self.selected_device_id))
         for control in [
             self.duration,
             *self.checks.values(),
         ]:
-            control.setEnabled(connected)
+            control.setEnabled(connected and not self.reset_pending)
         for edit in self.times.values():
             edit.setEnabled(connected and self.checks["quiet_enabled"].isChecked())
         self.ports.setEnabled(hardware and not busy)
@@ -1420,6 +1700,12 @@ class Dashboard(DashboardViews, QWidget):
             QApplication.clipboard().setText(plan["snippet"])
             self.integration_copy_buttons[source].setText("已复制")
 
+    def open_web_app(self, source):
+        from PySide6.QtCore import QUrl
+        from PySide6.QtGui import QDesktopServices
+        from aiflame.integrations.chatgpt_web.host import WEB_URLS
+        QDesktopServices.openUrl(QUrl(WEB_URLS[source]))
+
     def open_integration_docs(self, source):
         from PySide6.QtCore import QUrl
         from PySide6.QtGui import QDesktopServices
@@ -1461,7 +1747,7 @@ class Dashboard(DashboardViews, QWidget):
 
         self.act("/api/integrations/install",
                  self.integration_parameters(source) if source == "codex" else {"source": source},
-                 received, lambda: target.setText(self.message.text()))
+                 received, lambda: target.setText(source_text(self.message)))
 
     def cli_action(self, source, action):
         body = self.integration_parameters(source)
@@ -1472,7 +1758,7 @@ class Dashboard(DashboardViews, QWidget):
         target.setText("正在增量配置…" if action == "install" else "正在移除本应用接入…")
         self.act("/api/integrations/" + action, body,
                  lambda data: (target.setText(data.get("message", "接入已更新。")), self.check_cli(source)),
-                 lambda: target.setText(self.message.text()))
+                 lambda: target.setText(source_text(self.message)))
 
     def check_cli(self, source=None):
         query = urlencode(self.integration_parameters(source)) if source else None
@@ -1514,7 +1800,7 @@ class Dashboard(DashboardViews, QWidget):
         def failed():
             for current, message in self.cli_messages.items():
                 if source is None or source == current:
-                    message.setText("检查未完成：" + self.message.text())
+                    message.setText("检查未完成：" + source_text(self.message))
         self.api.request("/api/integration-check?" + query if source else "/api/cli-integrations", received, failed=failed)
 
     def check_codex(self):
@@ -1534,7 +1820,7 @@ class Dashboard(DashboardViews, QWidget):
             self.load_integration_guide("codex")
 
         self.api.request("/api/integration-check?" + query, received,
-                         failed=lambda: self.codex_message.setText("检查未完成：" + self.message.text()))
+                         failed=lambda: self.codex_message.setText("检查未完成：" + source_text(self.message)))
 
     def check_clients(self):
         def received(data):
@@ -1588,7 +1874,7 @@ class Dashboard(DashboardViews, QWidget):
 
     def download(self, endpoint, filename):
         path, _ = QFileDialog.getSaveFileName(
-            self, "保存下载包", filename, "ZIP 文件 (*.zip)"
+            self, t("保存下载包"), filename, t("ZIP 文件 (*.zip)")
         )
         if not path:
             return

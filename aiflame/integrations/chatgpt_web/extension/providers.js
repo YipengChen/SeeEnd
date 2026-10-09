@@ -1,7 +1,7 @@
 /* Site-specific control adapters. Never inspect message text, editor values or account data. */
 (function (root) {
   'use strict';
-  const VERSION = '0.2.6';
+  const VERSION = '0.2.8';
   function labels(values) {
     return values.flatMap(value => ['aria-label', 'title', 'data-tooltip'].map(
       attr => `button[${attr}="${value}"],[role="button"][${attr}="${value}"],a[${attr}="${value}"],div[${attr}="${value}"]`
@@ -98,15 +98,19 @@
     {id:'claude-web', name:'Claude', origins:['https://claude.ai'],
       composer:'.ProseMirror[contenteditable="true"],[contenteditable="true"][role="textbox"]',
       stop:join(labels(['Stop response','停止响应']),stop), send:join(labels(['Send message']),send), retry,
-      turn:'[data-is-streaming],.font-claude-response', turnContainer:'[data-testid="assistant-message"],.group',
-      copy:join(labels(['Copy','Copy response']),copy), final:join(labels(['Retry','Good response','Bad response']),feedback,retry),
+      // Current Claude renders actions beside the streaming node in the message row.
+      // The streaming node itself also has .group, so closest('.group') misses them.
+      turn:'[class~="group/message-row"]:has([data-is-streaming],.font-claude-response),[data-is-streaming],.font-claude-response', turnContainer:'[data-testid="assistant-message"],.group',
+      turnBusy:'[data-is-streaming="true"]',
+      copy:join('button[data-testid="action-bar-copy"]',labels(['Copy','Copy response']),copy),
+      final:join('button[data-testid="action-bar-thumbs-up"],button[data-testid="action-bar-thumbs-down"],button[data-testid="action-bar-retry"]',labels(['Retry','Good response','Bad response','回答不错','回复不佳']),feedback,retry),
       error:'[data-testid="message-error"],[data-status="error"]',
       newRoute:/^\/(?:new|project\/[^/]+)?\/?$/, conversationRoute:/^\/chat\/[^/]+/},
     {id:'gemini-web', name:'Gemini', origins:['https://gemini.google.com'],
       composer:'.ql-editor[contenteditable="true"],rich-textarea [contenteditable="true"]',
       stop:join('button.stop-button',labels(['Stop response','停止回答']),stop), send:join('button.send-button',send), retry,
-      turn:'model-response', copy:join('button[data-test-id="copy-button"]',copy),
-      final:join('button[data-test-id="thumb-up-button"],button[data-test-id="thumb-down-button"]',feedback,retry),
+      turn:'model-response', copy:join('copy-button button,button[data-test-id="copy-button"]',copy),
+      final:join('thumb-up-button button,thumb-down-button button,regenerate-button button,button[data-test-id="thumb-up-button"],button[data-test-id="thumb-down-button"]',labels(['答得好','答得不好','重做']),feedback,retry),
       error:'[data-test-id="response-error"],[data-status="error"]',
       newRoute:/^\/app\/?$/, conversationRoute:/^\/app\/[^/]+/},
   ];

@@ -35,7 +35,10 @@
       if (!el) return false;
       for (let node = el; node && node !== doc.documentElement; node = node.parentElement) {
         if (node.disabled || node.getAttribute('disabled') !== null || node.getAttribute('aria-disabled') === 'true'
-            || [...node.classList].some(cls => /(?:^|[-_])disabled(?:$|[-_])/i.test(cls))
+            // CSS variants describe conditional styling, not the current state.
+            // Claude includes [&:disabled:not([aria-busy])]:opacity-disabled
+            // on enabled buttons as well as disabled ones.
+            || [...node.classList].some(cls => !/[\[\]:]/.test(cls) && /(?:^|[-_])disabled(?:$|[-_])/i.test(cls))
             || node.classList.contains('shimGrey')) return false;
       }
       return true;

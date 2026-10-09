@@ -47,4 +47,4 @@ class OutputRouter:
 
     def snapshot(self):
         return [dict(row) for row in self.db.execute(
-            "SELECT * FROM deliveries ORDER BY updated DESC LIMIT 150")]
+            "SELECT * FROM deliveries WHERE event IN (SELECT id FROM events ORDER BY created DESC, rowid DESC LIMIT 50) ORDER BY updated DESC")]

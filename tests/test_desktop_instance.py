@@ -1,6 +1,7 @@
 """Real subprocess checks for desktop ownership and activation IPC."""
 
 import os
+from importlib.util import find_spec
 from pathlib import Path
 import queue
 import subprocess
@@ -11,12 +12,10 @@ import unittest
 from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-try:
+HAS_QT = find_spec("PySide6") is not None
+if HAS_QT:
     from PySide6.QtWidgets import QApplication
     from aiflame.desktop.instance import DesktopInstance
-    HAS_QT = True
-except ImportError:
-    HAS_QT = False
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = r'''

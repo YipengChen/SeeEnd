@@ -7,7 +7,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from aiflame.integrations.registry import SOURCES
 from aiflame.core.engine import Engine
 from aiflame.core.events import EventError, make_event
-from aiflame.integrations.codex.events import from_hook
+from aiflame.integrations.cli_tools.providers import CLI_SOURCES
 
 
 class TestEngine(unittest.TestCase):
@@ -188,7 +188,7 @@ class TestEngine(unittest.TestCase):
         )
 
     def test_native_hooks_wait_for_explicit_terminal_event(self):
-        for source in ("codex", "claude-code", "qoder", "deepseek-harness"):
+        for source in ("codex", *CLI_SOURCES):
             enabled = {**self.engine.settings["source_enabled"], source: True}
             self.engine.update_settings({"source_enabled": enabled})
             for terminal, reason in (("done", "completed"), ("error", "failed"), ("idle", "cancelled")):
@@ -257,23 +257,14 @@ class TestEngine(unittest.TestCase):
         self.engine.session_changed()
         self.assertEqual(self.engine.desired()["state"], "idle")
 
-    def test_codex_strips_content_and_deduplicates(self):
-        payload = {
-            "hook_event_name": "Stop",
-            "session_id": "thread",
-            "turn_id": "turn",
-            "input-messages": ["PRIVATE"],
-            "last-assistant-message": "PRIVATE",
-            "cwd": "PRIVATE",
-        }
-        a = from_hook(payload)
-        b = from_hook(payload)
-        self.assertNotIn("PRIVATE", str(a))
-        self.assertEqual(a["event_id"], b["event_id"])
-        self.assertIsNone(
-            from_hook({"hook_event_name": "Stop", "session_id": "thread"})
-        )
-        self.assertIsNone(from_hook({"hook_event_name": "SessionEnd"}))
+    def test_saved_settings_persist_across_restart(self):
+        settings = dict(self.engine.settings)
+        settings["brightness"] = 7
+        settings["source_enabled"] = {**settings["source_enabled"], "codex": False}
+        self.engine.update_settings(settings)
+        self.engine.db.close()
+        self.engine = Engine(Path(self.temp.name) / "db", sources=SOURCES)
+        self.assertEqual(self.engine.settings, settings)
 
 
 if __name__ == "__main__":

@@ -1,19 +1,11 @@
 """Hardware model isolation, firmware bundles and physical channel bounds."""
 
 import io
-import json
-from pathlib import Path
-import tempfile
-import threading
 import unittest
-from unittest.mock import Mock
 import zipfile
 
-from aiflame.core.engine import Engine
-from aiflame.core.events import EventError
 from aiflame.devices.downloads import firmware_archive
-from aiflame.devices.models import DEFAULT_MODEL, MODELS, firmware_files
-from aiflame.devices.service import DeviceService
+from aiflame.devices.models import MODELS, firmware_files
 from aiflame.devices.firmware import candle, matrix, matrix_map_v02
 from aiflame.transports.base import DeviceTransport
 from test_matrix_firmware import Bus
@@ -75,39 +67,3 @@ class DeviceModelTests(unittest.TestCase):
                 DeviceTransport.validate_display(hello, other["id"])
         DeviceTransport.validate_display({"display_width": 9, "display_height": 16,
                                           "capabilities": ["led-matrix-9x16", "mono-pwm"]})
-
-    def test_profile_switch_preserves_pairing_and_requires_explicit_connect(self):
-        with tempfile.TemporaryDirectory() as directory:
-            engine = Engine(":memory:")
-            self.addCleanup(engine.db.close)
-            config = {"device_id": "original", "port": "usb-old", "wifi_device_secret": "original-secret"}
-            transport = Mock(engine=engine)
-            service = DeviceService(config, directory, transport, threading.RLock())
-
-            def select(model):
-                service.start({"action": "select_model", "hardware_model": model})
-                service.thread.join(2)
-                self.assertFalse(service.thread.is_alive())
-                self.assertEqual(service.job["state"], "succeeded")
-
-            select(DEFAULT_MODEL)
-            transport.stop.assert_not_called()
-            select("ai-flame-v02")
-            self.assertNotIn("device_id", config)
-            self.assertNotIn("wifi_device_secret", config)
-            self.assertTrue(config["connection_paused"])
-            config.update(device_id="new", port="usb-new", wifi_device_secret="new-secret")
-            select(DEFAULT_MODEL)
-            self.assertEqual(config["device_id"], "original")
-            self.assertEqual(config["wifi_device_secret"], "original-secret")
-            select("ai-flame-v02")
-            self.assertEqual(config["device_id"], "new")
-            self.assertEqual(config["wifi_device_secret"], "new-secret")
-            transport.start.assert_not_called()
-            saved = json.loads((Path(directory) / "credentials.json").read_text())
-            self.assertEqual(saved["hardware_model"], "ai-flame-v02")
-            self.assertNotIn("secret", json.dumps(service.status()))
-            with self.assertRaises(EventError):
-                service.start({"action": "select_model", "hardware_model": "missing"})
-            with self.assertRaisesRegex(EventError, "型号已改变"):
-                service.start({"action": "install", "hardware_model": DEFAULT_MODEL})

@@ -115,6 +115,60 @@ class OutputTests(unittest.TestCase):
         self.assertEqual(result['deliveries']['flame'], 'dropped')
         self.assertEqual(result['deliveries']['desktop'], 'pending')
 
+    def test_fast_completion_settles_start_that_never_received_ack(self):
+        self.engine.device['online'] = True
+        start = self.send('working')['event_id']
+        self.send('done', 2)
+        row = self.engine.db.execute("SELECT status FROM events WHERE id=?", (start,)).fetchone()
+        self.assertEqual(row['status'], 'superseded')
+        receipt = self.engine.db.execute("SELECT status FROM deliveries WHERE event=? AND output='flame'", (start,)).fetchone()
+        self.assertEqual(receipt['status'], 'superseded')
+
+    def test_renewal_settles_old_start_but_preserves_confirmed_start(self):
+        self.engine.device['online'] = True
+        first = self.send('working')['event_id']
+        second = self.send('working', 2)['event_id']
+        self.engine.applied(self.engine.desired(), {'result': 'applied'})
+        self.send('done', 3)
+        states = {row['id']: row['status'] for row in self.engine.snapshot()['events']}
+        self.assertEqual(states[first], 'superseded')
+        self.assertEqual(states[second], 'applied')
+
+    def test_legacy_queued_start_is_reconciled_and_real_queue_is_explained(self):
+        self.engine.device['online'] = True
+        start = self.send('working')['event_id']
+        completion = self.send('done', 2)['event_id']
+        self.engine.router.record(start, 'flame', 'queued')
+        other = self.send('done', task='other')['event_id']
+        rows = {row['id']: row for row in self.engine.snapshot()['events']}
+        self.assertEqual(rows[start]['status'], 'superseded')
+        self.assertEqual(rows[completion]['status'], 'queued')
+        self.assertEqual(rows[other]['delivery_summary']['reason'], '排队中，等待当前提醒结束')
+
+    def test_confirmed_completion_receipt_survives_later_cancel(self):
+        self.engine.device['online'] = True
+        completion = self.send('needs_input')['event_id']
+        self.engine.applied(self.engine.desired(), {'result': 'applied'})
+        self.send('working', 2)
+        rows = {row['id']: row for row in self.engine.snapshot()['events']}
+        self.assertEqual(rows[completion]['status'], 'applied')
+
+    def test_queue_explains_completion_hold_waiting_for_activity(self):
+        self.engine.update_settings({'hold_until_activity': True})
+        self.send('done')
+        self.engine.desired()
+        waiting = self.send('done', task='other')['event_id']
+        row = next(event for event in self.engine.snapshot()['events'] if event['id'] == waiting)
+        self.assertEqual(row['delivery_summary']['reason'], '排队中，当前完成提醒等待键鼠活动结束')
+
+    def test_pausing_does_not_erase_acknowledged_history(self):
+        self.engine.device['online'] = True
+        event_id = self.send('done')['event_id']
+        self.engine.applied(self.engine.desired(), {'result': 'applied'})
+        self.engine.update_settings({'paused': True})
+        row = next(event for event in self.engine.snapshot()['events'] if event['id'] == event_id)
+        self.assertEqual(row['status'], 'applied')
+
     def test_future_output_receives_unmodified_lifecycle_independent_of_lamp(self):
         class Observer:
             name = 'watch'

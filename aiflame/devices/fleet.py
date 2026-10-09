@@ -5,7 +5,7 @@ from pathlib import Path
 
 from aiflame.core.events import EventError
 from aiflame.core.paths import write_private
-from aiflame.devices.models import DEFAULT_MODEL, YEELIGHT_MODELS, hardware_model
+from aiflame.devices.models import DEFAULT_MODEL, YEELIGHT_MODELS, CONNECTION_KEYS, hardware_model
 from aiflame.devices.service import DeviceService
 from aiflame.devices.light_settings import light_settings, validate_patch
 
@@ -66,7 +66,7 @@ class FleetDeviceService:
             result = service.status()
             result.update(job=self.job, hardware_model=model_id,
                           selected_device_id=record["device_id"] if record else "",
-                          light_settings=light_settings(record or {}),
+                          light_settings=light_settings(record or {"hardware_model": model_id}),
                           device=dict(manager.engine.device),
                           devices=[item for item in self.transport.snapshot() if item["hardware_model"] == model_id])
             return result
@@ -74,10 +74,23 @@ class FleetDeviceService:
     def update_light_settings(self, body):
         if set(body) != {"hardware_model", "device_id", "settings"} or not isinstance(body["device_id"], str) or not body["device_id"]:
             raise EventError("请先添加并选择要配置的设备", 409)
-        validate_patch(body["settings"])
+        validate_patch(body["settings"], body["hardware_model"])
         with self.lock:
             record = self.target(body["hardware_model"], body["device_id"])
             updated = {**light_settings(record), **body["settings"]}
+            if "colors" in body["settings"]:
+                if body["hardware_model"] not in YEELIGHT_MODELS:
+                    raise EventError("此设备不支持 RGB 颜色配置")
+                updated["colors"] = {**light_settings(record)["colors"],
+                                     **{key: value.upper() for key, value in body["settings"]["colors"].items()}}
+            if body["hardware_model"] in YEELIGHT_MODELS:
+                updated["reduced"] = False
+                if "brightness" in body["settings"]:
+                    updated["state_brightness"] = {key: updated["brightness"] for key in updated["state_brightness"]}
+                if "state_brightness" in body["settings"]:
+                    updated["state_brightness"] = {**light_settings(record)["state_brightness"],
+                                                   **body["settings"]["state_brightness"]}
+                    updated["brightness"] = max(updated["state_brightness"].values())
             saved = {**self.config, "devices": {**self.transport.records,
                      body["device_id"]: {**record, "light_settings": updated}}}
             write_private(self.runtime / "credentials.json", saved)
@@ -89,6 +102,46 @@ class FleetDeviceService:
             self.transport.engine.settings_changed()
             return {"device_id": body["device_id"], "light_settings": updated,
                     "message": "此设备的灯光设置已保存"}
+
+    def delete(self, body):
+        if (set(body) != {"hardware_model", "device_id"}
+                or body["hardware_model"] not in YEELIGHT_MODELS
+                or not isinstance(body["device_id"], str) or not body["device_id"]):
+            raise EventError("请选择要删除的 Yeelight 设备", 422)
+        with self.guard:
+            if self.busy():
+                raise EventError("请等待当前设备维护完成", 409)
+            with self.lock:
+                record = self.target(body["hardware_model"], body["device_id"])
+                manager = self.transport.connection(record["device_id"])
+                was_running = manager.running
+            manager.stop()
+            try:
+                with self.lock:
+                    device_id = record["device_id"]
+                    saved = {**self.config, "devices": {key: value for key, value in self.transport.records.items() if key != device_id}}
+                    if saved.get("device_id") == device_id:
+                        for key in CONNECTION_KEYS:
+                            saved.pop(key, None)
+                    if "hardware_profiles" in saved:
+                        saved["hardware_profiles"] = {key: value for key, value in saved["hardware_profiles"].items()
+                                                      if value.get("device_id") != device_id}
+                    write_private(self.runtime / "credentials.json", saved)
+                    self.config.clear()
+                    self.config.update(saved)
+                    self.transport.records = self.config["devices"]
+                    self.transport.connections.pop(device_id, None)
+                    self.transport.outputs.pop(device_id, None)
+                    flame = self.transport.engine
+                    for item in flame.queue + ([flame.current] if flame.current else []):
+                        item.get("device_sessions", {}).pop(device_id, None)
+                    self.transport.refresh()
+            except OSError:
+                if was_running:
+                    manager.start()
+                raise
+            return {**self.status(body["hardware_model"], ""), "deleted_device_id": device_id,
+                    "message": "此设备已删除"}
 
     def start(self, body):
         action = body.get("action")

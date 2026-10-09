@@ -6,24 +6,19 @@ import time
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from aiflame.core.paths import ensure_runtime
-from live_client import DashboardClient
+from live_client import DashboardClient, hardware_targets, hardware_applied, targets_connected, requested_devices
 
 
-def wait_for_state(client, state, seconds=8, event_id=None, min_seq=None):
+def wait_for_state(client, state, targets, seconds=8, event_id=None):
     end = time.monotonic() + seconds
     while time.monotonic() < end:
         _, s = client.request("/api/status")
-        event_ok = (
-            not event_id
-            or client.request("/v1/events/" + event_id)[1]["status"] == "applied"
-        )
-        seq_ok = min_seq is None or (s["last_ack"] and s["last_ack"]["seq"] > min_seq)
+        event_ok = not event_id or hardware_applied(s, targets, event_id)
         if (
             event_ok
-            and seq_ok
-            and s["device"]["online"]
-            and s["last_ack"]
-            and s["last_ack"]["state"] == state
+            and targets_connected(s, targets)
+            and s["display"]["device_confirmed"]
+            and s["display"]["state"] == state
         ):
             return s
         time.sleep(0.1)
@@ -31,6 +26,7 @@ def wait_for_state(client, state, seconds=8, event_id=None, min_seq=None):
 
 
 def main():
+    device_ids = requested_devices()
     client = DashboardClient()
     report = []
     assert client.request("/api/status", authenticated=False)[0] == 401
@@ -42,22 +38,21 @@ def main():
     )
     report.append("Authentication and Origin rejection: PASS")
     original = client.call("/api/status")
-    assert (
-        not original["settings"]["paused"]
-    ), "Resume reminders first"
+    targets = hardware_targets(original, device_ids)
+    report.append("Physical targets: " + ", ".join(targets))
     assert client.request("/api/settings", {"duration": 3})[0] == 200
     try:
         for mode in ("working", "done", "error"):
             code, r = client.request("/api/test", {"state": mode})
             assert code == 202
-            wait_for_state(client, mode, event_id=r["event_id"])
+            wait_for_state(client, mode, targets, event_id=r["event_id"])
             report.append(mode + " hardware applied ACK: PASS")
             if mode in ("done", "error"):
                 time.sleep(3.3)
         # Pausing turns the physical device off.
-        before = client.request("/api/status")[1]["last_ack"]["seq"]
-        client.request("/api/settings", {"paused": True})
-        wait_for_state(client, "idle", min_seq=before)
+        client.call("/api/settings", {"paused": True})
+        # Fleet confirmation checks the new muted display key on every active lamp.
+        wait_for_state(client, "idle", targets)
         report.append("Pause hardware ACK: PASS")
     finally:
         client.request("/api/settings", {"paused": False, "duration": original["settings"]["duration"]})

@@ -1,11 +1,12 @@
 import os
+from importlib.util import find_spec
 import sys
 import unittest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 
-@unittest.skipUnless(sys.platform == "darwin", "macOS native tray")
+@unittest.skipUnless(sys.platform == "darwin" and find_spec("PySide6") is not None, "macOS native tray requires desktop dependencies")
 class MacTrayTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

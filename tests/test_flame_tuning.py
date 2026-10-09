@@ -86,7 +86,7 @@ class TuningTests(unittest.TestCase):
         self.assertEqual(packet['duration_ms'], 5000)
         self.assertLess(len(json.dumps(packet)), 4096)
 
-    def test_all_extremes_bounded_for_both_matrices(self):
+    def test_uniform_minimum_maximum_and_default_profiles_bounded_for_both_matrices(self):
         for dimensions in ((9, 16), (7, 15)):
             renderer = Renderer(*dimensions)
             for index in (2, 3, 5):

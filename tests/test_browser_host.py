@@ -16,6 +16,8 @@ from aiflame.integrations.chatgpt_web.host import (
     read_message,
     write_message,
     extension_id,
+    extension_origins,
+    LEGACY_EXTENSION_ID,
     forward,
 )
 from aiflame.integrations.chatgpt_web.install import install
@@ -150,7 +152,17 @@ class TestBrowserHost(unittest.TestCase):
                 ),
             ):
                 install()
+                manifest = json.loads((root / "native.json").read_text())
+                manifest["allowed_origins"] = ["chrome-extension://" + LEGACY_EXTENSION_ID + "/"]
+                (root / "native.json").write_text(json.dumps(manifest))
                 install()
+                manifest = json.loads((root / "native.json").read_text())
+                manifest["allowed_origins"].append("chrome-extension://" + "a" * 32 + "/")
+                (root / "native.json").write_text(json.dumps(manifest))
+                with self.assertRaisesRegex(RuntimeError, "属于其他配置"):
+                    install()
+                manifest["allowed_origins"] = list(extension_origins())
+                (root / "native.json").write_text(json.dumps(manifest))
             copied = root / "BrowserBridge/chrome"
             self.assertEqual(
                 json.loads((copied / "bridge-config.json").read_text())["tokens"],
@@ -162,7 +174,7 @@ class TestBrowserHost(unittest.TestCase):
             )
             self.assertEqual(
                 json.loads((root / "native.json").read_text())["allowed_origins"],
-                ["chrome-extension://" + extension_id() + "/"],
+                list(extension_origins()),
             )
 
     def test_old_credentials_gain_separate_tokens_without_changing_existing_tokens(
@@ -268,7 +280,7 @@ class TestBrowserHost(unittest.TestCase):
                 read_message(io.BytesIO(data))
 
     def test_extension_id_matches_manifest_key(self):
-        self.assertEqual(extension_id(), "hifannlfdbbhmmgecknoakpbhfihihbg")
+        self.assertEqual(extension_id(), "miokmdeomlchjpihkcnommpnheagoimc")
 
     def test_web_requires_start_and_cancel_is_terminal(self):
         with tempfile.TemporaryDirectory() as t:
@@ -282,19 +294,5 @@ class TestBrowserHost(unittest.TestCase):
                 engine.accept(cancelled, "chatgpt-web")
                 with self.assertRaises(EventError):
                     engine.accept(self.event("done", 3), "chatgpt-web")
-            finally:
-                engine.db.close()
-
-    def test_saved_settings_persist_across_restart(self):
-        with tempfile.TemporaryDirectory() as t:
-            engine = Engine(Path(t) / "db", sources=SOURCES)
-            settings = dict(engine.settings)
-            settings["brightness"] = 7
-            settings["source_enabled"] = {**settings["source_enabled"], "codex": False}
-            engine.update_settings(settings)
-            engine.db.close()
-            engine = Engine(Path(t) / "db", sources=SOURCES)
-            try:
-                self.assertEqual(engine.settings, settings)
             finally:
                 engine.db.close()

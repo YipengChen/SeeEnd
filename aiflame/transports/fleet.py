@@ -6,6 +6,7 @@ from aiflame.core.events import EventError
 from aiflame.devices.registry import migrate_devices, public_record
 from aiflame.devices.light_settings import DEFAULTS as LIGHT_DEFAULTS, light_settings, migrate_light_settings
 from aiflame.transports.manager import TransportManager
+from aiflame.outputs.flame import demo_display
 
 
 class DeviceState(dict):
@@ -62,13 +63,14 @@ class DeviceOutput:
         if self.light_test:
             test = self.light_test
             flame = self.fleet.engine
-            if (flame.clock() >= test["expires"] or self.token != test["connection"]
+            now = flame.clock()
+            if (now >= test["expires"] or self.token != test["connection"]
                     or not self.device.get("online") or flame.settings["mode"] != "hardware"
                     or flame.muted() or result["key"] != test["shared_key"]):
                 self.light_test = None
             else:
-                return {"key": test["key"], "state": "done",
-                        "duration_ms": max(1, int((test["expires"] - flame.clock()) * 1000)), "device_test": True}
+                return {**demo_display(test["key"], now - test["started"]),
+                        "device_test": True}
         current = self.fleet.engine.current
         # Do not replay a completion on a newly attached/rebooted lamp.
         if current and result["key"] == current["id"]:
@@ -86,9 +88,12 @@ class DeviceOutput:
         flame = self.fleet.engine
         flame.applied(desired, ack)
         event_ids = [flame.current["id"]] if flame.current and flame.current["id"] == desired["key"] else (
-            [item["id"] for item in flame.active.values()] if desired["state"] == "working" else [])
+            [item["id"] for item in flame.active.values()] if desired["state"] == "working" else
+            [row["event"] for row in flame.db.execute("SELECT deliveries.event FROM deliveries JOIN events ON events.id=deliveries.event WHERE output=? AND deliveries.status='queued' AND events.state IN ('idle','cancelled','timeout','unknown')", ("flame:" + self.record["device_id"],)).fetchall()] if desired["state"] == "idle" else [])
         for event_id in event_ids:
-            flame.core.router.record(event_id, "flame:" + self.record["device_id"], "applied")
+            output = "flame:" + self.record["device_id"]
+            previous = flame.db.execute("SELECT detail FROM deliveries WHERE event=? AND output=?", (event_id, output)).fetchone()
+            flame.core.router.record(event_id, output, "applied", previous["detail"] if previous else None)
         self.fleet.refresh()
 
     def session_changed(self):
@@ -160,14 +165,17 @@ class FleetTransportManager:
                 raise EventError("请先停止此设备的灯效调参", 409)
             shared = self.engine.desired()
             key = "device-test:" + uuid.uuid4().hex
-            output.light_test = {"key": key, "expires": self.engine.clock() + 10,
+            started = self.engine.clock()
+            output.light_test = {"key": key, "started": started, "expires": started + 10,
                                  "connection": output.token, "shared_key": shared["key"]}
-            return {"device_id": device_id, "key": key, "remaining_ms": 10000}
+            return {"device_id": device_id, "key": key + ":working", "remaining_ms": 10000}
 
     def refresh(self):
         with self.lock:
             states = [dict(output.device) for key, output in self.outputs.items() if key in self.records]
             if not states:
+                self.engine.device = {"online": False, "connecting": False, "status": "未连接设备",
+                                      "last_error": None, "connected_count": 0, "device_count": 0}
                 return
             online = [state for state in states if state.get("online")]
             connecting = any(state.get("connecting") for state in states)
@@ -182,7 +190,7 @@ class FleetTransportManager:
             for key, record in self.records.items():
                 output = self.connection(key).engine
                 desired = output.desired()
-                remaining = desired["duration_ms"] if desired.get("device_test") else 0
+                remaining = desired["remaining_ms"] if desired.get("device_test") else 0
                 rows.append(public_record(record, {**output.device, "test_remaining_ms": remaining}))
             return rows
 

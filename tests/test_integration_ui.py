@@ -2,6 +2,7 @@
 
 import json
 import os
+from importlib.util import find_spec
 from pathlib import Path
 import tempfile
 import unittest
@@ -9,14 +10,12 @@ from unittest.mock import patch
 from urllib.parse import parse_qs, urlsplit
 
 os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
-try:
+HAS_QT = find_spec("PySide6") is not None
+if HAS_QT:
     from PySide6.QtCore import QObject, Signal
     from PySide6.QtWidgets import QApplication
     from aiflame.desktop.widgets import Dashboard
     from aiflame.integrations.cli_tools.guidance import integration_guide
-    HAS_QT = True
-except ImportError:
-    HAS_QT = False
 
 
 if HAS_QT:
@@ -109,3 +108,17 @@ class IntegrationUITests(unittest.TestCase):
         self.assertEqual(self.widget.cli_messages['deepseek-harness'].text(), '请选择 Profile 后连接。')
         self.assertIn('详细的插件诊断', self.widget.cli_details['deepseek-harness'].text())
         self.assertTrue(all(not kwargs.get('body') for _, kwargs in self.widget.api.calls))
+
+    def test_web_icons_titles_and_overview_open_matching_urls_without_changing_sources(self):
+        from PySide6.QtWidgets import QPushButton
+        from aiflame.integrations.chatgpt_web.host import WEB_URLS
+        with patch('PySide6.QtGui.QDesktopServices.openUrl', return_value=True) as open_url:
+            for source, url in WEB_URLS.items():
+                with self.subTest(source=source):
+                    enabled = self.widget.source_checks[source].isChecked()
+                    buttons = self.widget.source_rows[source].findChildren(QPushButton)
+                    self.assertEqual(len(buttons), 2)
+                    for button in [*buttons, self.widget.home_source_icons[source]]:
+                        button.click()
+                        self.assertEqual(open_url.call_args.args[0].toString(), url)
+                    self.assertEqual(self.widget.source_checks[source].isChecked(), enabled)

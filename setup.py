@@ -30,13 +30,14 @@ class WorkspaceSdist(sdist):
                     source.read_text(encoding="utf-8").replace("](../code/", "](../"),
                     encoding="utf-8",
                 )
-        readme = destination / "README.md"
-        content = readme.read_text(encoding="utf-8").replace(
-            "](../docs/", "](docs/"
-        )
-        # setuptools may hard-link release files; unlink before changing them.
-        readme.unlink()
-        readme.write_text(content, encoding="utf-8")
+        for name in ("README.md", "README.en.md"):
+            readme = destination / name
+            content = readme.read_text(encoding="utf-8").replace(
+                "](../docs/", "](docs/"
+            )
+            # setuptools may hard-link release files; unlink before changing them.
+            readme.unlink()
+            readme.write_text(content, encoding="utf-8")
 
 
 setup(cmdclass={"sdist": WorkspaceSdist})

@@ -98,7 +98,7 @@ def main():
                     'SELECT task,state,reason,status FROM events WHERE source=? ORDER BY created,rowid', (source,))]
             tasks = {event['task'] for event in events if event['state'] == 'working'}
             paired = any(event['state'] == 'done' and event['task'] in tasks for event in events)
-            report = {'source': source, 'model': 'deepseek-flash', 'exit_code': result.returncode,
+            report = {'source': source, 'model': args.qoder_model if source == 'qoder' else 'deepseek-flash', 'exit_code': result.returncode,
                       'response_ok': 'AI_FLAME_REAL_CLI_OK' in result.stdout,
                       'lifecycle_paired': paired, 'events': events}
             if not paired or result.returncode:

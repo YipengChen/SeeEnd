@@ -31,3 +31,7 @@ desktop.log
 # Local research media and generated frame analysis
 /参考焰火/
 /docs/reference-full-analysis/
+
+# Third-party source archives fetched for binary redistribution
+/third_party_sources/
+/packaging/generated_licenses/
