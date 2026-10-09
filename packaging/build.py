@@ -16,13 +16,6 @@ destination = args.dist_dir.resolve()
 with tempfile.TemporaryDirectory(prefix="aiflame-build-") as work:
     env = {**os.environ, "PYINSTALLER_CONFIG_DIR": str(Path(work) / "cache")}
     subprocess.run([sys.executable, str(root / "packaging/prepare_licenses.py")], check=True)
-    tool_dir = Path(work) / "tool-dist"
-    subprocess.run([
-        sys.executable, "-m", "PyInstaller", "--noconfirm",
-        "--distpath", str(tool_dir), "--workpath", str(Path(work) / "tool-work"),
-        str(root / "packaging/esptool.spec")
-    ], cwd=root, env=env, check=True)
-    env["SEEEND_ESPTOOL_BUNDLE"] = str(tool_dir / "esptool")
     env["SEEEND_THIRD_PARTY_LICENSES"] = str(root / "packaging/generated_licenses")
     result = subprocess.call(
         [

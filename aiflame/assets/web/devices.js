@@ -3,11 +3,10 @@ import { $, api, el, tell, names, results } from "./shared.js";
 let lightRevision = 0;
 let lightWriting = false;
 let lightEditing = false;
-let liveDevice = {}, pairedDevice = false, wifiAvailable = false, connectionPaused = false;
-let wifiScanRunning = false;
+let liveDevice = {}, pairedDevice = false, connectionPaused = false;
 let deviceJobRunning = false;
 let triggerJobRunning = false;
-let selectedHardwareModel = "ai-flame-v01";
+let selectedHardwareModel = "yeelight-yltd003";
 let selectedDeviceId = null;
 const isYeelight = () => ["yeelight-yltd003", "yeelight-yldp005"].includes(selectedHardwareModel);
 const testDeadlines = new Map();
@@ -35,22 +34,11 @@ function showDeviceDetails(modelId) {
   if (!button) return;
   selectedHardwareModel = modelId;
   $("deviceModelTitle").textContent = button.dataset.name;
-  $("deviceModelDimensions").textContent = (isYeelight() ? "" : "暖黄色灯板 · ") + button.dataset.size;
-  if (isYeelight()) $("deviceModelDimensions").textContent = button.querySelector(".device-model-detail").textContent;
-  $("yeelightControls").hidden = !isYeelight();
-  $("deviceReducedRow").hidden = isYeelight();
-  $("deviceBrightnessRow").hidden = isYeelight();
-  $("deviceLightTitle").hidden = isYeelight();
-  $("yeelightStateBrightness").hidden = !isYeelight();
-  $("deviceBrightness").max = isYeelight() ? "100" : "25";
-  $("deviceBrightnessLabel").textContent = isYeelight() ? "灯光亮度 · 上限 100%" : "灯光亮度 · 上限 25%";
-  if (isYeelight()) {
-    $("discoverYeelight").textContent = "搜索 " + button.dataset.name.replace("Yeelight ", "");
-    $("yeelightSetup").textContent = "在 Yeelight APP 中配置灯具，接入2.4 GHz WiFi，开启「局域网控制」。此电脑需与灯具在同一局域网内。";
-    $("yeelightLightHint").textContent = button.dataset.lightHint;
-  }
-  for (const id of ["matrixConnection", "matrixWifi", "matrixMaintenance"]) $(id).hidden = isYeelight();
-  $("firmwareDownload").href = "/api/firmware/download?model=" + modelId;
+  $("deviceModelDimensions").textContent = button.querySelector(".device-model-detail").textContent;
+  $("yeelightControls").hidden = false;
+  $("yeelightStateBrightness").hidden = false;
+  $("discoverYeelight").textContent = "搜索 " + button.dataset.name.replace("Yeelight ", "");
+  $("yeelightLightHint").textContent = button.dataset.lightHint;
   $("deviceSelector").hidden = true;
   $("deviceDetails").hidden = false;
 }
@@ -60,9 +48,7 @@ for (const button of document.querySelectorAll("[data-device-model]")) {
     modelRevision += 1;
     selectionLoading = true;
     deviceOperationId = null;
-    wifiAvailable = pairedDevice = connectionPaused = wifiScanRunning = false;
-    $("wifiNetworks").replaceChildren();
-    $("usbPort").replaceChildren();
+    pairedDevice = connectionPaused = false;
     updateBusy();
     selectedDeviceId = null;
     lightEditing = false;
@@ -71,9 +57,6 @@ for (const button of document.querySelectorAll("[data-device-model]")) {
     showDeviceDetails(button.dataset.deviceModel);
     $("yeelightHost").value = "";
     $("yeelightDiscovered").replaceChildren();
-    $("wifiPassword").value = "";
-    $("confirmBoard").checked = $("confirmFlash").checked = false;
-    await scanPorts();
     await refreshMaintenance();
   };
 }
@@ -81,18 +64,13 @@ $("deviceInstances").onchange = async () => {
   modelRevision += 1;
   selectionLoading = true;
   deviceOperationId = null;
-  wifiAvailable = pairedDevice = connectionPaused = wifiScanRunning = false;
-  $("wifiNetworks").replaceChildren();
-  $("usbPort").replaceChildren();
+  pairedDevice = connectionPaused = false;
   updateBusy();
   selectedDeviceId = $("deviceInstances").value;
   lightEditing = false;
   restoreSelectedPort = true;
   liveDevice = {};
   $("yeelightHost").value = "";
-  $("wifiPassword").value = "";
-  $("confirmBoard").checked = $("confirmFlash").checked = false;
-  await scanPorts();
   await refreshMaintenance();
 };
 async function saveLightSetting(key, value) {
@@ -113,13 +91,6 @@ async function saveLightSetting(key, value) {
     await refreshMaintenance();
   }
 }
-$("deviceBrightness").oninput = () => {
-  lightEditing = true;
-  $("deviceBrightnessValue").textContent = $("deviceBrightness").value + "%";
-  $("deviceBrightnessNote").hidden = Number($("deviceBrightness").value) !== 0;
-};
-$("deviceBrightness").onchange = () => saveLightSetting("brightness", Number($("deviceBrightness").value));
-$("deviceReduced").onchange = () => saveLightSetting("reduced", $("deviceReduced").checked);
 const stateBrightnessInputs = {working: "yeelightWorkingBrightness", done: "yeelightDoneBrightness", error: "yeelightErrorBrightness"};
 for (const [state, id] of Object.entries(stateBrightnessInputs)) {
   $(id).oninput = () => {
@@ -132,11 +103,10 @@ function deviceQuery() {
   return "/api/device?model=" + encodeURIComponent(selectedHardwareModel) +
     (selectedDeviceId === null ? "" : "&device_id=" + encodeURIComponent(selectedDeviceId));
 }
-function scanQuery() { return "/api/wifi-networks?device_id=" + encodeURIComponent(selectedDeviceId || ""); }
 const hardwareMode = () => document.body.dataset.mode === "hardware";
 function updateBusy() {
   renderTestCountdown();
-  for (const id of ["deviceBrightness", "deviceReduced", ...Object.values(stateBrightnessInputs)])
+  for (const id of Object.values(stateBrightnessInputs))
     $(id).disabled = selectionLoading || lightWriting || !selectedDeviceId;
   document.querySelectorAll("[data-device-model]").forEach(button => {
     button.disabled = false;
@@ -148,17 +118,7 @@ function updateBusy() {
   $("connectYeelight").disabled = blocked || !$("yeelightHost").value.trim();
   $("discoverYeelight").disabled = !hardwareMode() || selectionLoading || deviceJobRunning || triggerJobRunning;
   $("testCurrentDevice").disabled = blocked || !selectedDeviceId || !liveDevice.online;
-  const wifiOnline = liveDevice.online && liveDevice.port?.startsWith("wifi://");
-  const usbOnline = liveDevice.online && !wifiOnline;
-  const sameUsb = usbOnline && liveDevice.port === $("usbPort").value;
-  $("useUsb").disabled = blocked || !$("usbPort").value || sameUsb;
-  $("useUsb").textContent = sameUsb ? "USB 已连接" : usbOnline ? "切换到此串口" : wifiOnline ? "切换到 USB" : "连接 USB";
-  $("useWifi").disabled = blocked || !wifiAvailable || wifiOnline;
-  $("useWifi").textContent = wifiOnline ? "Wi-Fi 已连接" : usbOnline ? "切换到 Wi-Fi" : "连接 Wi-Fi";
   $("disconnectDevice").disabled = !hardwareMode() || selectionLoading || deviceJobRunning || triggerJobRunning || connectionPaused || !(liveDevice.online || liveDevice.connecting || pairedDevice);
-  $("scanPorts").disabled = !hardwareMode() || selectionLoading || deviceJobRunning;
-  $("flashBase").disabled = !hardwareMode() || selectionLoading || deviceJobRunning || triggerJobRunning
-    || !$("usbPort").value || !$("confirmBoard").checked || !$("confirmFlash").checked;
   document
     .querySelectorAll("[data-trigger]")
     .forEach((b) => (b.disabled = deviceJobRunning || triggerJobRunning));
@@ -176,31 +136,6 @@ for (const button of document.querySelectorAll("[data-tab]")) {
     if (button.dataset.tab === "testing") refreshDesktopClients();
   };
 }
-async function scanPorts() {
-  if (!hardwareMode() || isYeelight()) return;
-  const revision = modelRevision;
-  try {
-    const data = await api("/api/ports");
-    if (!hardwareMode() || revision !== modelRevision) return;
-    const selected = $("usbPort").value;
-    $("usbPort").replaceChildren();
-    for (const port of data.ports) {
-      const option = el("option", port.description + " · " + port.port);
-      option.value = port.port;
-      $("usbPort").append(option);
-    }
-    if (!data.ports.length) {
-      const option = el("option", "未找到 USB 设备");
-      option.value = "";
-      $("usbPort").append(option);
-    }
-    if (data.ports.some((p) => p.port === selected))
-      $("usbPort").value = selected;
-    updateBusy();
-  } catch (error) {
-    tell(error.message, true);
-  }
-}
 async function maintenance(action, values = {}) {
   if (!hardwareMode() || selectionLoading) return false;
   try {
@@ -208,7 +143,6 @@ async function maintenance(action, values = {}) {
       action,
       hardware_model: selectedHardwareModel,
       device_id: selectedDeviceId || "",
-      port: $("usbPort").value,
       ...values,
     });
     deviceOperationId = data.id;
@@ -251,11 +185,6 @@ function renderJob(job) {
 }
 async function refreshMaintenance() {
   try {
-    if (wifiScanRunning) {
-      const revision = modelRevision;
-      const scan = await api(scanQuery());
-      if (revision === modelRevision) renderWifiScan(scan);
-    }
     if ((!$("pane-device").hidden && !$("deviceDetails").hidden) || deviceJobRunning) {
       const revision = modelRevision;
       const appearanceRevision = lightRevision;
@@ -274,15 +203,11 @@ async function refreshMaintenance() {
         pairedDevice = Boolean(selectedDeviceId);
         if (appearanceRevision === lightRevision && !lightWriting && !lightEditing) {
           const appearance = data.light_settings || {brightness: isYeelight() ? 50 : 20, reduced: false};
-          $("deviceBrightness").value = appearance.brightness;
-          $("deviceBrightnessValue").textContent = appearance.brightness + "%";
-          $("deviceReduced").checked = appearance.reduced;
           for (const [state, id] of Object.entries(stateBrightnessInputs)) {
             const value = appearance.state_brightness?.[state] ?? (state === "working" ? 20 : 50);
             $(id).value = value;
             $(id + "Value").textContent = value + "%";
           }
-          $("deviceBrightnessNote").hidden = !selectedDeviceId || appearance.brightness !== 0;
         }
         $("deviceLightHint").hidden = Boolean(selectedDeviceId);
         $("deviceInstances").replaceChildren();
@@ -296,23 +221,12 @@ async function refreshMaintenance() {
         $("selectedDeviceState").textContent = liveDevice.online ? "此设备已连接，正在同步 AI 状态。" : "";
         $("selectedDeviceState").hidden = !liveDevice.online;
         if (isYeelight() && restoreSelectedPort) { $("yeelightHost").value = data.yeelight_host || ""; restoreSelectedPort = false; }
-        if (restoreSelectedPort && data.selected_port && Array.from($("usbPort").options).some(option => option.value === data.selected_port)) {
-          $("usbPort").value = data.selected_port; restoreSelectedPort = false;
-        }
       }
       if (data.hardware_model && data.job?.state !== "running" && !$("deviceDetails").hidden) showDeviceDetails(data.hardware_model);
       {
-        wifiAvailable = Boolean(data.wifi_available);
         connectionPaused = Boolean(data.connection_paused);
-        $("wifiRemembered").textContent = data.wifi_info_current
-          ? data.wifi_ssid ? "设备已记忆：" + data.wifi_ssid + (data.wifi_connected ? " · 已连入网络" : " · 尚未连入网络") : "设备尚未配置 Wi-Fi"
-          : data.wifi_info_known ? "上次记录：" + (data.wifi_ssid || "未配置 Wi-Fi") + " · 等待设备确认" : "网络名未知 · 连接并更新灯光程序后可读取";
+        $("transportMode").textContent = "当前方式：Wi-Fi 局域网";
         updateBusy();
-        $("pairedDevice").textContent = data.paired_device
-          ? "已配对：" + data.paired_device
-          : "尚未配对，请先保存网络并安装灯光程序";
-        $("transportMode").textContent =
-          "当前方式：" + (["wifi", "yeelight"].includes(data.transport) ? "Wi-Fi 局域网" : "USB");
         renderJob(data.job);
       }
     }
@@ -343,64 +257,11 @@ async function refreshMaintenance() {
     /* Main dashboard owns the connection warning. */
   }
 }
-function renderWifiScan(data) {
-  wifiScanRunning = data.state === "running";
-  $("wifiScanHint").textContent = data.message || "";
-  if (data.state === "succeeded") {
-    $("wifiNetworks").replaceChildren();
-    for (const network of data.networks || []) {
-      const option = el("button", network.ssid + " · " + network.signal + " dBm");
-      option.type = "button";
-      option.dataset.userContent = ""; option.value = network.ssid;
-      option.setAttribute("role", "option");
-      option.onclick = () => { $("wifiSsid").value = network.ssid; closeWifiChoices(); };
-      $("wifiNetworks").append(option);
-    }
-    if (!data.networks?.length) $("wifiNetworks").textContent = data.message || "未发现网络，可手动输入";
-  } else {
-    $("wifiNetworks").textContent = data.message || "ESP32 正在搜索…";
-  }
-  updateBusy();
-}
-let lastWifiScan = 0;
-async function scanWifiChoices() {
-  if (!hardwareMode() || !selectedDeviceId || selectionLoading || deviceJobRunning || wifiScanRunning || Date.now() - lastWifiScan < 15000) return;
-  lastWifiScan = Date.now();
-  wifiScanRunning = true;
-  updateBusy();
-  const revision = modelRevision;
-  try { const scan = await api("/api/wifi-networks", {device_id: selectedDeviceId || ""}); if (revision === modelRevision) renderWifiScan(scan); }
-  catch { if (revision === modelRevision) renderWifiScan({state: "failed", message: "搜索失败，请检查 ESP32 连接；也可手动输入网络名。"}); }
-}
-function closeWifiChoices() {
-  $("wifiNetworks").hidden = true;
-  $("wifiSsid").setAttribute("aria-expanded", "false");
-}
-function openWifiChoices() {
-  $("wifiNetworks").hidden = false;
-  $("wifiSsid").setAttribute("aria-expanded", "true");
-  if (!$("wifiNetworks").childNodes.length) $("wifiNetworks").textContent = "正在读取 ESP32 网络列表…";
-  scanWifiChoices();
-}
-$("wifiSsid").onfocus = openWifiChoices;
-$("wifiSsid").onclick = openWifiChoices;
-$("wifiSsid").onkeydown = event => {
-  if (event.key === "Escape") closeWifiChoices();
-  if (event.key === "ArrowDown") { openWifiChoices(); $("wifiNetworks").querySelector("button")?.focus(); event.preventDefault(); }
-};
-document.addEventListener("mousedown", event => {
-  if (!event.target.closest(".wifi-picker")) closeWifiChoices();
-});
 $("yeelightHost").oninput = updateBusy;
 $("yeelightDiscovered").onchange = () => { $("yeelightHost").value = $("yeelightDiscovered").value; updateBusy(); };
 $("discoverYeelight").onclick = () => maintenance("discover");
 $("connectYeelight").onclick = () => maintenance("connect", {transport: "yeelight", host: $("yeelightHost").value.trim()});
 $("disconnectDevice").onclick = () => maintenance("disconnect");
-$("scanPorts").onclick = scanPorts;
-$("usbPort").onchange = updateBusy;
-$("probeDevice").onclick = () => maintenance("probe");
-$("useWifi").onclick = () => maintenance("connect", { transport: "wifi" });
-$("useUsb").onclick = () => maintenance("connect", { transport: "usb" });
 $("testCurrentDevice").onclick = async () => {
   if ($("testCurrentDevice").disabled) return;
   $("testCurrentDevice").disabled = true;
@@ -412,33 +273,6 @@ $("testCurrentDevice").onclick = async () => {
   } catch (error) { tell(error.message, true); }
   finally { updateBusy(); }
 };
-$("installFirmware").onclick = () => maintenance("install");
-$("wifiForm").onsubmit = async (event) => {
-  event.preventDefault();
-  const ok = await maintenance("provision", {
-    ssid: $("wifiSsid").value,
-    password: $("wifiPassword").value,
-    open_network: $("openNetwork").checked,
-  });
-  if (ok) $("wifiPassword").value = "";
-};
-$("flashBase").onclick = async () => {
-  if (!$("confirmBoard").checked || !$("confirmFlash").checked) {
-    tell("请确认开发板型号，并确认清除板上的程序和配置。", true);
-    return;
-  }
-  $("flashBase").disabled = true;
-  try {
-    await maintenance("flash_base", {
-      confirm_board: true,
-      confirm_flash: true,
-    });
-  } finally {
-    updateBusy();
-  }
-};
-$("confirmBoard").onchange = updateBusy;
-$("confirmFlash").onchange = updateBusy;
 for (const button of document.querySelectorAll("[data-trigger]")) {
   button.onclick = async () => {
     try {
@@ -472,7 +306,6 @@ document.addEventListener("flame-mode", (event) => {
   if (!hardwareMode() && !modelSelectionRunning) deviceJobRunning = false;
 
   updateBusy();
-  if (hardwareMode() && !previousHardware && !$("pane-device").hidden && !$("deviceDetails").hidden) scanPorts();
   previousHardware = hardwareMode();
 });
 updateBusy();

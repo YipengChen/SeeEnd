@@ -14,19 +14,15 @@ SeeEnd 0.8.4 起的原创代码采用 LICENSE 中的专有许可，版权所有�
 
 第三方源码包也随桌面分发压缩包提供；网络地址不可用时可使用随包副本。
 
-## 独立 esptool 工具
-
-esptool 5.4.0 使用 GPL-2.0-or-later。它作为独立程序位于 third_party/esptool/，通过普通命令行参数和标准输出工作，不收进 SeeEnd 的 Python 模块档案，不导入 SeeEnd 模块。工具未修改，上游对应源码及独立工具构建配方包含在第三方源码包中。GPL 工具自身的权利不受 SeeEnd 专有许可限制。
-
 ## 其他依赖
 
-mpremote 使用 MIT，pyserial 使用 BSD；CPython 使用 PSF；PyObjC 使用 MIT；PyInstaller bootloader 按其运行例外用于专有应用。esptool 的第三方依赖以及系统动态库各自保留原有版权和许可证。随包 third_party_licenses/MANIFEST.json 记录实际材料版本和来源；各目录保留完整许可文本。
+CPython 使用 PSF；PyObjC 使用 MIT；PyInstaller bootloader 按其运行例外用于专有应用。系统动态库各自保留原有版权和许可证。随包 third_party_licenses/MANIFEST.json 记录实际材料版本和来源；各目录保留完整许可文本。
 
 libiconv、gettext/libintl、GLib 等 LGPL 动态库如被构建收录，其对应上游源码和发行方构建补丁也提供在第三方源码包中。SeeEnd 未自行修改这些库。
 
-## 设备固件和图标
+## 图标和浏览器资源
 
-内置 MicroPython ESP32-S3 固件保留 aiflame/devices/firmware/base/LICENSE 及 manifest.json 中的来源与版本。SeeEnd 配套设备脚本和浏览器 JavaScript 为运行功能随包提供，不构成对原创代码的开源或再分发授权。
+SeeEnd 浏览器 JavaScript 为运行功能随包提供，不构成对原创代码的开源或再分发授权。
 
 AI 平台和设备名称、标识用于说明兼容对象，不表示官方隶属或背书。第三方商标及图标保留其权利归属，不由 SeeEnd 专有许可重新授权。
 
@@ -34,4 +30,3 @@ AI 平台和设备名称、标识用于说明兼容对象，不表示官方隶�
 
 - Qt LGPL 说明：https://www.qt.io/development/open-source-lgpl-obligations
 - Qt/PySide 官方源码：https://download.qt.io/official_releases/
-- esptool：https://github.com/espressif/esptool

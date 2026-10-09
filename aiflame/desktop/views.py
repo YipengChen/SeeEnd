@@ -29,12 +29,11 @@ from aiflame.desktop.localization import (
 
 from aiflame import __version__
 from aiflame.devices.models import MODELS, DEFAULT_MODEL
-from aiflame.devices.base_firmware import BOARD, VERSION as BASE_VERSION
 from aiflame.integrations.registry import SOURCES
 from aiflame.integrations.cli_tools.providers import CLI_SOURCES
 from aiflame.integrations.chatgpt_web.host import WEB_SOURCES, WEB_URLS
 from aiflame.integrations.desktop_clients.providers import DESKTOP_SOURCES
-from .components import DeviceModelCard, NetworkComboBox, Disclosure, FlameVisual, Toggle, brand_icon, card, icon, label, separator
+from .components import DeviceModelCard, Disclosure, FlameVisual, Toggle, brand_icon, card, icon, label, separator
 
 PAGES = (
     ("总览", "home"),
@@ -74,10 +73,7 @@ class DashboardViews:
         self.source_details = {}
         self.manual_buttons = []
         self.nav_buttons = []
-        self.port_buttons = []
         self.source_action_buttons = []
-        self.brightness_controls = []
-        self.brightness_labels = []
         self.shortcuts = []
         root = QHBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
@@ -201,24 +197,6 @@ class DashboardViews:
         root.addWidget(main, 1)
         self.nav_buttons[0].setChecked(True)
 
-    def brightness_row(self, layout):
-        row = QHBoxLayout()
-        row.addWidget(label("灯光亮度"))
-        row.addStretch()
-        value = label("—", role="title")
-        self.brightness_labels.append(value)
-        row.addWidget(value)
-        layout.addLayout(row)
-        control = QSlider(Qt.Orientation.Horizontal)
-        control.setRange(0, 25)
-        control.setValue(20)
-        control.setAccessibleName("灯光亮度，0 至 25 百分比")
-        control.valueChanged.connect(
-            lambda value, c=control: self.brightness_changed(value, c)
-        )
-        self.brightness_controls.append(control)
-        layout.addWidget(control)
-        return control, value
 
     def home(self, layout):
         mode_card = card(layout)
@@ -430,7 +408,6 @@ class DashboardViews:
         self.device_details = QWidget()
         details = QVBoxLayout(self.device_details)
         self.device_details_layout = details
-        self.yeelight_layout_active = False
         details.setContentsMargins(0, 0, 0, 0)
         details.setSpacing(18)
         heading = QHBoxLayout()
@@ -439,10 +416,10 @@ class DashboardViews:
         details.addLayout(heading)
         model_heading = QHBoxLayout()
         model_heading.setSpacing(16)
-        self.device_model_title = label("AI Flame 0.1", role="pageTitle")
+        self.device_model_title = label("Yeelight 屏幕挂灯 Pro", role="pageTitle")
         self.device_model_title.setWordWrap(False)
         model_heading.addWidget(self.device_model_title)
-        self.device_model_description = label("9 × 16 LED · USB / Wi-Fi", True)
+        self.device_model_description = label("YLTD003 · RGB 背光", True)
         self.device_model_description.setWordWrap(False)
         model_heading.addWidget(self.device_model_description)
         model_heading.addStretch()
@@ -506,32 +483,6 @@ class DashboardViews:
         add.addLayout(ip_row)
         self.yeelight_connect_button = self.button(ip_row, "添加并连接", lambda: self.device_action("connect", transport="yeelight", host=self.yeelight_host.text().strip()), self.maintenance_buttons, "primary")
         self.yeelight_card.hide()
-        connection = card(top, "USB 连接")
-        self.matrix_connection_card = connection.parentWidget()
-        self.ports = QComboBox()
-        self.ports.setMinimumWidth(180)
-        self.ports.setSizeAdjustPolicy(
-            QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
-        )
-        self.ports.setMinimumContentsLength(16)
-        self.ports.setAccessibleName("选择 USB 设备")
-        self.ports.addItem("点击刷新，查找 USB 设备", "")
-        self.ports.currentIndexChanged.connect(lambda _: self.update_busy())
-        connection.addWidget(self.ports)
-        row = QHBoxLayout()
-        connection.addLayout(row)
-        self.scan_button = self.button(row, "刷新", self.scan_ports)
-        button = self.button(
-            row,
-            "连接 USB",
-            lambda: self.device_action("connect", transport="usb"),
-            self.maintenance_buttons,
-            "primary",
-        )
-        self.port_buttons.append(button)
-        self.usb_connect_button = button
-        self.pairing = label("正在读取设备信息…", True)
-        connection.addWidget(self.pairing)
         progress = card(top)
         self.device_status_layout = progress
         self.device_status_card = progress.parentWidget()
@@ -578,105 +529,12 @@ class DashboardViews:
         device_actions.addWidget(self.device_test_caption)
         self.device_test_caption.hide()
         device_actions.addStretch()
-        wifi = card(
-            layout,
-            "Wi-Fi 连接",
-            "2.4 GHz · 电脑与设备需在同一局域网",
-        )
-        self.matrix_wifi_card = wifi.parentWidget()
-        row = QHBoxLayout()
-        wifi.addLayout(row)
-        self.wifi_connect_button = self.button(
-            row,
-            "连接已配网的设备",
-            lambda: self.device_action("connect", transport="wifi"),
-            self.maintenance_buttons,
-            "primary",
-        )
-        row.addStretch()
-        self.wifi_network = label("连接设备后读取已记忆的网络", True)
-        wifi.addWidget(self.wifi_network)
-        self.wifi_available = False
         self.connection_paused = False
-        disclosure = Disclosure("首次配网 / 更换 Wi-Fi", wifi)
-        self.wifi_disclosure = disclosure
-        form = disclosure.content
-        columns = QHBoxLayout()
-        form.addLayout(columns)
-        ssid_col, password_col = QVBoxLayout(), QVBoxLayout()
-        columns.addLayout(ssid_col, 1)
-        columns.addLayout(password_col, 1)
-        ssid_col.addWidget(label("Wi-Fi 名称"))
-        self.wifi_choices = NetworkComboBox()
-        self.wifi_choices.popup_requested.connect(self.scan_wifi)
-        self.wifi_choices.setEditable(True)
-        self.wifi_choices.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
-        self.wifi_choices.setAccessibleName("选择或输入 2.4 GHz Wi-Fi 名称")
-        self.wifi_choices.setMinimumContentsLength(12)
-        self.wifi_choices.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
-        self.ssid = self.wifi_choices.lineEdit()
-        self.ssid.setAccessibleName("Wi-Fi 名称")
-        self.ssid.setPlaceholderText("选择 2.4 GHz Wi-Fi，或手动输入")
-        self.ssid.setMaxLength(32)
-        ssid_col.addWidget(self.wifi_choices)
-        self.wifi_scan_running = False
-        self.wifi_scan_hint = label("点击名称展开列表，由 ESP32 搜索并按信号排序；也可手动输入。", True)
-        form.addWidget(self.wifi_scan_hint)
-        password_col.addWidget(label("Wi-Fi 密码"))
-        self.password = QLineEdit()
-        self.password.setAccessibleName("Wi-Fi 密码")
-        self.password.setEchoMode(QLineEdit.EchoMode.Password)
-        self.password.setMaxLength(63)
-        self.password.setPlaceholderText("8–63 个字符")
-        password_col.addWidget(self.password)
-        options = QHBoxLayout()
-        self.show_password = QCheckBox("显示密码")
-        self.show_password.toggled.connect(
-            lambda value: self.password.setEchoMode(
-                QLineEdit.EchoMode.Normal if value else QLineEdit.EchoMode.Password
-            )
-        )
-        options.addWidget(self.show_password)
-        self.open_network = QCheckBox("此网络无需密码")
-        self.open_network.toggled.connect(self.open_network_changed)
-        options.addWidget(self.open_network)
-        options.addStretch()
-        form.addLayout(options)
-        self.wifi_error = label()
-        self.wifi_error.setStyleSheet("color: #a0472c;")
-        self.wifi_error.hide()
-        form.addWidget(self.wifi_error)
-        self.ssid.textChanged.connect(self.clear_wifi_error)
-        self.password.textChanged.connect(self.clear_wifi_error)
-        action = self.button(
-            form, "保存并连接 Wi-Fi", self.provision, self.maintenance_buttons, "primary"
-        )
-        self.port_buttons.append(action)
-        form.addWidget(
-            label("通过 USB 仅保存网络配置，灯光程序保持不变。首次使用请先在设备维护中安装灯光程序。", True)
-        )
+        self.yeelight_history_layout.addWidget(self.device_instance_panel)
+        self.yeelight_history_layout.addWidget(self.device_status_card)
+        self.yeelight_card.layout().addWidget(self.device_job_feedback)
         layout = details
         light = card(layout)
-        self.device_light_title = label("灯光表现", role="title")
-        light.addWidget(self.device_light_title)
-        self.device_brightness_panel = QWidget()
-        brightness_layout = QVBoxLayout(self.device_brightness_panel)
-        brightness_layout.setContentsMargins(0, 0, 0, 0)
-        self.brightness, self.brightness_value = self.brightness_row(brightness_layout)
-        light.addWidget(self.device_brightness_panel)
-        self.brightness.setToolTip("亮度上限 25%；设为 0% 只关闭此设备的提醒。")
-        self.brightness_note = label("亮度为 0%，此设备的灯光提醒已关闭。", True)
-        light.addWidget(self.brightness_note)
-        self.brightness_note.hide()
-        self.device_reduced_panel = QWidget()
-        row = QHBoxLayout(self.device_reduced_panel)
-        row.setContentsMargins(0, 0, 0, 0)
-        row.addWidget(label("减少动态效果", role="title"), 1)
-        self.device_reduced = Toggle()
-        self.device_reduced.setAccessibleName("此设备减少动态效果")
-        self.device_reduced.toggled.connect(lambda value: self.device_light_setting("reduced", value))
-        row.addWidget(self.device_reduced)
-        light.addWidget(self.device_reduced_panel)
         self.device_light_hint = label("先连接并添加设备，即可设置此设备的灯光表现。", True)
         light.addWidget(self.device_light_hint)
         self.yeelight_colors_panel = QWidget()
@@ -751,55 +609,6 @@ class DashboardViews:
             colors.addLayout(section)
         light.addWidget(self.yeelight_colors_panel)
         self.yeelight_colors_panel.hide()
-        self.hardware_maintenance_controls = QWidget()
-        layout.addWidget(self.hardware_maintenance_controls)
-        layout = QVBoxLayout(self.hardware_maintenance_controls)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(18)
-        self.hardware_maintenance_controls.hide()
-        maintenance = card(layout)
-        self.matrix_maintenance_card = maintenance.parentWidget()
-        advanced = Disclosure("设备维护与恢复", maintenance)
-        self.firmware_disclosure = advanced
-        firmware = advanced.content
-        firmware.addWidget(label("设备正常工作时，无需进行这些操作。", True))
-        row = QHBoxLayout()
-        firmware.addLayout(row)
-        for text, action in (("识别 USB 设备", "probe"), ("安装 / 更新灯光程序", "install")):
-            button = self.button(
-                row,
-                text,
-                lambda a=action: self.device_action(a),
-                self.maintenance_buttons,
-            )
-            self.port_buttons.append(button)
-        self.button(
-            row,
-            "导出完整固件包（ZIP）",
-            lambda: self.download(
-                f"/api/firmware/download?model={self.selected_device_model}", f"{self.selected_device_model}-firmware.zip"
-            ),
-        )
-        firmware.addWidget(label("更新灯光程序使用 APP 内置文件，保留 Wi-Fi 配置。导出的 ZIP 包含底层 .bin 和灯光程序，供手动安装使用。", True))
-        base = Disclosure("初始化 / 恢复开发板", firmware)
-        base.content.addWidget(
-            label(
-                f"已内置 MicroPython {BASE_VERSION}，无需下载或选择文件。适用 {BOARD}：16 MB Flash / 8 MB Octal PSRAM。初始化后先安装灯光程序，再按需配置 Wi-Fi。",
-                True,
-            )
-        )
-        self.confirm_board = QCheckBox("确认所选开发板为 ESP32-S3-N16R8")
-        base.content.addWidget(self.confirm_board)
-        self.confirm_flash = QCheckBox("确认清除板上所有程序、Wi-Fi 配置和配对信息")
-        base.content.addWidget(self.confirm_flash)
-        self.flash_button = self.button(
-            base.content, "使用内置固件初始化", self.flash, self.maintenance_buttons, "danger"
-        )
-        self.port_buttons.append(self.flash_button)
-        self.confirm_flash.toggled.connect(lambda _: self.update_busy())
-        self.confirm_board.toggled.connect(lambda _: self.update_busy())
-        base.content.addWidget(label("请保持 USB 连接。连接失败时，按住 BOOT，短按 RESET / EN，再松开 BOOT 后重试。", True))
-
     def source_row(self, layout, source, short_name=None):
         policy = next(item for item in SOURCES if item.id == source)
         frame = QFrame()
@@ -1030,7 +839,7 @@ class DashboardViews:
             ),
             (
                 "灯光与测试",
-                "在「我的设备」设置每台灯具的灯光表现，Yeelight 亮度上限为 100%，AI Flame 为 25%；设为 0% 只关闭对应灯具，任务仍会记录。暂停、静默后不补播；模拟诊断和手动试亮不计入真实任务验证。",
+                "在「我的设备」设置每台灯具的灯光表现，Yeelight 亮度上限为 100%；设为 0% 只关闭对应灯具，任务仍会记录。暂停、静默后不补播；模拟诊断和手动试亮不计入真实任务验证。",
             ),
         ):
             instructions.addWidget(label(title, role="title"))
@@ -1202,7 +1011,7 @@ class DashboardViews:
             ),
             (
                 "连接灯具需要重新接入吗？",
-                "不需要。应用接入和偏好保存在本机，连接火焰灯后直接沿用。到「我的设备」连接并试亮，再用新任务检查实体提醒。无硬件体验不验证 USB、Wi-Fi 或实体发光效果。",
+                "不需要。应用接入和偏好保存在本机，连接 Yeelight 灯具后直接沿用。到「我的设备」连接并试亮，再用新任务检查实体提醒。无硬件体验不验证局域网连接或实体发光效果。",
             ),
             (
                 "灯没亮怎么办？",
@@ -1217,8 +1026,8 @@ class DashboardViews:
                 "会。支持系统托盘时，关闭窗口仅隐藏界面，可从菜单栏 / 托盘重新打开。从应用菜单选择「退出 SeeEnd」才会停止本 App 的服务。电脑休眠、浏览器关闭或页面被丢弃时，无法保证继续采集网页任务。",
             ),
             (
-                "USB 连接失败怎么办？",
-                "确认数据线支持数据传输，关闭可能占用串口的软件，再到「我的设备」刷新。全新 ESP32-S3-N16R8 请在「设备维护与恢复 → 初始化 / 恢复开发板」安装内置底层固件。",
+                "Yeelight 连接失败怎么办？",
+                "在 Yeelight APP 中开启「局域网控制」，确认电脑与灯具在同一局域网，再到「我的设备」搜索或手动输入 IP。",
             ),
         ):
             item = Disclosure(title, help_box)
@@ -1276,7 +1085,7 @@ class DashboardViews:
         about.addWidget(label(f"SeeEnd  {__version__}", role="title"))
         about.addWidget(
             label(
-                "支持 AI Flame 0.1（9×16）和 0.2（7×15），可同时连接多台 ESP32-S3 / IS31FL3731 矩阵设备，通过 USB 或局域网 Wi-Fi 连接；支持 Yeelight YLTD003 和 YLDP005，通过局域网连接。网页及桌面客户端接入的兼容性以各版本实测范围为准。",
+                "支持 Yeelight YLTD003 和 YLDP005，可同时连接多台灯具，通过局域网连接。网页及桌面客户端接入的兼容性以各版本实测范围为准。",
                 True,
             )
         )

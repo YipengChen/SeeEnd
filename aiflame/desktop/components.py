@@ -33,7 +33,6 @@ ICONS = {
     "flame": '<path d="M13 2c4 8-7 9-5 15 1-4 4-4 4-8 8 6 10 10 5 13-6 4-15-1-12-7 0-3 3-5 3-7 0 2 1 3 1 4-1-6 6-6 4-10z"/>',
     "power": '<path d="M12 2v9M6 5a9 9 0 1 0 12 0"/>',
     "wifi": '<path d="M3 8a15 15 0 0 1 18 0M6 12a10 10 0 0 1 12 0M9 16a5 5 0 0 1 6 0"/><circle cx="12" cy="20" r=".7"/>',
-    "usb": '<rect x="3" y="4" width="6" height="7" rx="1"/><path d="M5 2v2m2-2v2M6 11v4a5 5 0 0 0 10 0v-2"/><rect x="13" y="7" width="6" height="6" rx="1"/><path d="M15 5v2m2-2v2"/>',
 }
 
 
@@ -119,7 +118,7 @@ class DeviceModelCard(QPushButton):
         row.setSpacing(16)
         self.thumbnail = label()
         self.thumbnail.setObjectName("deviceThumbnail")
-        self.thumbnail.setProperty("kind", "matrix" if "mapping" in model else "rgb")
+        self.thumbnail.setProperty("kind", "rgb")
         self.thumbnail.setFixedSize(96, 112)
         self.thumbnail.setAlignment(Qt.AlignmentFlag.AlignCenter)
         asset = Path(__file__).resolve().parents[1] / "assets/web/devices" / (model["id"] + ".svg")
@@ -127,13 +126,13 @@ class DeviceModelCard(QPushButton):
         row.addWidget(self.thumbnail)
         content = QVBoxLayout()
         content.setSpacing(5)
-        brand = label("AI FLAME" if "mapping" in model else "YEELIGHT", role="deviceBrand")
+        brand = label("YEELIGHT", role="deviceBrand")
         content.addWidget(brand)
         self.title = label(model["name"], role="deviceName")
         content.addWidget(self.title)
         self.detail = label(model["card_description"], True)
         content.addWidget(self.detail)
-        connection = label("USB / Wi-Fi" if "mapping" in model else "Wi-Fi 局域网", role="deviceMeta")
+        connection = label("Wi-Fi 局域网", role="deviceMeta")
         content.addWidget(connection)
         footer = QHBoxLayout()
         self.connection_count = label(role="deviceCount")
@@ -192,28 +191,6 @@ class Toggle(QCheckBox):
             Qt.AlignmentFlag.AlignVCenter,
             self.text(),
         )
-
-
-class NetworkComboBox(QComboBox):
-    popup_requested = Signal()
-
-    def setEditable(self, editable):
-        super().setEditable(editable)
-        if editable:
-            self.lineEdit().installEventFilter(self)
-
-    def eventFilter(self, watched, event):
-        if watched is self.lineEdit() and event.type() == QEvent.Type.MouseButtonRelease and event.button() == Qt.MouseButton.LeftButton and not self.view().isVisible():
-            QTimer.singleShot(0, self.showPopup)
-        return super().eventFilter(watched, event)
-
-    def showPopup(self):
-        self.popup_requested.emit()
-        super().showPopup()
-
-    def reopen_popup(self):
-        # Refresh an already-open list without requesting a second scan.
-        super().showPopup()
 
 
 class Disclosure(QWidget):

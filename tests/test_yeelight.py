@@ -11,7 +11,6 @@ from unittest.mock import Mock, patch
 from aiflame.core.engine import Engine
 from aiflame.integrations.registry import SOURCES
 from aiflame.core.events import EventError, make_event
-from aiflame.devices.downloads import firmware_archive
 from aiflame.devices.fleet import FleetDeviceService
 from aiflame.devices.models import YEELIGHT_MODEL, YEELIGHT_BULB_MODEL, hardware_model
 from aiflame.devices.yeelight import YeelightClient, lan_host, parse_discovery, discover
@@ -177,7 +176,7 @@ class YeelightTests(unittest.TestCase):
             config = {'devices': {
                 IDENTITY: {'device_id': IDENTITY, 'hardware_model': YEELIGHT_MODEL, 'connection_paused': True},
                 BULB_ID: {'device_id': BULB_ID, 'hardware_model': YEELIGHT_BULB_MODEL, 'connection_paused': True},
-                'matrix': {'device_id': 'matrix', 'hardware_model': 'ai-flame-v01', 'connection_paused': True}}}
+                'matrix': {'device_id': 'matrix', 'hardware_model': 'yeelight-yltd003', 'connection_paused': True}}}
             fleet = FleetTransportManager(engine.flame, threading.RLock(), config)
             service = FleetDeviceService(config, directory, fleet, fleet.lock)
             body = {'hardware_model': YEELIGHT_MODEL, 'device_id': IDENTITY}
@@ -336,8 +335,6 @@ class YeelightTests(unittest.TestCase):
 
     def test_no_firmware_or_usb_operations_for_original_firmware_device(self):
         self.assertEqual(hardware_model(YEELIGHT_MODEL)['connection'], 'yeelight')
-        with self.assertRaisesRegex(EventError, '原厂'):
-            firmware_archive(YEELIGHT_MODEL)
         with tempfile.TemporaryDirectory() as directory:
             engine = Engine(':memory:')
             self.addCleanup(engine.db.close)
@@ -345,7 +342,7 @@ class YeelightTests(unittest.TestCase):
             fleet = FleetTransportManager(engine.flame, threading.RLock(), {'devices': {}})
             service = FleetDeviceService(fleet.config, directory, fleet, fleet.lock)
             for action in ('install', 'flash_base', 'provision', 'probe'):
-                with self.subTest(action=action), self.assertRaisesRegex(EventError, '原厂'):
+                with self.subTest(action=action), self.assertRaisesRegex(EventError, '不支持'):
                     service.start({'hardware_model': YEELIGHT_MODEL, 'action': action, 'device_id': ''})
 
     def _fleet_connect(self, model_id, info):
@@ -354,7 +351,7 @@ class YeelightTests(unittest.TestCase):
             engine = Engine(':memory:')
             self.addCleanup(engine.db.close)
             engine.update_settings({'mode': 'hardware'})
-            config = {'devices': {'matrix': {'device_id': 'matrix', 'hardware_model': 'ai-flame-v01', 'connection_paused': True}}}
+            config = {'devices': {'matrix': {'device_id': 'matrix', 'hardware_model': 'yeelight-yltd003', 'connection_paused': True}}}
             lock = threading.RLock()
             fleet = FleetTransportManager(engine.flame, lock, config)
             service = FleetDeviceService(config, directory, fleet, lock)
@@ -379,7 +376,7 @@ class YeelightTests(unittest.TestCase):
                 saved = json.loads((Path(directory) / 'credentials.json').read_text())
                 self.assertEqual(saved['devices'][identity]['yeelight_host'], HOST)
                 self.assertEqual(service.status(model_id, identity)['transport'], 'yeelight')
-                self.assertEqual(fleet.records['matrix']['hardware_model'], 'ai-flame-v01')
+                self.assertEqual(fleet.records['matrix']['hardware_model'], 'yeelight-yltd003')
                 changed = {**info, 'device_id': 'yeelight:another'}
                 with patch('aiflame.devices.yeelight.discover', return_value=[changed]):
                     service.start({'action': 'connect', 'hardware_model': model_id, 'device_id': identity, 'transport': 'yeelight', 'host': HOST})
@@ -402,8 +399,6 @@ class YeelightTests(unittest.TestCase):
         self.assertIsNone(parse_discovery(REPLY, HOST, YEELIGHT_BULB_MODEL))
         self.assertIsNone(parse_discovery(BULB_REPLY.replace(b'start_cf', b'no_flow'), HOST))
         self.assertIsNone(parse_discovery(BULB_REPLY.replace(b'colorb', b'color4'), HOST))
-        with self.assertRaisesRegex(EventError, '原厂'):
-            firmware_archive(YEELIGHT_BULB_MODEL)
 
     def test_bulb_rejects_screen_light_before_connecting_or_saving(self):
         with tempfile.TemporaryDirectory() as directory:

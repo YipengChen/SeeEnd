@@ -42,7 +42,7 @@ def main():
                 and self.hub.devices.busy()
             ):
                 QMessageBox.information(
-                    None, t("设备维护中"), t("固件操作正在进行，请等待完成后退出。")
+                    None, t("设备维护中"), t("设备连接操作正在进行，请等待完成后退出。")
                 )
                 event.ignore()
                 return True
@@ -91,7 +91,7 @@ def _run_primary(app, instance, resources):
             hub.start()
         except OSError:
             QMessageBox.critical(
-                None, t("无法启动"), t("本地端口 8765 被旧版或另一份 Hub 占用，请退出该 Hub（包括调参启动器）后重新打开 SeeEnd。")
+                None, t("无法启动"), t("本地端口 8765 被旧版或另一份 Hub 占用，请退出该 Hub后重新打开 SeeEnd。")
             )
             return 1
 
@@ -135,7 +135,7 @@ def _run_primary(app, instance, resources):
     def quit_app():
         if hub and hub.devices.busy():
             show()
-            QMessageBox.information(window, t("设备维护中"), t("请等待固件操作结束后退出。"))
+            QMessageBox.information(window, t("设备维护中"), t("请等待设备连接操作结束后退出。"))
             return
         window.quitting = True
         app.quit()

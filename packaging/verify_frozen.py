@@ -21,25 +21,13 @@ def main():
     app_archive = CArchiveReader(str(helper))
     pyz = next(name for name in app_archive.toc if name.endswith(".pyz"))
     modules = app_archive.open_embedded_archive(pyz).toc
-    if any(name == "esptool" or name.startswith("esptool.") for name in modules):
-        raise RuntimeError("GPL esptool was bundled into the desktop module archive")
-    if "readline" in modules:
-        raise RuntimeError("GPL readline was bundled into the desktop module archive")
-    if sys.platform == "darwin":
-        contents = helper.parent.parent
-        tool = contents / "Resources/third_party/esptool/esptool"
-        tool_archive = CArchiveReader(str(tool))
-        tool_pyz = next(name for name in tool_archive.toc if name.endswith(".pyz"))
-        tool_modules = tool_archive.open_embedded_archive(tool_pyz).toc
-        if any(name == "aiflame" or name.startswith("aiflame.") for name in tool_modules):
-            raise RuntimeError("Independent tool contains SeeEnd application modules")
-        if any(contents.rglob("*readline*.dylib")):
-            raise RuntimeError("GPL readline dynamic library was bundled")
-    result = subprocess.run([str(helper), "--esptool", "version"],
-                            capture_output=True, text=True, timeout=20)
-    if result.returncode or "5.4.0" not in result.stdout:
-        raise RuntimeError("Independent esptool did not run: " + result.stdout + result.stderr)
-    print("Independent esptool 5.4.0 verified; desktop archive contains no esptool/readline.")
+    retired = ("esptool", "mpremote", "serial", "aiflame.devices.firmware",
+               "aiflame.transports.usb", "aiflame.transports.wifi", "aiflame.hub.tuning")
+    if any(name == prefix or name.startswith(prefix + ".") for name in modules for prefix in retired):
+        raise RuntimeError("Removed AI Flame modules were bundled")
+    if sys.platform == "darwin" and (helper.parent.parent / "Resources/third_party/esptool").exists():
+        raise RuntimeError("Removed esptool executable was bundled")
+    print("Desktop archive contains no AI Flame hardware modules or tools.")
     environment = {**os.environ, "AIFLAME_TEST_FROZEN_HELPER": str(helper)}
     return subprocess.call(
         [sys.executable, "-m", "unittest",

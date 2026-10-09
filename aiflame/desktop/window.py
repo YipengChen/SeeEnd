@@ -16,7 +16,7 @@ class DesktopWindow(QMainWindow):
     def closeEvent(self, event):
         if self.hub and self.hub.devices.busy():
             QMessageBox.information(
-                self, t("设备维护中"), t("固件操作正在进行，请等待完成后退出。")
+                self, t("设备维护中"), t("设备连接操作正在进行，请等待完成后退出。")
             )
             event.ignore()
         elif self.background_available and not self.quitting:

@@ -20,10 +20,8 @@ from aiflame.core.events import EventError
 from aiflame.transports.fleet import FleetTransportManager as TransportManager
 from aiflame.devices.fleet import FleetDeviceService as DeviceService
 from aiflame.devices.models import DEFAULT_MODEL, MODELS
-from aiflame.devices.wifi_scan import FleetWiFiScan as WiFiScan
 from aiflame.integrations.codex.diagnostics import diagnostics
 from aiflame.integrations.manual.actions import DemoTasks, test as manual_test
-from aiflame.devices.downloads import firmware_archive
 from aiflame.integrations.chatgpt_web.downloads import extension_archive
 from aiflame.integrations.chatgpt_web.host import WEB_SOURCES
 from aiflame.integrations.testing import TriggerTests
@@ -49,7 +47,6 @@ class Hub:
         self.devices = DeviceService(
             self.config, self.runtime, self.transport, self.lock
         )
-        self.wifi_scan = WiFiScan(self.transport)
         self.tests = TriggerTests(self)
         self.limits = {}
         self.demos = DemoTasks(self)
@@ -232,9 +229,6 @@ class Handler(BaseHTTPRequestHandler):
             self.validate_host()
             assets = {
                 "/": "index.html",
-                "/tuning": "tuning.html",
-                "/tuning.js": "tuning.js",
-                "/tuning.css": "tuning.css",
                 "/app.js": "app.js",
                 "/shared.js": "shared.js",
                 "/i18n.js": "i18n.js",
@@ -253,7 +247,7 @@ class Handler(BaseHTTPRequestHandler):
                     200,
                     file.read_bytes(),
                     mimetypes.guess_type(file.name)[0] + "; charset=utf-8",
-                    cookie=self.path in ("/", "/tuning"),
+                    cookie=self.path == "/",
                 )
                 return
             identity = self.identity()
@@ -287,11 +281,6 @@ class Handler(BaseHTTPRequestHandler):
                                                  verification=evidence)["integrations"][0]
                 self.reply(200, report)
                 return
-            if identity == "dashboard" and self.path == "/api/tuning":
-                from aiflame.hub.tuning import status
-                with c.lock:
-                    self.reply(200, status(c))
-                return
             if identity == "dashboard" and self.path == "/api/cli-integrations":
                 from aiflame.integrations.cli_tools.diagnostics import diagnostics as cli_diagnostics
 
@@ -307,24 +296,8 @@ class Handler(BaseHTTPRequestHandler):
                 query = parse_qs(urlsplit(self.path).query, keep_blank_values=True)
                 self.reply(200, c.devices.status(query.get("model", [None])[0], query.get("device_id", [None])[0]))
                 return
-            if identity == "dashboard" and urlsplit(self.path).path == "/api/wifi-networks":
-                query = parse_qs(urlsplit(self.path).query, keep_blank_values=True)
-                self.reply(200, c.wifi_scan.status(query.get("device_id", [None])[0]))
-                return
-            if identity == "dashboard" and self.path == "/api/ports":
-                self.reply(200, {"ports": c.devices.ports()})
-                return
             if identity == "dashboard" and self.path == "/api/trigger-test":
                 self.reply(200, c.tests.status())
-                return
-            if identity == "dashboard" and urlsplit(self.path).path == "/api/firmware/download":
-                model_id = parse_qs(urlsplit(self.path).query).get("model", [c.config.get("hardware_model", DEFAULT_MODEL)])[0]
-                self.reply(
-                    200,
-                    firmware_archive(model_id),
-                    "application/zip",
-                    filename=f"AI-Flame-firmware-{__version__}.zip",
-                )
                 return
             if (
                 identity == "dashboard"
@@ -444,13 +417,6 @@ class Handler(BaseHTTPRequestHandler):
             c = self.c
             with c.lock:
                 self.rate_limit(identity)
-            if self.path == "/api/firmware/upload":
-                if identity != "dashboard":
-                    raise EventError("需要控制台会话", 403)
-                if self.headers.get_content_type() != "application/octet-stream":
-                    raise EventError("请选择 .bin 文件")
-                self.reply(200, c.devices.stage_image(self.read_body(16 * 1024 * 1024)))
-                return
             if self.headers.get_content_type() != "application/json":
                 raise EventError("请发送 JSON")
             try:
@@ -473,11 +439,6 @@ class Handler(BaseHTTPRequestHandler):
                     raise EventError("请先确认重置 APP")
                 self.reply(200, c.reset_app(), cookie=True)
                 return
-            if self.path == "/api/tuning":
-                from aiflame.hub.tuning import update
-                with c.lock:
-                    self.reply(200, update(c, body))
-                return
             if self.path == "/api/notifications/claim":
                 if body:
                     raise EventError("通知领取请求不接受额外字段")
@@ -488,11 +449,6 @@ class Handler(BaseHTTPRequestHandler):
             if self.path == "/api/notifications/ack":
                 with c.lock:
                     self.reply(200, c.engine.desktop.acknowledge(body))
-                return
-            if self.path == "/api/wifi-networks":
-                if set(body) - {"device_id"}:
-                    raise EventError("搜索请求不接受额外字段")
-                self.reply(202, c.wifi_scan.start(body["device_id"]) if "device_id" in body else c.wifi_scan.start())
                 return
             if self.path == "/api/desktop-clients/permissions":
                 if body:

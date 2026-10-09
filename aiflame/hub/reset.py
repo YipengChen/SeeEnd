@@ -11,7 +11,6 @@ from aiflame.core.events import EventError
 from aiflame.core.paths import new_config, write_private
 from aiflame.devices.fleet import FleetDeviceService
 from aiflame.devices.models import DEFAULT_MODEL
-from aiflame.devices.wifi_scan import FleetWiFiScan
 from aiflame.integrations.desktop_clients.service import DesktopClients
 from aiflame.integrations.registry import SOURCES
 from aiflame.integrations.testing import TriggerTests
@@ -87,7 +86,6 @@ def _services(hub):
     hub.transport = FleetTransportManager(hub.engine.flame, hub.lock, hub.config)
     hub.engine.flame.transport = hub.transport
     hub.devices = FleetDeviceService(hub.config, hub.runtime, hub.transport, hub.lock)
-    hub.wifi_scan = FleetWiFiScan(hub.transport)
     hub.tests = TriggerTests(hub)
     hub.desktop_clients = DesktopClients(hub)
     if hub.hardware_enabled:

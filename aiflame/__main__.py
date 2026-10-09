@@ -11,14 +11,7 @@ def main():
         args.insert(0, "--browser-host")
     mode = args.pop(0) if args and args[0].startswith("--") else "--desktop"
     sys.argv = [sys.argv[0]] + args
-    if mode == "--mpremote":
-        from mpremote.main import main as run
-    elif mode == "--esptool":
-        import subprocess
-        from aiflame.core.process import command
-
-        return subprocess.call(command("--esptool", *args))
-    elif mode == "--codex-hook":
+    if mode == "--codex-hook":
         from aiflame.integrations.codex.hook import main as run
     elif mode == "--cli-hook":
         from aiflame.integrations.cli_tools.hook import main as run

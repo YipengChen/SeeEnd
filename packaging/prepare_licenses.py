@@ -29,11 +29,9 @@ CONDA_NOTICES = {'python', 'pyobjc-core', 'pyobjc-framework-cocoa',
                  'libtiff', 'libxcb', 'libdeflate', 'libmpdec', 'lcms2', 'libopenjpeg',
                  'sqlite', 'xorg-libxau', 'libcxx', 'libwebp-base', 'xorg-libxdmcp',
                  'ncurses', 'libavif', 'lerc'}
-PYTHON_PACKAGES = {'esptool', 'mpremote', 'pyserial', 'PySide6', 'shiboken6',
+PYTHON_PACKAGES = {'PySide6', 'shiboken6',
                    'pyobjc-core', 'pyobjc-framework-Cocoa', 'pyobjc-framework-UserNotifications',
-                   'PyInstaller', 'click', 'cryptography', 'bitarray', 'bitstring',
-                   'reedsolo', 'intelhex', 'rich', 'markdown-it-py', 'mdurl',
-                   'PyYAML', 'cffi', 'pycparser', 'Pygments', 'packaging'}
+                   'PyInstaller', 'packaging'}
 
 
 def fetch(url, path, expected, download):
@@ -60,7 +58,9 @@ def fetch(url, path, expected, download):
 
 def main(download=False):
     SOURCES.mkdir(exist_ok=True)
-    NOTICES.mkdir(exist_ok=True)
+    if NOTICES.exists():
+        shutil.rmtree(NOTICES)
+    NOTICES.mkdir()
     shutil.copy2(ROOT / 'docs/legal/LEGACY_GPL_3_0.txt', NOTICES / 'GPL-3.0.txt')
     records = []
     prefix = Path(sys.base_prefix)
@@ -148,19 +148,6 @@ def main(download=False):
         records.append({'name': dist.metadata['Name'], 'version': dist.version,
                         'license': dist.metadata.get('License-Expression') or dist.metadata.get('License'),
                         'home_page': dist.metadata.get('Home-page')})
-    # esptool is shipped as its own program. Offer its exact official source,
-    # together with its build recipe, rather than SeeEnd application source.
-    version = metadata.version('esptool')
-    manifest = SOURCES / 'esptool-pypi.json'
-    if download:
-        subprocess.run(['curl', '--fail', '--location', '--retry', '3', '--silent', '--show-error',
-                        'https://pypi.org/pypi/esptool/' + version + '/json', '-o', str(manifest)], check=True)
-    data = json.loads(manifest.read_text())
-    source = next(x for x in data['urls'] if x['packagetype'] == 'sdist')
-    fetch(source['url'], SOURCES / source['filename'], source['digests']['sha256'], download)
-    shutil.copy2(ROOT / 'packaging/esptool.spec', SOURCES / 'esptool.spec')
-    records.append({'name': 'esptool-source', 'version': version, 'url': source['url'],
-                    'sha256': source['digests']['sha256'], 'archive': source['filename']})
     (SOURCES / 'MANIFEST.json').write_text(json.dumps(records, ensure_ascii=False, indent=2) + '\n')
     (NOTICES / 'MANIFEST.json').write_text(json.dumps(records, ensure_ascii=False, indent=2) + '\n')
     shutil.copy2(ROOT / 'THIRD_PARTY_NOTICES.md', NOTICES / 'README.md')

@@ -10,8 +10,6 @@ from unittest.mock import Mock
 from aiflame.core.engine import Engine
 from aiflame.core.events import EventError, make_event
 from aiflame.integrations.registry import SOURCES
-from aiflame.transports.base import DeviceTransport
-from aiflame.transports.wifi import SocketLine
 
 
 class HardwarePreviewTests(unittest.TestCase):
@@ -108,107 +106,13 @@ class HardwarePreviewTests(unittest.TestCase):
         self.engine.device["connected_at"] = 2
         self.assertEqual(self.engine.desired()["state"], "idle")
 
-    def transport(self):
-        worker = DeviceTransport(self.engine, threading.RLock(), "hub", "lamp")
-        worker.session = "session"
-        worker.connection = Mock()
-        worker.stopping = Mock(wait=Mock(return_value=False), is_set=Mock(return_value=False))
-        return worker
-
-    def test_matrix_receives_working_brightness_without_legacy_cap(self):
-        for brightness in (0, 1, 10, 20, 25):
-            for reduced in (False, True):
-                with self.subTest(brightness=brightness, reduced=reduced):
-                    worker = self.transport()
-                    worker.receive = Mock(return_value={"result": "applied"})
-                    worker.display(
-                        {"key": "working", "state": "working", "duration_ms": 0},
-                        {"brightness": brightness, "reduced": reduced},
-                    )
-                    command = json.loads(worker.connection.write.call_args.args[0])
-                    self.assertEqual(command["brightness"], brightness)
-                    self.assertEqual(command["effect"], "reduced" if reduced else "standard")
 
 
-    def test_failed_frame_ack_does_not_mark_display_applied(self):
-        self.engine.start_preview("first")
-        desired = self.engine.desired()
-        worker = self.transport()
-        worker.receive = Mock(return_value={"result": "error", "error": "matrix-i2c"})
-        with self.assertRaisesRegex(ValueError, "灯板未响应"):
-            worker.display(desired, self.engine.settings)
-        self.assertFalse(self.engine.snapshot()["display"]["device_confirmed"])
-        self.assertIsNone(self.engine.last_command)
 
-    def test_device_uses_remaining_phase_duration_and_short_fail_safe(self):
-        self.engine.start_preview("first")
-        desired = self.engine.desired()
-        self.now += 0.25
-        worker = self.transport()
-        worker.receive = Mock(return_value={"result": "applied"})
-        worker.display(desired, self.engine.settings)
-        command = json.loads(worker.connection.write.call_args.args[0])
-        self.assertEqual(command["state"], self.engine.snapshot()["display"]["state"])
-        self.assertEqual(command["duration_ms"], 4750)
-        self.assertEqual(command["lease_ms"], 6750)
 
-    def test_retry_drops_old_preview_phase_instead_of_resending(self):
-        self.engine.start_preview("first")
-        worker = self.transport()
 
-        def timeout(*_, **__):
-            self.now += 5.1
-            raise TimeoutError()
 
-        worker.receive = Mock(side_effect=timeout)
-        self.assertIsNone(worker.display(self.engine.desired(), self.engine.settings))
-        self.assertEqual(worker.connection.write.call_count, 1)
-        self.assertEqual(self.engine.desired()["state"], "done")
 
-    def test_waiting_for_ack_exits_when_real_task_arrives(self):
-        self.engine.start_preview("first")
-        worker = self.transport()
-
-        def incoming(*_):
-            self.engine.accept(make_event("local-script", "real-task", "working"), "local-script")
-            return b""
-
-        worker.connection.read_until.side_effect = incoming
-        self.assertIsNone(worker.display(self.engine.desired(), self.engine.settings))
-        self.assertEqual(worker.connection.read_until.call_count, 1)
-        self.assertEqual(worker.connection.write.call_count, 1)
-
-    def test_blocked_wifi_ack_does_not_delay_preview_cancellation(self):
-        self.engine.start_preview("first")
-        left, right = socket.socketpair()
-        self.addCleanup(left.close)
-        self.addCleanup(right.close)
-        left.settimeout(2)
-        right.settimeout(1)
-        worker = self.transport()
-        reading = threading.Event()
-
-        class Stream(SocketLine):
-            def read_until(self, mark, limit):
-                reading.set()
-                return super().read_until(mark, limit)
-
-        worker.connection = Stream(left)
-        desired = self.engine.desired()
-        result = []
-        thread = threading.Thread(target=lambda: result.append(worker.display(desired, self.engine.settings)))
-        thread.start()
-        self.addCleanup(thread.join, 3)
-        self.assertIn(b'"display"', right.recv(4096))
-        self.assertTrue(reading.wait(1))
-        started = time.monotonic()
-        with worker.lock:
-            self.engine.cancel_preview()
-        thread.join(0.5)
-        self.assertFalse(thread.is_alive())
-        self.assertLess(time.monotonic() - started, 0.5)
-        self.assertEqual(result, [None])
-        self.assertEqual(left.gettimeout(), 2)
 
 
 if __name__ == "__main__":

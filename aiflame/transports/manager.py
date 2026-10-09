@@ -2,8 +2,6 @@
 
 import threading
 
-from aiflame.transports.usb import USBTransport
-from aiflame.transports.wifi import WiFiTransport
 from aiflame.devices.models import DEFAULT_MODEL, YEELIGHT_MODELS
 from aiflame.transports.yeelight import YeelightTransport
 
@@ -42,25 +40,13 @@ class TransportManager:
             return
         c = self.config
         if not c.get("device_id"):
-            self.engine.device.update(online=False, connecting=False, status="未连接设备，请连接火焰灯")
+            self.engine.device.update(online=False, connecting=False, status="未连接设备，请连接 Yeelight 灯具")
             return
-        if c.get("hardware_model") in YEELIGHT_MODELS:
-            self.worker = YeelightTransport(self.engine, self.lock, c)
-        elif c.get("transport") == "wifi" and c.get("wifi_device_secret"):
-            self.worker = WiFiTransport(
-                self.engine,
-                self.lock,
-                getattr(self, "hub_id", c.get("hub_id", "")),
-                c["device_id"],
-                c["wifi_device_secret"],
-                c.get("wifi_last_ip"),
-            )
-        else:
-            self.worker = USBTransport(
-                self.engine, self.lock, getattr(self, "hub_id", c.get("hub_id", "")), c["device_id"], c.get("port", "")
-            )
-        self.worker.strict_port = getattr(self, "strict_port", False)
-        self.worker.model_id = c.get("hardware_model", DEFAULT_MODEL)
+        if c.get("hardware_model", DEFAULT_MODEL) not in YEELIGHT_MODELS:
+            self.running = False
+            self.engine.device.update(online=False, connecting=False, status="不支持的硬件型号")
+            return
+        self.worker = YeelightTransport(self.engine, self.lock, c)
         self.worker.start()
 
     def suspend(self):

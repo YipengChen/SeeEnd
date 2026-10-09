@@ -37,40 +37,12 @@ test("automatic integration waits for plugin manager while ordinary checks time 
   d.dom.window.close();
 });
 
-test("initialization uses bundled firmware and requires board and erase confirmations", async () => {
-  const d = dashboard();
-  vm.runInContext(fs.readFileSync("aiflame/assets/web/devices.js", "utf8").replace(/^import .*?;\n/, ""), d.context);
-  d.data.settings.mode = "hardware";
-  d.render();
-  d.get("usbPort").innerHTML = '<option value="fixture">fixture</option>';
-  d.get("usbPort").onchange();
-  assert.equal(d.get("flashBase").disabled, true);
-  d.get("confirmBoard").checked = true;
-  d.get("confirmBoard").onchange();
-  assert.equal(d.get("flashBase").disabled, true);
-  d.get("confirmFlash").checked = true;
-  d.get("confirmFlash").onchange();
-  assert.equal(d.get("flashBase").disabled, false);
-  vm.runInContext(`
-    globalThis.calls = [];
-    api = async (path, body) => {
-      calls.push({path, body});
-      return {state: 'running', progress: 10, message: '初始化'};
-    };
-  `, d.context);
-  await d.get("flashBase").onclick();
-  assert.deepEqual(JSON.parse(JSON.stringify(d.context.calls)), [{
-    path: "/api/device", body: {action: "flash_base", hardware_model: "ai-flame-v01", device_id: "", port: "fixture", confirm_board: true, confirm_flash: true},
-  }]);
-  assert.equal(d.get("flashBase").disabled, true);
-  assert.equal(d.dom.window.document.querySelector('input[type="file"]'), null);
-  d.dom.window.close();
-});
 
-test("connected status uses wifi or USB cable icons and removes them offline", () => {
+
+test("connected status uses Wi-Fi icons and removes them offline", () => {
   const d = dashboard();
   d.data.settings.mode = "hardware";
-  for (const [port, connection] of [["wifi://192.0.2.1:8766", "wifi"], ["/dev/cu.fixture", "usb"]]) {
+  for (const [port, connection] of [["wifi://192.0.2.1:55443", "wifi"]]) {
     d.data.device = {online: true, port};
     d.render();
     assert.equal(d.get("deviceBadge").textContent, "已连接 1 台设备");
@@ -277,7 +249,7 @@ test("virtual device page never scans and late hardware job cannot disable diagn
   d.render();
   vm.runInContext(`globalThis.calls = []; api = async (path) => { calls.push(path); return {job: null}; };`, d.context);
   d.dom.window.document.querySelector('[data-tab="device"]').click();
-  await vm.runInContext("scanPorts(); refreshMaintenance()", d.context);
+  await vm.runInContext("refreshMaintenance()", d.context);
   assert.equal(d.context.calls.includes("/api/ports"), false);
   assert.equal(d.context.calls.includes("/api/device"), false);
   d.get("pane-device").hidden = true;
@@ -286,7 +258,7 @@ test("virtual device page never scans and late hardware job cannot disable diagn
   vm.runInContext(`
     let resolveDevice;
     api = (path) => path.startsWith('/api/device?') ? new Promise(resolve => { resolveDevice = resolve; }) : Promise.resolve({job: null});
-    $("pane-device").hidden = false; showDeviceDetails("ai-flame-v01"); globalThis.oldMaintenance = refreshMaintenance();
+    $("pane-device").hidden = false; showDeviceDetails("yeelight-yltd003"); globalThis.oldMaintenance = refreshMaintenance();
   `, d.context);
   d.data.settings.mode = "virtual";
   d.render();
@@ -398,51 +370,11 @@ test("connecting is neutral until handshake succeeds or fails", () => {
   d.dom.window.close();
 });
 
-test("device connection buttons prevent duplicate connections and permit switching", () => {
-  const d = dashboard();
-  vm.runInContext(fs.readFileSync("aiflame/assets/web/devices.js", "utf8").replace(/^import .*?;\n/, ""), d.context);
-  d.data.settings.mode = "hardware";
-  d.data.hardware_paired = true;
-  d.get("usbPort").innerHTML = '<option value="COM1">USB A</option><option value="COM2">USB B</option>';
-  vm.runInContext('wifiAvailable = true;', d.context);
-  d.data.device = {online: true, port: "COM1"};
-  d.render();
-  assert.equal(d.get("useUsb").disabled, true);
-  assert.equal(d.get("useWifi").disabled, false);
-  d.get("usbPort").value = "COM2";
-  d.get("usbPort").onchange();
-  assert.equal(d.get("useUsb").disabled, false);
-  d.data.device = {online: true, port: "wifi://192.0.2.1:8766"};
-  d.render();
-  assert.equal(d.get("useWifi").disabled, true);
-  assert.equal(d.get("useUsb").disabled, false);
-  assert.equal(d.get("disconnectDevice").disabled, false);
-  d.dom.window.close();
-});
 
-test("Wi-Fi scan populates choices without replacing manually entered SSID", () => {
-  const d = dashboard();
-  vm.runInContext(fs.readFileSync("aiflame/assets/web/devices.js", "utf8").replace(/^import .*?;\n/, ""), d.context);
-  d.get("wifiSsid").value = "Hidden network";
-  vm.runInContext('renderWifiScan({state: "succeeded", networks: [{ssid: "Studio", signal: -40}], message: "找到网络"})', d.context);
-  assert.equal(d.get("wifiSsid").value, "Hidden network");
-  assert.equal(d.get("wifiNetworks").children[0].value, "Studio");
-  assert.equal(d.get("wifiSsid").getAttribute("aria-controls"), "wifiNetworks");
-  d.dom.window.close();
-});
 
-test("clicking Wi-Fi name opens the list and selecting a network fills only its name", () => {
-  const d = dashboard();
-  vm.runInContext(fs.readFileSync("aiflame/assets/web/devices.js", "utf8").replace(/^import .*?;\n/, ""), d.context);
-  d.get("wifiSsid").click();
-  assert.equal(d.get("wifiNetworks").hidden, false);
-  assert.equal(d.get("wifiSsid").getAttribute("aria-expanded"), "true");
-  vm.runInContext('renderWifiScan({state: "succeeded", networks: [{ssid: "ESP-visible", signal: -45}], message: "ESP32 找到网络"})', d.context);
-  d.get("wifiNetworks").querySelector("button").click();
-  assert.equal(d.get("wifiSsid").value, "ESP-visible");
-  assert.equal(d.get("wifiNetworks").hidden, true);
-  d.dom.window.close();
-});
+
+
+
 
 
 test("hardware model cards gate configuration and route model-specific operations", async () => {
@@ -463,18 +395,17 @@ test("hardware model cards gate configuration and route model-specific operation
   assert.equal(d.get('deviceDetails').hidden, true);
   assert.equal(d.context.calls.some(c => c.path === '/api/ports'), false);
   const cards = d.dom.window.document.querySelectorAll('[data-device-model]');
-  assert.equal(cards.length, 4);
-  await d.dom.window.document.querySelector('[data-device-model="ai-flame-v02"]').onclick();
+  assert.equal(cards.length, 2);
+  await d.dom.window.document.querySelector('[data-device-model="yeelight-yldp005"]').onclick();
   assert.equal(d.get('deviceSelector').hidden, true);
   assert.equal(d.get('deviceDetails').hidden, false);
-  assert.equal(d.get('deviceModelTitle').textContent, 'AI Flame 0.2');
-  assert.match(d.get('firmwareDownload').href, /model=ai-flame-v02$/);
-  await vm.runInContext("maintenance('install')", d.context);
-  assert.equal(d.context.calls.find(c => c.body?.action === 'install').body.hardware_model, 'ai-flame-v02');
+  assert.equal(d.get('deviceModelTitle').textContent, 'Yeelight W3 彩色灯泡');
+  await vm.runInContext("maintenance('discover')", d.context);
+  assert.equal(d.context.calls.find(c => c.body?.action === 'discover').body.hardware_model, 'yeelight-yldp005');
   nav.click();
   assert.equal(d.get('deviceDetails').hidden, true);
-  await d.dom.window.document.querySelector('[data-device-model="ai-flame-v01"]').onclick();
-  assert.equal(d.get('deviceModelTitle').textContent, 'AI Flame 0.1');
+  await d.dom.window.document.querySelector('[data-device-model="yeelight-yltd003"]').onclick();
+  assert.equal(d.get('deviceModelTitle').textContent, 'Yeelight 屏幕挂灯 Pro');
   d.get('backToDeviceModels').click();
   assert.equal(d.get('deviceSelector').hidden, false);
   assert.equal(d.get('deviceDetails').hidden, true);
@@ -489,7 +420,7 @@ test("model browsing sends no connection mutation and keeps navigation in the ga
   vm.runInContext(`globalThis.calls = []; api = async (path, body) => { calls.push({path, body}); return {job: null}; };`, d.context);
   const nav = d.dom.window.document.querySelector('[data-tab="device"]');
   nav.click();
-  const pending = d.dom.window.document.querySelector('[data-device-model="ai-flame-v02"]').onclick();
+  const pending = d.dom.window.document.querySelector('[data-device-model="yeelight-yldp005"]').onclick();
   nav.click();
   await pending;
   assert.equal(d.get('deviceSelector').hidden, false);
@@ -502,7 +433,7 @@ test("same-model devices keep independent selection and disconnect targets", asy
   const d = dashboard();
   vm.runInContext(fs.readFileSync("aiflame/assets/web/devices.js", "utf8").replace(/^import .*?;\n/, ""), d.context);
   d.data.settings.mode = "hardware";
-  d.data.devices = ["one", "two"].map(device_id => ({device_id, name: "AI Flame 0.1", hardware_model: "ai-flame-v01", online: true, port: device_id}));
+  d.data.devices = ["one", "two"].map(device_id => ({device_id, name: "Yeelight 屏幕挂灯 Pro", hardware_model: "yeelight-yltd003", online: true, port: device_id}));
   d.data.device = {...d.data.devices[0], connected_count: 2};
   d.context.lamps = d.data.devices;
   d.render();
@@ -512,13 +443,13 @@ test("same-model devices keep independent selection and disconnect targets", asy
     if (path === '/api/ports') return {ports: lamps.map(item => ({description: item.device_id, port: item.port}))};
     if (path.startsWith('/api/device?')) {
       const id = new URL(path, location.href).searchParams.get('device_id') ?? 'one';
-      return {hardware_model: 'ai-flame-v01', selected_device_id: id, devices: lamps,
+      return {hardware_model: 'yeelight-yltd003', selected_device_id: id, devices: lamps,
         device: lamps.find(item => item.device_id === id), selected_port: id, paired_device: id, transport: 'usb', job: null};
     }
     return {job: null};
   };`, d.context);
   d.dom.window.document.querySelector('[data-tab="device"]').click();
-  await d.dom.window.document.querySelector('[data-device-model="ai-flame-v01"]').onclick();
+  await d.dom.window.document.querySelector('[data-device-model="yeelight-yltd003"]').onclick();
   assert.equal(d.get("deviceInstances").options.length, 3);
   d.get("deviceInstances").value = "two";
   const loading = d.get("deviceInstances").onchange();
@@ -526,7 +457,6 @@ test("same-model devices keep independent selection and disconnect targets", asy
   await loading;
   assert.equal(d.get("disconnectDevice").disabled, false);
   assert.equal(d.context.calls.some(call => call.body), false);
-  assert.equal(d.get("useUsb").className, d.get("useWifi").className);
   await d.get("testCurrentDevice").onclick();
   assert.equal(d.get("deviceTestCountdown").textContent, "试亮剩余 10 秒");
   assert.equal(d.get("deviceTestCountdown").hidden, false);
@@ -538,83 +468,7 @@ test("same-model devices keep independent selection and disconnect targets", asy
   d.dom.window.close();
 });
 
-test("device brightness and motion save to physical identity and ignore old selection responses", async () => {
-  const d = dashboard();
-  vm.runInContext(fs.readFileSync("aiflame/assets/web/devices.js", "utf8").replace(/^import .*?;\n/, ""), d.context);
-  d.data.settings.mode = "hardware";
-  d.render();
-  assert.equal(d.get("brightness"), null);
-  assert.equal(d.get("reduced"), null);
-  assert.ok(d.get("deviceDetails").contains(d.get("deviceBrightness")));
-  assert.equal(d.get("deviceBrightness").disabled, true);
-  vm.runInContext(`
-    globalThis.calls = [];
-    globalThis.lamps = ['one', 'two'].map(device_id => ({device_id, name: 'AI Flame 0.1', hardware_model: 'ai-flame-v01', online: false,
-      light_settings: {brightness: device_id === 'one' ? 8 : 20, reduced: false}}));
-    globalThis.delayLightSave = false;
-    api = async (path, body) => {
-      calls.push({path, body});
-      if (path === '/api/ports') return {ports: []};
-      if (path.startsWith('/api/device?')) {
-        const id = new URL(path, location.href).searchParams.get('device_id') ?? 'one';
-        const lamp = lamps.find(item => item.device_id === id);
-        return {hardware_model: 'ai-flame-v01', selected_device_id: id, devices: lamps, device: lamp,
-          light_settings: {...lamp?.light_settings}, transport: 'usb', job: null};
-      }
-      if (path === '/api/device/light-settings') {
-        if (delayLightSave) await new Promise(resolve => {globalThis.releaseLightSave = resolve;});
-        const lamp = lamps.find(item => item.device_id === body.device_id);
-        Object.assign(lamp.light_settings, body.settings);
-        return {device_id: body.device_id, light_settings: {...lamp.light_settings}};
-      }
-      return {job: null};
-    };`, d.context);
-  d.dom.window.document.querySelector('[data-tab="device"]').click();
-  await d.dom.window.document.querySelector('[data-device-model="ai-flame-v01"]').onclick();
-  assert.equal(d.get("deviceBrightness").disabled, false); // Offline settings remain editable.
-  assert.equal(d.get("deviceBrightness").value, '8');
-  d.get("deviceReduced").checked = true;
-  await d.get("deviceReduced").onchange();
-  assert.equal(d.context.lamps[0].light_settings.reduced, true);
-  assert.equal(d.context.lamps[1].light_settings.reduced, false);
-  d.context.delayLightSave = true;
-  d.get("deviceBrightness").value = '7';
-  d.get("deviceBrightness").oninput();
-  const pending = d.get("deviceBrightness").onchange();
-  d.get("deviceInstances").value = 'two';
-  await d.get("deviceInstances").onchange();
-  d.context.releaseLightSave();
-  await pending;
-  assert.equal(d.get("deviceInstances").value, 'two');
-  assert.equal(d.get("deviceBrightness").value, '20');
-  assert.equal(d.get("deviceReduced").checked, false);
-  assert.equal(d.context.lamps[0].light_settings.brightness, 7);
-  assert.equal(d.context.lamps[1].light_settings.brightness, 20);
-  assert.equal(d.context.calls.some(call => call.path === '/api/settings'), false);
-  vm.runInContext(`
-    delayLightSave = false;
-    const baseLightApi = api;
-    globalThis.delayNextRead = true;
-    api = async (path, body) => {
-      if (path.startsWith('/api/device?') && delayNextRead) {
-        delayNextRead = false;
-        const stale = await baseLightApi(path, body);
-        await new Promise(resolve => {globalThis.releaseStaleRead = resolve;});
-        return stale;
-      }
-      return baseLightApi(path, body);
-    };`, d.context);
-  const staleRead = vm.runInContext("refreshMaintenance()", d.context);
-  await Promise.resolve();
-  d.get("deviceBrightness").value = '9';
-  d.get("deviceBrightness").oninput();
-  await d.get("deviceBrightness").onchange();
-  d.context.releaseStaleRead();
-  await staleRead;
-  assert.equal(d.get("deviceBrightness").value, '9');
-  assert.equal(d.context.lamps[1].light_settings.brightness, 9);
-  d.dom.window.close();
-});
+
 
 test("overview demo lasts ten seconds with two phases and a countdown", async () => {
   const d = dashboard();
@@ -654,12 +508,9 @@ for (const modelId of ["yeelight-yltd003", "yeelight-yldp005"]) test(`${modelId}
   assert.equal(d.get('yeelightControls').hidden, false);
   assert.equal(d.get('deviceModelDimensions').textContent,
     d.dom.window.document.querySelector(`[data-device-model="${modelId}"] .device-model-detail`).textContent);
-  assert.equal(d.get('deviceBrightness').max, '100');
-  assert.equal(d.get('deviceBrightness').value, '50');
-  assert.equal(d.get('deviceReducedRow').hidden, true);
   assert.match(d.get('discoverYeelight').textContent, modelId.endsWith('yldp005') ? /W3 彩色灯泡/ : /屏幕挂灯 Pro/);
   assert.match(d.get('yeelightLightHint').textContent, modelId.endsWith('yldp005') ? /整颗灯泡/ : /前方照明/);
-  for (const id of ['matrixConnection', 'matrixWifi', 'matrixMaintenance']) assert.equal(d.get(id).hidden, true);
+  for (const id of ['matrixConnection', 'matrixWifi', 'matrixMaintenance']) assert.equal(d.get(id), null);
   assert.equal(d.context.calls.some(call => call.path === '/api/ports'), false);
   const completed = {id: 'search', action: 'discover', state: 'succeeded', progress: 100, message: '已发现', result: {devices: [{name: 'YLTD003', host: '192.168.1.44'}]}};
   d.context.searchJob = completed;
@@ -695,7 +546,6 @@ test("compact model cards keep product details while live counts update", () => 
   assert.equal(count.textContent, '在线 2 · 离线 0');
   assert.equal(count.dataset.online, 'true');
   assert.equal(d.dom.window.document.querySelector('[data-model-count="yeelight-yltd003"]').textContent, '在线 0 · 离线 1');
-  assert.equal(d.dom.window.document.querySelector('[data-model-count="ai-flame-v01"]').textContent, '未添加设备');
   d.dom.window.document.dispatchEvent(new d.dom.window.CustomEvent('flame-mode', {detail: {mode: 'hardware', devices: [
     {hardware_model: 'yeelight-yldp005', online: true},
     {hardware_model: 'yeelight-yldp005', online: false},

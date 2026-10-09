@@ -55,10 +55,6 @@ def main():
             )
             print(source + ": adapter + hardware completion ACK PASS", flush=True)
             time.sleep(3.3)
-        # This checks the matrix download API even when the connected lamp is Yeelight.
-        download = client.download("/api/firmware/download?model=" + DEFAULT_MODEL)
-        assert download.startswith(b"PK")
-        print("Firmware download: ZIP PASS", flush=True)
     finally:
         call("/api/settings", {"duration": original["settings"]["duration"]})
     from aiflame.core.paths import ensure_runtime

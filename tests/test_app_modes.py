@@ -10,8 +10,6 @@ from unittest.mock import patch
 from aiflame.core.engine import Engine
 from aiflame.core.events import EventError, make_event
 from aiflame.hub.server import Hub
-from aiflame.transports.usb import USBTransport
-from aiflame.transports.wifi import WiFiTransport
 
 
 class AppModeTests(unittest.TestCase):
@@ -21,7 +19,7 @@ class AppModeTests(unittest.TestCase):
         self.root = Path(self.temp.name)
         self.hub = Hub(runtime=self.root, config={
             "hub_id": "fixture-hub", "device_id": "fixture-lamp",
-            "transport": "wifi", "wifi_device_secret": "fixture-secret",
+            "transport": "yeelight", "hardware_model": "yeelight-yltd003",
         })
         self.addCleanup(self.hub.stop)
 
@@ -48,27 +46,10 @@ class AppModeTests(unittest.TestCase):
         finally:
             reopened.db.close()
 
-    def test_saved_virtual_mode_never_enumerates_or_creates_transports(self):
-        self.hub.update_settings({"mode": "virtual"})
-        with patch("aiflame.transports.manager.USBTransport") as usb, patch(
-            "aiflame.transports.manager.WiFiTransport"
-        ) as wifi, patch("aiflame.devices.service.list_ports.comports") as ports:
-            for transport in ("usb", "wifi"):
-                self.hub.config["transport"] = transport
-                self.hub.transport.start()
-                self.assertEqual(self.hub.devices.ports(), [])
-                for action in ("probe", "connect", "provision", "install", "flash_base"):
-                    with self.assertRaisesRegex(EventError, "硬件模式"):
-                        self.hub.devices.start({"action": action, "transport": transport})
-            usb.assert_not_called()
-            wifi.assert_not_called()
-            ports.assert_not_called()
-        self.assertIsNone(self.hub.transport.worker)
-        self.assertFalse(self.hub.engine.device["online"])
 
     def test_switch_starts_stops_and_restores_saved_hardware(self):
         self.hub.hardware_enabled = True
-        with patch("aiflame.transports.manager.WiFiTransport") as wifi:
+        with patch("aiflame.transports.manager.YeelightTransport") as wifi:
             worker = wifi.return_value
             worker.is_alive.return_value = False
             self.hub.update_settings({"mode": "hardware"})
@@ -117,19 +98,6 @@ class AppModeTests(unittest.TestCase):
         engine.device["online"] = True
         self.assertEqual(engine.snapshot()["display"]["state"], "idle")
 
-    def test_stopping_transports_do_not_scan_or_try_more_candidates(self):
-        usb = USBTransport(self.hub.engine, self.hub.lock, "hub", "lamp", "COM1")
-        wifi = WiFiTransport(self.hub.engine, self.hub.lock, "hub", "lamp", "secret")
-        usb.stopping.set()
-        wifi.stopping.set()
-        with patch("aiflame.transports.usb.list_ports.comports") as ports, patch(
-            "aiflame.transports.wifi.socket.socket"
-        ) as socket:
-            with self.assertRaises(OSError):
-                usb.connect()
-            self.assertEqual(wifi.discover(), [])
-            ports.assert_not_called()
-            socket.assert_not_called()
 
 
 if __name__ == "__main__":

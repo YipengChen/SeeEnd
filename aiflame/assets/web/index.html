@@ -16,7 +16,6 @@
         <div class="brand-tagline">让完成，被看见</div>
         </div>
         <div class="head-right">
-          <a class="btn" href="/tuning">火焰调参</a>
           <span class="badge" id="deviceBadge">正在读取模式</span>
         </div>
       <label class="language-switch">中文 / English <select id="languageChoice" aria-label="界面语言 / Language"><option value="zh-CN">中文</option><option value="en">English</option></select></label></header>
@@ -156,7 +155,7 @@
                 九种 AI 网页共用 Chrome 扩展及本机桥接；豆包、千问、元宝、ChatGPT 的 macOS 桌面普通聊天为实验接入，需授权后用实际客户端验证。Windows / Linux 暂不支持桌面客户端监听。
               </p>
               <p>
-                Hub 支持 USB 与 Wi-Fi 控制；在桌面 App
+                Hub 支持 Yeelight 局域网控制；在桌面 App
                 中关闭窗口后可从托盘恢复，退出 App 后停止监听。
               </p>
             </details>
@@ -218,27 +217,11 @@
                 <span class="device-model-footer"><span class="device-model-count" data-model-count="yeelight-yldp005">未添加设备</span><span class="device-model-arrow" aria-hidden="true">→</span></span>
               </span>
             </button>
-            <button class="device-model-card" data-device-model="ai-flame-v01" data-name="AI Flame 0.1" data-size="9 × 16">
-              <span class="device-model-image" data-kind="matrix"><img src="/device-icons/ai-flame-v01.svg" alt="9列16行暖黄色 LED 灯板" width="96" height="112" /></span>
-              <span class="device-model-info">
-                <span class="device-model-brand">AI FLAME</span><strong>AI Flame 0.1</strong>
-                <span class="device-model-detail">9 × 16 · 暖黄色灯板</span><span class="device-model-connection">USB / Wi-Fi</span>
-                <span class="device-model-footer"><span class="device-model-count" data-model-count="ai-flame-v01">未添加设备</span><span class="device-model-arrow" aria-hidden="true">→</span></span>
-              </span>
-            </button>
-            <button class="device-model-card" data-device-model="ai-flame-v02" data-name="AI Flame 0.2" data-size="7 × 15">
-              <span class="device-model-image" data-kind="matrix"><img src="/device-icons/ai-flame-v02.svg" alt="7列15行暖黄色 LED 灯板" width="96" height="112" /></span>
-              <span class="device-model-info">
-                <span class="device-model-brand">AI FLAME</span><strong>AI Flame 0.2</strong>
-                <span class="device-model-detail">7 × 15 · 暖黄色灯板</span><span class="device-model-connection">USB / Wi-Fi</span>
-                <span class="device-model-footer"><span class="device-model-count" data-model-count="ai-flame-v02">未添加设备</span><span class="device-model-arrow" aria-hidden="true">→</span></span>
-              </span>
-            </button>
           </div>
         </div>
         <div id="deviceDetails" hidden>
           <button class="btn" id="backToDeviceModels">← 选择其他设备</button>
-          <h1 id="deviceModelTitle">AI Flame 0.1</h1>
+          <h1 id="deviceModelTitle">Yeelight 屏幕挂灯 Pro</h1>
           <label>配置设备<select id="deviceInstances"><option value="">添加此型号设备…</option></select></label>
           <p class="muted" id="selectedDeviceState">请选择设备或添加新的设备。</p>
         <section id="virtualDevice" class="card">
@@ -253,7 +236,7 @@
             <h1>把这一点光，连起来。</h1>
             <p class="sub">设备连接可选；应用接入和偏好会直接沿用。选择型号后，按设备指引连接。</p>
           </div>
-          <span class="tag" id="deviceModelDimensions">暖黄色灯板 · 9 × 16</span>
+          <span class="tag" id="deviceModelDimensions">YLTD003 · RGB 背光</span>
         </div>
         <section id="yeelightControls" class="card" hidden>
           <div class="title">连接准备</div>
@@ -265,88 +248,14 @@
         </section>
         <div class="device-grid">
           <section class="card">
-            <div id="matrixConnection">
-            <div class="title">① 连接你的设备</div>
-            <p class="muted">
-              选择 USB 串口。未找到设备时，请确认数据线支持数据传输。
-            </p>
-            <label class="field"
-              >USB 设备<select id="usbPort">
-                <option value="">点击刷新，查找 USB 设备</option>
-              </select></label
-            >
-            <div class="actions">
-              <button class="btn" id="scanPorts">刷新设备</button
-              ><button class="btn" id="probeDevice" data-maintenance>
-                识别设备
-              </button>
-            </div>
-            <p class="muted" id="pairedDevice">尚未读取配对信息</p>
-            <div class="field">
-              日常连接方式
-              <div class="actions">
-                <button class="btn primary" id="useWifi" data-maintenance>
-                  使用 Wi-Fi</button
-                ><button class="btn primary" id="useUsb" data-maintenance>
-                  使用 USB
-                </button>
-              </div>
-            </div>
-            </div>
             <p class="muted" id="transportMode"></p>
             <button class="btn primary" id="testCurrentDevice">试亮此设备</button>
             <span class="muted" id="deviceTestCountdown" hidden></span>
             <button class="btn" id="disconnectDevice" data-maintenance>断开此设备</button>
           </section>
-          <section class="card" id="matrixWifi">
-            <div class="title">② Wi-Fi 网络</div>
-            <p class="muted" id="wifiRemembered">连接设备后读取已记忆的网络</p>
-            <p class="muted">
-              填写 2.4 GHz Wi-Fi。电脑与开发板需在同一局域网。
-            </p>
-            <p class="muted" id="wifiScanHint">点击网络名称，由 ESP32 搜索附近网络并按信号排序，也可手动输入。</p>
-            <form id="wifiForm">
-              <div class="field wifi-picker">
-                <label for="wifiSsid">Wi-Fi 名称</label><input
-                  id="wifiSsid"
-                  role="combobox" aria-controls="wifiNetworks" aria-expanded="false" aria-autocomplete="list"
-                  type="text"
-                  maxlength="32"
-                  autocomplete="off"
-                  required
-                  placeholder="选择 2.4 GHz Wi-Fi，或手动输入" />
-                <div id="wifiNetworks" role="listbox" hidden></div>
-              </div><label class="field"
-                >Wi-Fi 密码<input
-                  id="wifiPassword"
-                  type="password"
-                  maxlength="63"
-                  autocomplete="new-password"
-                  placeholder="输入 Wi-Fi 密码" /></label
-              ><label class="check"
-                ><input
-                  type="checkbox"
-                  id="openNetwork"
-                />这是无密码的开放网络</label
-              >
-              <div class="actions">
-                <button class="btn primary" type="submit" data-maintenance>
-                  保存并连接 Wi-Fi
-                </button>
-              </div>
-            </form>
-            <p class="muted">
-              仅通过 USB 保存网络配置，不重装灯光程序。首次使用请先在设备维护中安装灯光程序。
-            </p>
-          </section>
         </div>
         </div>
         <section class="card" id="deviceLightSettings">
-          <div class="title" id="deviceLightTitle">灯光表现 <span class="tag">仅此设备</span></div>
-          <div class="range" id="deviceBrightnessRow">
-            <div class="row"><label for="deviceBrightness" id="deviceBrightnessLabel">灯光亮度 · 上限 25%</label><span id="deviceBrightnessValue">20%</span></div>
-            <input id="deviceBrightness" type="range" min="0" max="25" value="20" disabled />
-          </div>
           <div id="yeelightStateBrightness" hidden>
             <div class="title">任务提醒颜色与亮度</div>
             <p class="muted" id="yeelightLightHint">仅控制 RGB 背光；每台灯具的任务提醒颜色与亮度独立保存，待机或静默时熄灭背光。前方照明沿用灯具设置。</p>
@@ -354,47 +263,10 @@
             <div class="range"><div class="row"><label for="yeelightDoneBrightness">任务已完成亮度</label><span id="yeelightDoneBrightnessValue">50%</span></div><input id="yeelightDoneBrightness" type="range" min="0" max="100" value="50" disabled /></div>
             <div class="range"><div class="row"><label for="yeelightErrorBrightness">需关注 / 等待输入亮度</label><span id="yeelightErrorBrightnessValue">50%</span></div><input id="yeelightErrorBrightness" type="range" min="0" max="100" value="50" disabled /></div>
           </div>
-          <label class="check" id="deviceReducedRow"><input id="deviceReduced" type="checkbox" disabled />减少动态效果</label>
-          <p class="muted" id="deviceBrightnessNote" hidden>亮度为 0%，此设备的灯光提醒已关闭。</p>
           <p class="muted" id="deviceLightHint">先连接并添加设备，即可设置此设备的灯光表现。</p>
         </section>
-        <div id="hardwareMaintenanceControls" hidden>
+        <div id="deviceJobControls" hidden>
         <div class="device-grid">
-          <section class="card" id="matrixMaintenance">
-            <div class="title">
-              ③ 设备维护与恢复 <span class="tag">使用 APP 内置文件</span>
-            </div>
-            <p class="muted">更新灯光程序保留 Wi-Fi 配置。导出的 ZIP 包含底层 .bin 和灯光程序，供手动安装使用。</p>
-            <div class="actions">
-              <button class="btn" id="installFirmware" data-maintenance>
-                更新灯光程序</button
-              ><a class="btn" id="firmwareDownload" href="/api/firmware/download?model=ai-flame-v01" download
-                >导出完整固件包（ZIP）</a
-              >
-            </div>
-            <details>
-              <summary>初始化 / 恢复开发板</summary>
-              <p>
-                已内置 MicroPython 1.29.0，无需下载或选择文件。
-                仅适用 ESP32-S3-N16R8（16 MB Flash / 8 MB Octal PSRAM）。
-                初始化后，再执行上方「保存并连接 Wi-Fi」。
-              </p>
-              <label class="check">
-                <input id="confirmBoard" type="checkbox" />确认所选开发板为 ESP32-S3-N16R8
-              </label>
-              <label class="check">
-                <input id="confirmFlash" type="checkbox" />确认清除板上所有程序、Wi-Fi 配置和配对信息
-              </label>
-              <div class="actions">
-                <button class="btn" id="flashBase" data-maintenance>
-                  使用内置固件初始化
-                </button>
-              </div>
-              <p class="muted">
-                请保持 USB 连接。连接失败时，按住 BOOT，短按 RESET / EN，再松开 BOOT 后重试。
-              </p>
-            </details>
-          </section>
           <section class="card job-card">
             <div class="title">
               操作进度 <span class="tag" id="jobState">准备就绪</span>
@@ -597,7 +469,7 @@
         <span
           >AI FLAME · 桌面预览版 / <span id="footerVersion">读取中</span><br />关闭网页后仍运行；从桌面 App
           菜单退出可停止 Hub。</span
-        ><span id="deviceDetail">USB · 9×16 灯板 · 协议 1.0</span>
+        ><span id="deviceDetail">连接后显示灯具信息</span>
       </footer>
     </div>
     <script type="module" src="/app.js"></script>

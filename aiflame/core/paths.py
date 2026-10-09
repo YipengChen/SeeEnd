@@ -61,7 +61,7 @@ def new_config():
     from aiflame.integrations.registry import SOURCES
     return {"hub_id": str(uuid.uuid4()), "dashboard": secrets.token_urlsafe(32),
             "tokens": {source.id: secrets.token_urlsafe(32) for source in SOURCES if source.authenticated},
-            "device_id": "", "port": "", "transport": "usb", "devices": {}}
+            "devices": {}}
 
 
 def load_config():

@@ -60,14 +60,14 @@ function render(data) {
   const hardware = data.settings.mode === "hardware";
   const connected = hardware && d.online;
   const connecting = hardware && !connected && d.connecting && !data.maintenance;
-  const connection = d.port?.startsWith("wifi://") ? "Wi-Fi" : d.port ? "USB" : "设备";
+  const connection = d.port ? "Wi-Fi" : "设备";
   document.body.dataset.mode = hardware ? "hardware" : "virtual";
   $("hardwareWarning").hidden = !hardware || connected || connecting;
   $("hardwareWarningText").textContent = data.maintenance
     ? "设备维护中，硬件灯光暂不可用。" : "尚未连接设备，硬件灯光暂不可用。";
   $("virtualDevice").hidden = hardware;
   $("hardwareControls").hidden = !hardware;
-  $("hardwareMaintenanceControls").hidden = !hardware;
+  $("deviceJobControls").hidden = !hardware;
   $("modeHint").textContent = hardware
     ? "连接设备接收任务提醒，屏幕也会同步设备状态。"
     : "屏幕烛火随任务变化，不查找或连接设备。";
@@ -89,7 +89,7 @@ function render(data) {
     mark.setAttribute("class", "connection-icon");
     mark.setAttribute("role", "img");
     mark.setAttribute("aria-label", connection + " 连接");
-    mark.dataset.connection = connection === "Wi-Fi" ? "wifi" : "usb";
+    mark.dataset.connection = "wifi";
     mark.innerHTML = connection === "Wi-Fi"
       ? '<path d="M3 8a15 15 0 0 1 18 0M6 12a10 10 0 0 1 12 0M9 16a5 5 0 0 1 6 0"/><circle cx="12" cy="20" r=".7"/>'
       : '<rect x="3" y="4" width="6" height="7" rx="1"/><path d="M5 2v2m2-2v2M6 11v4a5 5 0 0 0 10 0v-2"/><rect x="13" y="7" width="6" height="6" rx="1"/><path d="M15 5v2m2-2v2"/>';
@@ -131,7 +131,7 @@ function render(data) {
   $("active").textContent = data.active_count;
   $("queued").textContent = data.queue_count;
   $("deviceDetail").textContent = connected
-    ? (d.port && d.port.startsWith("wifi://") ? "Wi-Fi · " : "USB · ") +
+    ? "Wi-Fi · " +
       d.device_id +
       " · " +
       d.firmware_version

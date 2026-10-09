@@ -282,19 +282,15 @@ class Dashboard(DashboardViews, QWidget):
         self.selected_device_id = None
         self.selected_device_model = DEFAULT_MODEL
         self.selected_device_state = {"online": False}
+        self.selected_device_brightness = 50
         self.device_selection_loading = self.port_restore_pending = False
         self.device_operation_id = self.rendered_yeelight_discovery = None
-        self.wifi_available = self.connection_paused = self.wifi_scan_running = False
+        self.connection_paused = False
         self.source_values.clear()
-        for edit in [self.ssid, self.password, self.yeelight_host, *self.cli_config_dirs.values(), self.history_search]:
+        for edit in [self.yeelight_host, *self.cli_config_dirs.values(), self.history_search]:
             with QSignalBlocker(edit):
                 edit.clear()
-        for control in [self.show_password, self.open_network, self.confirm_board, self.confirm_flash]:
-            with QSignalBlocker(control):
-                control.setChecked(False)
-        self.password.setEnabled(True)
-        self.password.setEchoMode(self.password.EchoMode.Password)
-        for choices in [self.wifi_choices, self.yeelight_choices, self.device_instances, *self.cli_profiles.values()]:
+        for choices in [self.yeelight_choices, self.device_instances, *self.cli_profiles.values()]:
             with QSignalBlocker(choices):
                 choices.clear()
         with QSignalBlocker(self.device_instances):
@@ -302,17 +298,8 @@ class Dashboard(DashboardViews, QWidget):
         for choices in self.cli_profiles.values():
             with QSignalBlocker(choices):
                 choices.addItem("正在查找已有 Profile…", "")
-        with QSignalBlocker(self.ports):
-            self.ports.clear()
-            self.ports.addItem("点击刷新，查找 USB 设备", "")
-        with QSignalBlocker(self.brightness), QSignalBlocker(self.device_reduced):
-            self.brightness.setValue(data["settings"]["brightness"])
-            self.device_reduced.setChecked(data["settings"]["reduced"])
-        self.brightness_value.setText(f"{data['settings']['brightness']}%")
-        self.brightness_note.hide()
         self.device_test_caption.hide()
         self.device_version.setText("连接后读取固件版本")
-        self.pairing.setText("正在读取设备信息…")
         with QSignalBlocker(self.history_filter):
             self.history_filter.setCurrentIndex(0)
         self.integration_plans.clear()
@@ -325,15 +312,12 @@ class Dashboard(DashboardViews, QWidget):
         for message in [*self.cli_messages.values(), *self.cli_details.values(), self.codex_connection_details]:
             message.setText("尚未检查。")
         for message in [self.browser_message, self.client_message, self.chatgpt_permission_hint,
-                        self.test_message, self.test_details, self.job_message, self.wifi_error]:
+                        self.test_message, self.test_details, self.job_message]:
             message.clear()
             message.hide()
         self.client_details.clear()
         self.test_details.setText("尚未运行诊断。")
         self.progress.hide()
-        self.clear_wifi_error()
-        self.wifi_network.setText("连接设备后读取已记忆的网络")
-        self.wifi_scan_hint.setText("点击名称展开列表，由 ESP32 搜索并按信号排序；也可手动输入。")
         for disclosure in self.findChildren(Disclosure):
             disclosure.button.setChecked(False)
         self.history_key = None
@@ -386,19 +370,6 @@ class Dashboard(DashboardViews, QWidget):
             else "屏幕烛火随任务变化，不查找或连接设备。"
         )
 
-    def brightness_changed(self, value, sender=None):
-        for control in self.brightness_controls:
-            if control is not sender:
-                with QSignalBlocker(control):
-                    control.setValue(value)
-        for value_label in self.brightness_labels:
-            value_label.setText(f"{value}%")
-        self.brightness_note.setVisible(value == 0)
-        if self.model and self.selected_device_id and not self.device_selection_loading:
-            self.pending_device_brightness = {"hardware_model": self.selected_device_model,
-                                             "device_id": self.selected_device_id,
-                                             "settings": {"brightness": value}}
-            self.brightness_timer.start()
 
     def flush_device_brightness(self):
         self.brightness_timer.stop()
@@ -531,7 +502,7 @@ class Dashboard(DashboardViews, QWidget):
         if self.device_selection_loading or not self.selected_device_id or not self.detail_device().get("online"):
             self.tell("请先连接当前设备", error=True)
             return
-        reason = ("此设备亮度为 0%，请先提高灯光亮度。" if self.brightness.value() == 0 else self.light_block_reason())
+        reason = ("此设备亮度为 0%，请先提高灯光亮度。" if self.selected_device_brightness == 0 else self.light_block_reason())
         if reason:
             self.tell(reason, error=True)
             return
@@ -583,38 +554,17 @@ class Dashboard(DashboardViews, QWidget):
         model = hardware_model(model_id)
         self.selected_device_model = model_id
         self.device_model_title.setText(model["name"])
-        self.device_model_description.setText(model["card_description"] if model_id in YEELIGHT_MODELS else model["description"])
-        yeelight = model_id in YEELIGHT_MODELS
-        self.yeelight_card.setVisible(yeelight)
-        self.yeelight_history_heading.setVisible(yeelight)
+        self.device_model_description.setText(model["card_description"])
+        self.yeelight_card.show()
+        self.yeelight_history_heading.show()
         self.device_instance_panel.show()
-        self.yeelight_colors_panel.setVisible(yeelight)
-        self.device_light_title.setVisible(not yeelight)
-        self.device_brightness_panel.setVisible(not yeelight)
-        self.device_reduced_panel.setVisible(not yeelight)
-        with QSignalBlocker(self.brightness):
-            self.brightness.setMaximum(100 if yeelight else 25)
-        self.brightness.setAccessibleName("灯光亮度，0 至 100 百分比" if yeelight else "灯光亮度，0 至 25 百分比")
-        self.brightness.setToolTip("亮度上限 100%；设为 0% 只关闭此设备的提醒。" if yeelight else "亮度上限 25%；设为 0% 只关闭此设备的提醒。")
-        if yeelight != self.yeelight_layout_active:
-            if yeelight:
-                self.yeelight_history_layout.addWidget(self.device_instance_panel)
-                self.yeelight_history_layout.addWidget(self.device_status_card)
-                self.yeelight_card.layout().addWidget(self.device_job_feedback)
-            else:
-                self.device_details_layout.insertWidget(2, self.device_instance_panel)
-                self.device_connections_layout.insertWidget(0, self.device_status_card)
-                self.device_status_layout.insertWidget(2, self.device_job_feedback)
-            self.yeelight_layout_active = yeelight
-        self.device_status_card.setVisible(not yeelight or bool(self.selected_device_id))
+        self.yeelight_colors_panel.show()
+        self.device_status_card.setVisible(bool(self.selected_device_id))
         self.yeelight_add_panel.setVisible(not self.selected_device_id)
-        self.yeelight_reconnect_button.setVisible(yeelight and bool(self.selected_device_id))
-        self.yeelight_delete_button.setVisible(yeelight and bool(self.selected_device_id))
-        if yeelight:
-            self.yeelight_discover_button.setText("搜索 " + model["name"].removeprefix("Yeelight "))
-            self.yeelight_light_hint.setText(model["light_description"])
-        for widget in (self.matrix_connection_card, self.matrix_wifi_card, self.matrix_maintenance_card):
-            widget.setVisible(not yeelight)
+        self.yeelight_reconnect_button.setVisible(bool(self.selected_device_id))
+        self.yeelight_delete_button.setVisible(bool(self.selected_device_id))
+        self.yeelight_discover_button.setText("搜索 " + model["name"].removeprefix("Yeelight "))
+        self.yeelight_light_hint.setText(model["light_description"])
         if self.tabs.currentIndex() == 1:
             self.breadcrumb.setText("我的设备 / " + model["name"])
         self.device_selector.hide()
@@ -629,25 +579,15 @@ class Dashboard(DashboardViews, QWidget):
         self.port_restore_pending = True
         self.device_selection_loading = True
         self.device_operation_id = None
-        self.wifi_available = False
         self.connection_paused = False
-        self.wifi_scan_running = False
-        with QSignalBlocker(self.wifi_choices):
-            self.wifi_choices.clear()
         self.update_busy()
         self.selected_device_state = {"online": False}
+        self.selected_device_brightness = 50
         self.open_device_details(model_id)
         self.yeelight_host.clear()
         self.yeelight_choices.clear()
         self.yeelight_choices.addItem("搜索后选择灯具…", "")
         self.rendered_yeelight_discovery = None
-        self.password.clear()
-        self.ssid.clear()
-        self.confirm_board.setChecked(False)
-        self.confirm_flash.setChecked(False)
-        self.ports.clear()
-        self.ports.addItem("点击刷新，查找 USB 设备", "")
-        self.scan_ports()
         self.poll(force=True)
 
     def choose_device_instance(self, _index):
@@ -657,24 +597,14 @@ class Dashboard(DashboardViews, QWidget):
         self.port_restore_pending = True
         self.device_selection_loading = True
         self.device_operation_id = None
-        self.wifi_available = False
         self.connection_paused = False
-        self.wifi_scan_running = False
-        with QSignalBlocker(self.wifi_choices):
-            self.wifi_choices.clear()
         self.update_busy()
         self.selected_device_state = {"online": False}
+        self.selected_device_brightness = 50
         self.yeelight_host.clear()
         self.yeelight_choices.clear()
         self.yeelight_choices.addItem("搜索后选择灯具…", "")
         self.rendered_yeelight_discovery = None
-        self.password.clear()
-        self.ssid.clear()
-        self.confirm_board.setChecked(False)
-        self.confirm_flash.setChecked(False)
-        self.ports.clear()
-        self.ports.addItem("点击刷新，查找 USB 设备", "")
-        self.scan_ports()
         self.poll(force=True)
 
     def device_query(self):
@@ -846,7 +776,7 @@ class Dashboard(DashboardViews, QWidget):
         if data["maintenance"]:
             kind, text, action = (
                 "maintenance",
-                "设备维护进行中，请保持 USB 连接。",
+                "设备连接操作进行中，请稍候。",
                 "查看进度",
             )
         elif settings["paused"]:
@@ -921,8 +851,8 @@ class Dashboard(DashboardViews, QWidget):
         online = hardware and device["online"]
         connecting = hardware and not online and device.get("connecting", False) and not data["maintenance"]
         port = device.get("port", "")
-        connection = "wifi" if port.startswith("wifi://") else "usb" if port else None
-        connection_name = "Wi-Fi" if connection == "wifi" else "USB" if connection else "设备"
+        connection = "wifi" if port else None
+        connection_name = "Wi-Fi" if connection else "设备"
         count = device.get("connected_count", int(bool(online)))
         connected_title = f"已连接 {count} 台设备"
         for model_id, button in self.device_model_buttons.items():
@@ -939,10 +869,6 @@ class Dashboard(DashboardViews, QWidget):
         self.hardware_notice_action.setText("查看进度" if data["maintenance"] else "连接设备")
         self.virtual_device_card.setVisible(not hardware)
         self.hardware_controls.setVisible(hardware)
-        self.hardware_maintenance_controls.setVisible(hardware)
-        if not hardware and was_hardware:
-            self.ports.clear()
-            self.ports.addItem("虚拟模式 · 不查找设备", "")
         self.device_badge.setText(
             "虚拟模式 · 屏幕提醒"
             if not hardware
@@ -978,7 +904,7 @@ class Dashboard(DashboardViews, QWidget):
         )
         self.device_summary_icon.setVisible(selected_online)
         if selected_online:
-            selected_transport = "wifi" if selected.get("port", "").startswith("wifi://") else "usb"
+            selected_transport = "wifi"
             self.device_summary_icon.setPixmap(icon(selected_transport, "#38735b", 18).pixmap(18, 18))
         self.render_scene()
         self.render_notice()
@@ -1039,8 +965,6 @@ class Dashboard(DashboardViews, QWidget):
             self.render_history()
             self.render_recent()
         self.update_busy()
-        if hardware and not was_hardware and self.tabs.currentIndex() == 1:
-            self.scan_ports()
         self.state_changed.emit(data)
 
     def event_values(self, event):
@@ -1225,8 +1149,6 @@ class Dashboard(DashboardViews, QWidget):
                 self.poll(force=True)
 
         self.api.request("/api/status", received)
-        if self.wifi_scan_running:
-            self.api.request("/api/wifi-networks?" + urlencode({"device_id": self.selected_device_id or ""}), lambda data: self.render_wifi_scan(data) if generation == self.generation else None)
         if (self.tabs.currentIndex() == 1 and not self.device_details.isHidden()) or self.job_busy:
             self.api.request(self.device_query(), lambda data: self.render_device(data) if generation == self.generation else None)
         if self.tabs.currentIndex() == 5 or self.test_busy:
@@ -1257,36 +1179,6 @@ class Dashboard(DashboardViews, QWidget):
             self.check_codex()
         self.poll(force=True)
 
-    def scan_ports(self):
-        generation = self.generation
-        if not self.ready or not self.hardware_mode() or self.job_busy or self.selected_device_model in YEELIGHT_MODELS:
-            return
-        self.scan_button.setEnabled(False)
-        self.scan_button.setText("查找中…")
-
-        def finished():
-            self.scan_button.setText("刷新")
-            self.update_busy()
-
-        def received(data):
-            if generation != self.generation or not self.hardware_mode():
-                finished()
-                return
-            selected = self.ports.currentData()
-            self.ports.clear()
-            for port in data["ports"]:
-                self.ports.addItem(
-                    port["description"] + " · " + port["port"], port["port"]
-                )
-            if not data["ports"]:
-                self.ports.addItem("未找到 USB 设备", "")
-            index = self.ports.findData(selected)
-            if index >= 0:
-                self.ports.setCurrentIndex(index)
-            finished()
-            self.update_busy()
-
-        self.api.request("/api/ports", received, failed=finished)
 
     def device_action(self, action, callback=None, **values):
         if self.device_selection_loading:
@@ -1295,12 +1187,6 @@ class Dashboard(DashboardViews, QWidget):
         if not self.hardware_mode():
             self.tell("请先在总览切换至硬件模式。", error=True)
             return
-        if (
-            action not in ("connect", "disconnect", "discover") or values.get("transport") == "usb"
-        ) and not self.ports.currentData():
-            self.tell("请先连接 USB 数据线并选择设备。", error=True)
-            return
-
         self.job_message.setText("正在提交设备操作…")
         self.job_message.setStyleSheet("")
         self.job_message.show()
@@ -1321,102 +1207,15 @@ class Dashboard(DashboardViews, QWidget):
 
         self.act(
             "/api/device",
-            {"action": action, "port": self.ports.currentData() or "", "hardware_model": self.selected_device_model, "device_id": self.selected_device_id or "", **values},
+            {"action": action, "hardware_model": self.selected_device_model, "device_id": self.selected_device_id or "", **values},
             received,
             failed,
         )
 
-    def scan_wifi(self):
-        if self.device_selection_loading or not self.selected_device_id or self.wifi_scan_running or not self.ready or not self.hardware_mode() or self.job_busy:
-            return
-        if self.wifi_choices.count() == 0:
-            typed = self.ssid.text()
-            with QSignalBlocker(self.wifi_choices):
-                self.wifi_choices.addItem("正在读取附近网络…")
-                self.wifi_choices.model().item(0).setEnabled(False)
-                self.wifi_choices.setEditText(typed)
-        self.wifi_scan_running = True
-        self.wifi_scan_hint.setText("ESP32 正在搜索附近的 2.4 GHz Wi-Fi…")
-        def failed():
-            if generation == self.generation:
-                self.render_wifi_scan({"state": "failed", "message": "搜索失败，可重试或手动输入网络名。"})
-        generation = self.generation
-        self.api.request("/api/wifi-networks", lambda data: self.render_wifi_scan(data) if generation == self.generation else None, body={"device_id": self.selected_device_id or ""}, failed=failed)
 
-    def render_wifi_scan(self, data):
-        self.wifi_scan_running = data["state"] == "running"
-        self.wifi_scan_hint.setText(data.get("message", ""))
-        if data["state"] == "succeeded":
-            typed = self.ssid.text()
-            popup_open = self.wifi_choices.view().isVisible()
-            with QSignalBlocker(self.wifi_choices):
-                self.wifi_choices.clear()
-                for network in data.get("networks", []):
-                    self.wifi_choices.addItem(network["ssid"])
-                    self.wifi_choices.setItemData(self.wifi_choices.count() - 1, str(network["signal"]) + " dBm", Qt.ItemDataRole.ToolTipRole)
-                if not data.get("networks"):
-                    self.wifi_choices.addItem("未发现网络，可手动输入")
-                    self.wifi_choices.model().item(0).setEnabled(False)
-                self.wifi_choices.setEditText(typed)
-            if popup_open:
-                self.wifi_choices.reopen_popup()
-        elif data["state"] == "failed":
-            typed = self.ssid.text()
-            popup_open = self.wifi_choices.view().isVisible()
-            with QSignalBlocker(self.wifi_choices):
-                self.wifi_choices.clear()
-                self.wifi_choices.addItem("暂时无法读取，可手动输入")
-                self.wifi_choices.model().item(0).setEnabled(False)
-                self.wifi_choices.setEditText(typed)
-            if popup_open:
-                self.wifi_choices.reopen_popup()
-        self.update_busy()
 
-    def clear_wifi_error(self, *_):
-        self.wifi_error.hide()
-        restyle(self.ssid, "invalid", False)
-        restyle(self.password, "invalid", False)
 
-    def open_network_changed(self, value):
-        self.password.setEnabled(not value)
-        self.show_password.setEnabled(not value)
-        if value:
-            self.password.clear()
-            self.show_password.setChecked(False)
-        self.clear_wifi_error()
 
-    def provision(self):
-        self.clear_wifi_error()
-        ssid, password = self.ssid.text(), self.password.text()
-        invalid, message = None, ""
-        if not 1 <= len(ssid.encode("utf-8")) <= 32:
-            invalid, message = (
-                self.ssid,
-                "请输入 Wi-Fi 名称（最多 32 字节，中文通常每字占 3 字节）。",
-            )
-        elif not self.open_network.isChecked() and not 8 <= len(password) <= 63:
-            invalid, message = (
-                self.password,
-                "密码需要 8–63 个字符；无密码网络请勾选「此网络无需密码」。",
-            )
-        if invalid:
-            restyle(invalid, "invalid", True)
-            self.wifi_error.setText(message)
-            self.wifi_error.show()
-            invalid.setFocus()
-            return
-
-        def submitted(_):
-            self.password.clear()
-            self.show_password.setChecked(False)
-
-        self.device_action(
-            "provision",
-            submitted,
-            ssid=ssid,
-            password="" if self.open_network.isChecked() else password,
-            open_network=self.open_network.isChecked(),
-        )
 
     def choose_yeelight_address(self, _index):
         host = self.yeelight_choices.currentData()
@@ -1431,17 +1230,13 @@ class Dashboard(DashboardViews, QWidget):
             self.selected_device_id = job["result"]["device_id"]
             data = {**data, "selected_device_id": self.selected_device_id}
             self.device_operation_id = None
+        if "connection_paused" in data:
+            self.connection_paused = data["connection_paused"]
         if "selected_device_id" in data:
             self.device_selection_loading = False
             self.selected_device_id = data["selected_device_id"]
             self.selected_device_state = data.get("device", {"online": False})
-            if not self.writing and not self.brightness_timer.isActive() and not self.brightness.isSliderDown():
-                appearance = data.get("light_settings", {"brightness": 50 if self.selected_device_model in YEELIGHT_MODELS else 20, "reduced": False})
-                with QSignalBlocker(self.brightness), QSignalBlocker(self.device_reduced):
-                    self.brightness.setValue(appearance["brightness"])
-                    self.device_reduced.setChecked(appearance["reduced"])
-                self.brightness_value.setText(f"{appearance['brightness']}%")
-                self.brightness_note.setVisible(bool(self.selected_device_id) and appearance["brightness"] == 0)
+            self.selected_device_brightness = data.get("light_settings", {}).get("brightness", 50)
             self.device_light_hint.setVisible(not self.selected_device_id)
             from aiflame.devices.light_settings import COLOR_DEFAULTS
             color_values = data.get("light_settings", {}).get("colors", COLOR_DEFAULTS)
@@ -1477,36 +1272,10 @@ class Dashboard(DashboardViews, QWidget):
             if self.port_restore_pending and self.selected_device_model in YEELIGHT_MODELS:
                 self.yeelight_host.setText(data.get("yeelight_host", ""))
                 self.port_restore_pending = False
-            if self.port_restore_pending and data.get("selected_port") and not self.ports.hasFocus():
-                index = self.ports.findData(data["selected_port"])
-                if index >= 0:
-                    self.ports.setCurrentIndex(index)
-                    self.port_restore_pending = False
         job = data.get("job")
         if "hardware_model" in data and not (job and job["state"] == "running"):
             if not self.device_details.isHidden():
                 self.open_device_details(data["hardware_model"])
-        if "wifi_available" in data:
-            self.wifi_available = data["wifi_available"]
-            self.connection_paused = data.get("connection_paused", False)
-            ssid = data.get("wifi_ssid")
-            if data.get("wifi_info_current"):
-                text = ("设备已记忆：" + ssid + (" · 已连入网络" if data.get("wifi_connected") else " · 尚未连入网络")) if ssid else "设备尚未配置 Wi-Fi"
-            elif data.get("wifi_info_known"):
-                text = "上次记录：" + (ssid or "未配置 Wi-Fi") + " · 等待设备确认"
-            else:
-                text = "网络名未知 · 连接并更新灯光程序后可读取"
-            self.wifi_network.setText(text)
-        if "transport" in data:
-            self.pairing.setText(
-                (
-                    "已配对：" + data["paired_device"]
-                    if data["paired_device"]
-                    else "尚未配对"
-                )
-                + " · "
-                + ("Wi-Fi 局域网" if data["transport"] in ("wifi", "yeelight") else "USB")
-            )
         job = data.get("job")
         if job:
             if job.get("action") == "discover" and job["state"] == "succeeded" and self.selected_device_model in YEELIGHT_MODELS and job.get("hardware_model", self.selected_device_model) == self.selected_device_model and self.rendered_yeelight_discovery != job.get("id"):
@@ -1587,18 +1356,9 @@ class Dashboard(DashboardViews, QWidget):
             button.setEnabled(connected and not busy)
         for button in self.maintenance_buttons:
             button.setEnabled(hardware and not busy)
-        for button in self.port_buttons:
-            button.setEnabled(hardware and not busy and bool(self.ports.currentData()))
-            button.setToolTip(
-                "" if self.ports.currentData() else "请先接入 USB 数据线并选择设备"
-            )
         device = self.detail_device()
         online = hardware and device.get("online", False)
         connecting = device.get("connecting", False)
-        port = device.get("port", "")
-        wifi_online = online and port.startswith("wifi://")
-        usb_online = online and not wifi_online
-        same_usb = usb_online and port == self.ports.currentData()
         available = hardware and not busy and not connecting
         self.yeelight_discover_button.setEnabled(hardware and not busy)
         self.yeelight_connect_button.setEnabled(available and not self.selected_device_id and bool(self.yeelight_host.text().strip()))
@@ -1613,21 +1373,9 @@ class Dashboard(DashboardViews, QWidget):
             self.yeelight_add_panel.setVisible(not self.selected_device_id)
             self.device_status_card.setVisible(bool(self.selected_device_id))
             self.yeelight_reconnect_button.setVisible(bool(self.selected_device_id))
-        self.usb_connect_button.setEnabled(available and bool(self.ports.currentData()) and not same_usb)
-        self.usb_connect_button.setText("USB 已连接" if same_usb else "切换此设备串口" if usb_online else "此设备改用 USB" if wifi_online else "连接此设备 USB")
-        self.wifi_connect_button.setEnabled(available and self.wifi_available and not wifi_online)
-        self.wifi_connect_button.setText("Wi-Fi 已连接" if wifi_online else "此设备改用 Wi-Fi" if usb_online else "连接此设备 Wi-Fi")
-        self.wifi_connect_button.setToolTip("" if self.wifi_available else "请先通过 USB 配置网络")
         self.disconnect_button.setEnabled(hardware and not busy and not self.connection_paused and (online or connecting or bool(self.selected_device_id)))
         self.yeelight_delete_button.setEnabled(connected and not busy and not self.device_selection_loading
                                              and bool(self.selected_device_id) and self.selected_device_model in YEELIGHT_MODELS)
-        self.flash_button.setEnabled(
-            hardware
-            and not busy
-            and bool(self.ports.currentData())
-            and self.confirm_board.isChecked()
-            and self.confirm_flash.isChecked()
-        )
         reason = self.light_block_reason()
         for button in self.manual_buttons:
             button.setEnabled(not self.writing and not reason)
@@ -1648,8 +1396,6 @@ class Dashboard(DashboardViews, QWidget):
         )
         for check in self.source_checks.values():
             check.setEnabled(connected and not self.reset_pending)
-        for control in [*self.brightness_controls, self.device_reduced]:
-            control.setEnabled(connected and not self.writing and not self.device_selection_loading and bool(self.selected_device_id))
         for control in [
             self.duration,
             *self.checks.values(),
@@ -1657,9 +1403,6 @@ class Dashboard(DashboardViews, QWidget):
             control.setEnabled(connected and not self.reset_pending)
         for edit in self.times.values():
             edit.setEnabled(connected and self.checks["quiet_enabled"].isChecked())
-        self.ports.setEnabled(hardware and not busy)
-        self.scan_button.setEnabled(hardware and not busy)
-        self.wifi_choices.setEnabled(hardware and not busy)
 
     def integration_parameters(self, source):
         body = {"source": source}
@@ -1888,17 +1631,6 @@ class Dashboard(DashboardViews, QWidget):
 
         self.api.request(endpoint, received, raw=True)
 
-    def flash(self):
-        if not self.hardware_mode():
-            self.tell("请先在总览切换至硬件模式。", error=True)
-            return
-        if not self.confirm_board.isChecked() or not self.confirm_flash.isChecked():
-            self.tell("请确认开发板型号，并确认清除板上的程序和配置。", error=True)
-            return
-        if not self.ports.currentData():
-            self.tell("请先选择 USB 设备。", error=True)
-            return
-        self.device_action("flash_base", confirm_board=True, confirm_flash=True)
 
     def shutdown(self):
         self.device_test_timer.stop()

@@ -2,7 +2,7 @@
 
 [中文](README.md) | **English**
 
-The software is currently named **SeeEnd** (formerly AI Flame App). The physical lamp series retains the **AI Flame** name, including **AI Flame 0.1** and **AI Flame 0.2**.
+The software is named **SeeEnd**. Supported lamps are the Yeelight YLTD003 Screen Light Bar Pro and YLDP005 W3 color bulb.
 
 Turn AI task status into a candle flame.
 
@@ -13,8 +13,8 @@ Current version: **0.8.4 desktop preview** · Python **3.11+** · **Proprietary 
 ## Features
 
 - **Unified task status**: track task lifecycles by source, distinguishing real tasks, simulated diagnostics, cancellations, and timeouts.
-- **Multiple notification channels**: on-screen candle, menu bar / system tray status, desktop notifications, and physical lamps over USB or Wi-Fi. Desktop notifications work independently of light output.
-- **Adjustable alerts**: set brightness and reduced motion per device; configure alert duration and quiet hours globally; export activity to CSV.
+- **Multiple notification channels**: on-screen candle, menu bar / system tray status, desktop notifications, and Yeelight lamps over the LAN. Desktop notifications work independently of light output.
+- **Adjustable alerts**: set each lamp’s color and brightness independently for each task state; configure alert duration and quiet hours globally; export activity to CSV.
 - **Local processing**: the Hub listens only on `127.0.0.1:8765` and authenticates requests with credentials. Integrations collect task status metadata, without saving conversation content. No model API key is required by SeeEnd.
 - **Chinese and English**: choose **中文** or **English** under **Alert preferences → Language**. The selection is saved locally and applied immediately, including the tray and notifications. The local web dashboard and Flame Lab also provide a language selector.
 
@@ -78,30 +78,9 @@ Integration checks distinguish specific configuration errors, disabled sources, 
 
 ## Optional hardware
 
-The current light firmware version is **0.4.8**. It supports these **ESP32-S3-N16R8 + IS31FL3731 warm-yellow matrix boards**:
+Supports the RGB backlight of the **Yeelight YLTD003 Screen Light Bar Pro** and the **Yeelight YLDP005 W3 color bulb** through the original LAN protocol. Set up Wi-Fi and enable LAN control in the Yeelight App, then select a model in **My devices** and discover it or enter its IP. Multiple lamps can connect simultaneously, with independent connection details, colors, and per-state brightness. Browsing devices keeps connections active; virtual mode pauses all physical connections.
 
-| Hardware model | LED matrix |
-| --- | --- |
-| AI Flame 0.1 | 9×16 |
-| AI Flame 0.2 | 7×15 |
-
-Also supports the RGB backlight of the **Yeelight YLTD003 Screen Light Bar Pro** and the **Yeelight YLDP005 W3 color bulb**, using the manufacturer's LAN protocol without replacing firmware. See [YLTD003 setup](#yeelight-yltd003-screen-light-bar-pro) below.
-
-In **My devices**, choose a model from the large icons, then select a paired device or **Add a device of this model**. Multiple models and multiple devices of the same model can connect simultaneously. Pairing, USB, and network information are saved separately for each device. Browsing models or devices does not disconnect them. AI status is sent to all connected devices. Disconnecting, updating, or maintaining a device affects only the selected device; other devices continue displaying status. Switching globally to **Virtual mode** pauses all physical device connections. Use GPIO21 / GPIO18 for SDA / SCL; see the [hardware guide (Chinese)](../docs/quick-start.md#9×16-暖黄色矩阵火苗) for board specifications, wiring, and installation.
-
-After switching to **Hardware mode**, select a model in **My devices** and use USB to install its light firmware, pair it, or configure 2.4 GHz Wi-Fi. The project includes MicroPython base firmware for the specified board. Initialization erases board data; routine light updates use a separate action. Do not use bundled firmware on boards with different Flash / PSRAM specifications.
-
-## Live flame tuning
-
-Start the source Hub and open the [Flame Lab](http://127.0.0.1:8765/tuning), or double-click `启动火焰调参.command` on macOS. Older packaged apps do not include this page; quit the older app before starting it.
-
-1. Connect a matrix board in **My devices** and use USB to update light firmware to 0.4.8 or newer, preserving pairing and Wi-Fi.
-2. Open the tuning page, select a device, and click **Start live tuning**. USB and Wi-Fi are supported.
-3. Adjust 15 core parameters: height, width, tip taper, core intensity, total brightness, edge softness, brightness flicker, overall speed, motion amplitude, slow sway amplitude, slow sway frequency, tip jitter, height variation, gust strength, and fragment strength. Other parameters use internal defaults; importing old presets preserves their complete parameter set. Slider updates are coalesced approximately every 180 ms. **Hardware confirmed** means the first frame was successfully written on the board.
-4. Save a preset in the current browser or import / export JSON. Saved presets are for subsequent tuning and do not overwrite normal task light defaults.
-5. Click **Stop tuning** to restore task lights. Closing the page or failing to renew the lease exits tuning after approximately 6 seconds. The board also has an independent timeout that turns lights off if the host disconnects.
-
-Tuning temporarily overrides task lights and brightness / reduced motion / quiet preferences for the selected board only. Brightness remains limited to 0–25%, with a PWM ceiling of 16. Both warm-yellow monochrome matrices lack hue adjustment.
+The complete AI Flame 0.1 / 0.2 implementation is preserved on [`archive/ai-flame-2026-10-09`](https://github.com/YipengChen/SeeEnd/tree/archive/ai-flame-2026-10-09). The main branch no longer supports these boards, firmware maintenance, or flame tuning. Upgrading ignores old matrix connection records while retaining Yeelight devices, task history, and preferences.
 
 ## Development and tests
 
@@ -149,8 +128,8 @@ aiflame/
   integrations/   CLI, web, desktop client, and local API integrations
   outputs/        Light and desktop notification delivery
   desktop/        Native PySide6 desktop interface
-  devices/        Device maintenance and ESP32 firmware
-  transports/     USB / Wi-Fi communication
+  devices/        Yeelight discovery, connection, and configuration
+  transports/     Yeelight LAN communication
   assets/         UI assets, translation catalog, and web dashboard
 tests/            Automated tests and manual acceptance tools
 packaging/        PyInstaller build and archiving
@@ -166,7 +145,7 @@ hardware/         Matrix board debugging tools
 
 ## License
 
-Starting with 0.8.4, original project code uses the [SeeEnd proprietary software license](LICENSE). The source repository remains private; previously granted rights are not revoked. Third-party firmware, dependencies, and brand assets retain their respective licenses and ownership. See [third-party notices](THIRD_PARTY_NOTICES.md).
+Starting with 0.8.4, original project code uses the [SeeEnd proprietary software license](LICENSE). The source repository remains private; previously granted rights are not revoked. Third-party dependencies and brand assets retain their respective licenses and ownership. See [third-party notices](THIRD_PARTY_NOTICES.md).
 
 ### Yeelight YLTD003 (Screen Light Bar Pro)
 
@@ -181,7 +160,7 @@ This implementation controls only the rear RGB ambient light. The front white li
 | Error / Waiting for input | Steady orange `#FF9F43`, default brightness 50%, for the alert duration |
 | Idle, paused, quiet hours, current state's brightness at 0% | Backlight off |
 
-Under **My devices → Selected device**, set the color and 0–100% brightness independently for Working, Completed, and Error / Waiting for input. These settings affect only the selected device. At 100%, the app sends the lamp's protocol brightness parameter `100` directly, without additional scaling or the AI Flame matrix's 25% cap. Setting a state to 0% disables only that state's light alerts; other states retain their own settings. Both Yeelight models hold a steady color at the selected brightness and do not use breathing, pulses, or a **Reduce motion** setting. Each lamp has independent connection, disconnection, test, and receipt records, and can receive task status alongside AI Flame matrices. Reconnecting does not replay old completion alerts.
+Under **My devices → Selected device**, set the color and 0–100% brightness independently for Working, Completed, and Error / Waiting for input. These settings affect only the selected device. At 100%, the app sends the lamp's protocol brightness parameter `100` directly, without additional scaling. Setting a state to 0% disables only that state's light alerts; other states retain their own settings. Both Yeelight models hold a steady color at the selected brightness and do not use breathing, pulses, or a **Reduce motion** setting. Each lamp has independent connection, disconnection, test, and receipt records, and can receive task status alongside other Yeelight lamps. Reconnecting does not replay old completion alerts.
 
 Implementation references: [Yeelight official LAN protocol](https://www.yeelight.com/download/Yeelight_Inter-Operation_Spec.pdf), [official Chroma Connector capability detection](https://github.com/Yeelight/Yeelight-Chroma-Connector/blob/main/ChromaBroadcastSampleApplication/ChromaBroadcastSampleApplicationDlg.cpp), and [official product brochure](https://en.yeelight.com/wp-content/uploads/sites/4/2023/08/Yeelight-Fun.pdf). Discovery responses identify compatible lamps through `lamp15`, physical `id`, and the `support` method list. Discovery uses SSDP-style UDP at `239.255.255.250:1982` (manual IPs are queried directly first); control uses CRLF-terminated JSON over TCP `55443`. Automatic reconnection discovers the physical ID again to avoid controlling another lamp after an IP change.
 
@@ -191,7 +170,7 @@ Simulated discovery responses, TCP receipts, light behavior, and UI regressions 
 
 ### Yeelight YLDP005 (W3 color bulb)
 
-Select **Yeelight YLDP005** in **My devices**. As with YLTD003, connect it to 2.4 GHz Wi-Fi and enable **LAN control** in the Yeelight App, then discover it or enter its IP manually. Independent tests, disconnection, automatic reconnection, and synchronization with multiple devices are supported. AI Flame firmware is not installed.
+Select **Yeelight YLDP005** in **My devices**. As with YLTD003, connect it to 2.4 GHz Wi-Fi and enable **LAN control** in the Yeelight App, then discover it or enter its IP manually. Independent tests, disconnection, automatic reconnection, and synchronization with multiple devices are supported. The lamps retain their original firmware.
 
 YLDP005 uses the entire bulb to show task status, with the same default colors and brightness as above: steady blue while working (20%), steady green on completion (50%), and steady orange for errors / input requests (50%). It turns off when idle, paused, during quiet hours, or when the current state's brightness is 0%. Each state's color and 0–100% brightness are set independently; 100% is sent directly without additional scaling. Alert duration and hold-until-activity settings are supported. While connected, SeeEnd uses the bulb for task alerts.
 

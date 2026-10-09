@@ -52,10 +52,6 @@ class DeviceOutput:
         return self.device.get("session_id"), self.device.get("connected_at")
 
     def desired(self):
-        from aiflame.hub.tuning import display
-        tuning = display(self)
-        if tuning:
-            return tuning
         if self.settings["brightness"] == 0:
             self.light_test = None
             return {"key": "device-muted", "state": "idle", "duration_ms": 0, "device_muted": True}
@@ -83,7 +79,7 @@ class DeviceOutput:
         if self.desired()["key"] != desired["key"]:
             return
         self.last_command, self.last_display_key = ack, desired["key"]
-        if desired.get('tuning') is not None or desired.get("device_test") or desired.get("device_muted"):
+        if desired.get("device_test") or desired.get("device_muted"):
             return
         flame = self.fleet.engine
         flame.applied(desired, ack)
@@ -121,7 +117,6 @@ class FleetTransportManager:
                 output = DeviceOutput(self, record)
                 connection = TransportManager(output, self.lock, record)
                 connection.hub_id = self.config.get("hub_id", "")
-                connection.strict_port = True
                 self.outputs[key] = output
                 self.connections[key] = connection
             return self.connections[key]
@@ -160,9 +155,6 @@ class FleetTransportManager:
                 raise EventError("此设备亮度为 0%，请在设备配置中提高亮度", 409)
             if self.engine.settings["mode"] != "hardware" or self.engine.muted():
                 raise EventError("请切换到硬件模式，并恢复亮度和提醒", 409)
-            from aiflame.hub.tuning import display
-            if display(output):
-                raise EventError("请先停止此设备的灯效调参", 409)
             shared = self.engine.desired()
             key = "device-test:" + uuid.uuid4().hex
             started = self.engine.clock()
@@ -201,16 +193,9 @@ class FleetTransportManager:
             return bool(online) and all(output.last_display_key == key for output in online)
 
     def start(self):
-        # Independent records may use USB and Wi-Fi concurrently. Never share a USB port.
-        occupied = set()
+        # Each lamp owns an independent LAN connection.
         for key, record in list(self.records.items()):
             connection = self.connection(key, record)
-            port = record.get("port")
-            if record.get("transport", "usb") == "usb" and not record.get("connection_paused") and port:
-                if port in occupied:
-                    connection.engine.device.update(online=False, connecting=False, last_error="USB 串口已用于另一台设备", status="串口冲突")
-                    continue
-                occupied.add(port)
             connection.start()
         if not self.records:
             self.fallback.start()

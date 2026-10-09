@@ -69,21 +69,21 @@ class NativeDesktopTests(unittest.TestCase):
         self.widget.navigate(1)
         self.assertTrue(self.widget.device_selector.isVisible())
         self.assertFalse(self.widget.device_details.isVisible())
-        self.assertEqual(len(self.widget.device_model_buttons), 4)
-        self.widget.device_model_buttons["ai-flame-v02"].click()
-        self.wait(lambda: self.widget.selected_device_model == "ai-flame-v02" and not self.widget.job_busy and not self.widget.writing)
+        self.assertEqual(len(self.widget.device_model_buttons), 2)
+        self.widget.device_model_buttons["yeelight-yldp005"].click()
+        self.wait(lambda: self.widget.selected_device_model == "yeelight-yldp005" and not self.widget.job_busy and not self.widget.writing)
         self.assertTrue(self.widget.device_details.isVisible())
         self.assertFalse(self.widget.device_selector.isVisible())
-        self.assertEqual(self.widget.device_model_title.text(), "AI Flame 0.2")
-        self.assertIn("7 × 15", self.widget.device_model_description.text())
+        self.assertEqual(self.widget.device_model_title.text(), "Yeelight W3 彩色灯泡")
+        self.assertIn("YLDP005", self.widget.device_model_description.text())
         self.assertNotIn("hardware_model", self.hub.config)
         self.assertEqual(self.hub.transport.records, {})
         self.widget.nav_buttons[1].click()
         self.assertTrue(self.widget.device_selector.isVisible())
         self.assertFalse(self.widget.device_details.isVisible())
-        self.widget.device_model_buttons["ai-flame-v01"].click()
-        self.wait(lambda: self.widget.selected_device_model == "ai-flame-v01" and not self.widget.job_busy and not self.widget.writing)
-        self.assertEqual(self.widget.breadcrumb.text(), "我的设备 / AI Flame 0.1")
+        self.widget.device_model_buttons["yeelight-yltd003"].click()
+        self.wait(lambda: self.widget.selected_device_model == "yeelight-yltd003" and not self.widget.job_busy and not self.widget.writing)
+        self.assertEqual(self.widget.breadcrumb.text(), "我的设备 / Yeelight 屏幕挂灯 Pro")
         self.widget.device_back_button.click()
         self.assertTrue(self.widget.device_selector.isVisible())
         self.assertEqual(self.widget.breadcrumb.text(), "我的设备")
@@ -93,9 +93,6 @@ class NativeDesktopTests(unittest.TestCase):
         self.widget.device_model_buttons["yeelight-yltd003"].click()
         self.wait(lambda: self.widget.selected_device_model == "yeelight-yltd003" and not self.widget.device_selection_loading)
         self.assertFalse(self.widget.yeelight_card.isHidden())
-        self.assertTrue(self.widget.matrix_connection_card.isHidden())
-        self.assertTrue(self.widget.matrix_wifi_card.isHidden())
-        self.assertTrue(self.widget.matrix_maintenance_card.isHidden())
         job = {"id": "search", "action": "discover", "state": "succeeded", "progress": 100,
                "message": "已发现", "result": {"devices": [{"name": "YLTD003", "host": "192.168.1.44"}]}}
         self.widget.render_device({"job": job})
@@ -136,9 +133,9 @@ class NativeDesktopTests(unittest.TestCase):
                 self.assertTrue(self.widget.yeelight_connect_button.isEnabled())
                 self.assertEqual(self.hub.transport.records, {})
                 client.close.assert_called_once()
-        self.widget.choose_device_model('ai-flame-v01')
+        self.widget.choose_device_model('yeelight-yltd003')
         self.wait(lambda: not self.widget.device_selection_loading)
-        self.assertEqual(self.widget.device_job_feedback.parentWidget(), self.widget.device_status_card)
+        self.assertEqual(self.widget.device_job_feedback.parentWidget(), self.widget.yeelight_card)
 
     def test_yeelight_history_actions_and_per_device_colors(self):
         self.widget.act('/api/settings', {'mode': 'hardware'})
@@ -148,9 +145,6 @@ class NativeDesktopTests(unittest.TestCase):
             with self.subTest(model=model):
                 self.widget.choose_device_model(model)
                 self.wait(lambda: not self.widget.device_selection_loading)
-                self.assertEqual(self.widget.brightness.maximum(), 100)
-                self.assertEqual(self.widget.brightness.value(), 50)
-                self.assertTrue(self.widget.device_reduced_panel.isHidden())
                 self.assertTrue(self.widget.yeelight_add_panel.isVisible())
                 self.assertTrue(self.widget.device_status_card.isHidden())
                 self.assertTrue(self.widget.yeelight_history_heading.isVisible())
@@ -173,10 +167,9 @@ class NativeDesktopTests(unittest.TestCase):
                 self.assertTrue(self.widget.yeelight_delete_button.isVisible())
                 self.assertTrue(self.widget.yeelight_delete_button.isEnabled())
                 self.assertEqual(self.widget.yeelight_host.text(), '192.168.1.44')
-                self.widget.brightness.setValue(100)
+                self.widget.yeelight_brightness_controls["working"].setValue(100)
                 self.wait(lambda: self.hub.transport.records[identity].get('light_settings', {}).get('brightness') == 100)
                 self.wait(lambda: not self.widget.writing)
-                self.assertTrue(self.widget.device_brightness_panel.isHidden())
                 self.widget.yeelight_brightness_controls['working'].setValue(27)
                 self.wait(lambda: self.hub.transport.records[identity].get('light_settings', {}).get('state_brightness', {}).get('working') == 27)
                 self.wait(lambda: not self.widget.writing)
@@ -208,9 +201,6 @@ class NativeDesktopTests(unittest.TestCase):
         self.widget.device_model_buttons["yeelight-yldp005"].click()
         self.wait(lambda: self.widget.selected_device_model == "yeelight-yldp005" and not self.widget.device_selection_loading)
         self.assertFalse(self.widget.yeelight_card.isHidden())
-        self.assertTrue(self.widget.matrix_connection_card.isHidden())
-        self.assertTrue(self.widget.matrix_wifi_card.isHidden())
-        self.assertTrue(self.widget.matrix_maintenance_card.isHidden())
         self.assertEqual(self.widget.yeelight_discover_button.text(), "搜索 W3 彩色灯泡")
         self.assertIn("整颗灯泡", self.widget.yeelight_light_hint.text())
         self.widget.show_device_selector()
@@ -218,24 +208,24 @@ class NativeDesktopTests(unittest.TestCase):
             self.widget.resize(width, height)
             for _ in range(4):
                 self.app.processEvents()
-            self.assertEqual(self.widget.device_cards_layout.rowCount(), 2)
+            self.assertEqual(self.widget.device_cards_layout.rowCount(), 1)
             self.assertEqual(self.widget.tabs.widget(1).horizontalScrollBar().maximum(), 0)
             self.assertEqual(self.widget.tabs.widget(1).verticalScrollBar().maximum(), 0)
 
     def test_device_cards_keep_details_when_counts_change_and_thumbnail_is_clickable(self):
         self.widget.navigate(1)
         cards = self.widget.device_model_buttons
-        first, bulb = cards["ai-flame-v01"], cards["yeelight-yldp005"]
+        first, bulb = cards["yeelight-yltd003"], cards["yeelight-yldp005"]
         title, detail = first.title.text(), first.detail.text()
         snapshot = {**self.widget.model, "devices": [
-            {"device_id": "one", "hardware_model": "ai-flame-v01", "online": True},
-            {"device_id": "two", "hardware_model": "ai-flame-v01", "online": True},
+            {"device_id": "one", "hardware_model": "yeelight-yltd003", "online": True},
+            {"device_id": "two", "hardware_model": "yeelight-yltd003", "online": True},
             {"device_id": "bulb", "hardware_model": "yeelight-yldp005", "online": True},
         ]}
         self.widget.render(snapshot)
         self.assertEqual(first.connection_count.text(), "在线 2 · 离线 0")
         self.assertEqual(bulb.connection_count.text(), "在线 1 · 离线 0")
-        self.assertEqual(cards["ai-flame-v02"].connection_count.text(), "未添加设备")
+        self.assertEqual(cards["yeelight-yldp005"].connection_count.text(), "在线 1 · 离线 0")
         snapshot["devices"][1]["online"] = False
         snapshot["devices"][2]["online"] = False
         self.widget.render(snapshot)
@@ -253,15 +243,15 @@ class NativeDesktopTests(unittest.TestCase):
         first.setEnabled(True)
         QTest.mouseClick(first, Qt.MouseButton.LeftButton, pos=point)
         self.assertFalse(self.widget.device_selector.isVisible())
-        self.assertEqual(self.widget.selected_device_model, "ai-flame-v01")
+        self.assertEqual(self.widget.selected_device_model, "yeelight-yltd003")
 
     def test_device_light_uses_selected_identity_and_connection_buttons_share_style(self):
         self.connect_preview_fixture()
         self.widget.selected_device_id = "fixture-lamp"
+        self.widget.selected_device_state = {"online": True}
+        self.widget.selected_device_brightness = 50
         self.widget.device_selection_loading = False
         self.widget.update_busy()
-        self.assertEqual(self.widget.usb_connect_button.property("variant"), "primary")
-        self.assertEqual(self.widget.wifi_connect_button.property("variant"), "primary")
         with patch.object(self.widget, "act") as act:
             self.widget.try_light_button.click()
             self.assertEqual(act.call_args.args[:2], ("/api/device/test-light", {"device_id": "fixture-lamp"}))
@@ -282,34 +272,30 @@ class NativeDesktopTests(unittest.TestCase):
     def test_late_model_selection_does_not_override_navigation(self):
         self.widget.navigate(1)
         with patch.object(self.widget, "act") as act:
-            self.widget.choose_device_model("ai-flame-v02")
+            self.widget.choose_device_model("yeelight-yldp005")
         act.assert_not_called()
         self.widget.navigate(1)
         self.assertTrue(self.widget.device_details.isHidden())
         self.widget.navigate(0)
         self.assertEqual(self.widget.breadcrumb.text(), "总览")
         self.widget.navigate(1)
-        self.widget.open_device_details("ai-flame-v02")
+        self.widget.open_device_details("yeelight-yldp005")
         self.widget.navigate(2)
-        self.widget.render_device({"hardware_model": "ai-flame-v02", "job": None})
+        self.widget.render_device({"hardware_model": "yeelight-yldp005", "job": None})
         self.assertEqual(self.widget.breadcrumb.text(), "应用接入")
 
     def test_device_selector_does_not_scan_until_model_is_opened(self):
         self.widget.choose_mode("hardware")
         self.wait(lambda: self.widget.hardware_mode() and not self.widget.writing)
-        with patch.object(self.widget, "scan_ports") as scan:
+        with patch("aiflame.devices.yeelight.discover") as discover:
             self.widget.navigate(1)
-            self.assertTrue(self.widget.device_selector.isVisible())
-            scan.assert_not_called()
-            self.widget.device_model_buttons["ai-flame-v01"].click()
-            scan.assert_called_once()
-            self.assertTrue(self.widget.hardware_controls.isVisible())
+            self.widget.device_model_buttons["yeelight-yltd003"].click()
             self.wait(lambda: not self.widget.device_selection_loading)
+            discover.assert_not_called()
+            self.assertTrue(self.widget.hardware_controls.isVisible())
             with patch.object(self.widget, "act") as act:
-                self.widget.ports.addItem("fixture", "fixture")
-                self.widget.ports.setCurrentIndex(self.widget.ports.count() - 1)
-                self.widget.device_action("install")
-                self.assertEqual(act.call_args.args[1]["hardware_model"], "ai-flame-v01")
+                self.widget.device_action("discover")
+                self.assertEqual(act.call_args.args[1]["hardware_model"], "yeelight-yltd003")
 
     def test_all_sources_and_pages_without_loading_a_browser(self):
         self.assertEqual(len(self.widget.source_checks), 22)
@@ -321,7 +307,7 @@ class NativeDesktopTests(unittest.TestCase):
         self.assertEqual(self.widget.tabs.count(), 6)
         self.assertFalse(any("QtWebEngine" in module for module in sys.modules))
         self.widget.tabs.setCurrentIndex(1)
-        self.wait(lambda: self.widget.ports.count() and not self.widget.api.pending)
+        self.wait(lambda: not self.widget.api.pending)
         self.widget.tabs.setCurrentIndex(2)
         rows = list(self.widget.source_rows.values())
         self.assertTrue(all(not row.isHidden() for row in rows))
@@ -529,7 +515,7 @@ class NativeDesktopTests(unittest.TestCase):
         self.connect_preview_fixture()
         self.assertEqual(self.widget.device_badge.text(), "已连接 1 台设备")
         self.assertEqual(self.widget.device_summary.text(), "设备已连接")
-        self.assertEqual(self.widget.device_connection_icon.property("connection"), "usb")
+        self.assertEqual(self.widget.device_connection_icon.property("connection"), "wifi")
         self.assertFalse(self.widget.device_connection_icon.isHidden())
         usb_image = self.widget.device_connection_icon.pixmap().toImage()
         self.hub.engine.device["port"] = "wifi://192.0.2.1:8766"
@@ -538,7 +524,7 @@ class NativeDesktopTests(unittest.TestCase):
         self.assertEqual(self.widget.device_badge.text(), "已连接 1 台设备")
         self.assertEqual(self.widget.device_connection_icon.property("connection"), "wifi")
         self.assertEqual(self.widget.device_status.toolTip(), "Wi-Fi 连接")
-        self.assertNotEqual(usb_image, self.widget.device_connection_icon.pixmap().toImage())
+        self.assertEqual(usb_image, self.widget.device_connection_icon.pixmap().toImage())
         self.assertEqual(self.widget.device_summary_icon.property("connection"), "wifi")
         self.hub.engine.device["online"] = False
         self.widget.poll(force=True)
@@ -805,7 +791,8 @@ class NativeDesktopTests(unittest.TestCase):
 
     def test_zero_brightness_explains_and_blocks_physical_test(self):
         self.select_light_settings_fixture()
-        self.widget.brightness.setValue(0)
+        for control in self.widget.yeelight_brightness_controls.values():
+            control.setValue(0)
         self.wait(lambda: self.hub.transport.records["one"]["light_settings"]["brightness"] == 0 and not self.widget.writing and not self.widget.api.pending)
         self.assertEqual(self.widget.notice_kind, "brightness")
         self.assertIn("0%", self.widget.notice_text.text())
@@ -828,7 +815,7 @@ class NativeDesktopTests(unittest.TestCase):
     def select_light_settings_fixture(self, count=1):
         with self.hub.lock:
             for device_id in ("one", "two")[:count]:
-                record = {"device_id": device_id, "hardware_model": "ai-flame-v01",
+                record = {"device_id": device_id, "hardware_model": "yeelight-yltd003",
                           "connection_paused": True, "light_settings": {"brightness": 20, "reduced": False}}
                 self.hub.transport.records[device_id] = record
                 self.hub.transport.connection(device_id, record)
@@ -836,90 +823,24 @@ class NativeDesktopTests(unittest.TestCase):
         self.widget.poll(force=True)
         self.wait(lambda: self.widget.hardware_mode() and not self.widget.api.pending)
         self.widget.navigate(1)
-        self.widget.choose_device_model("ai-flame-v01")
+        self.widget.choose_device_model("yeelight-yltd003")
         self.wait(lambda: self.widget.selected_device_id == "one" and not self.widget.device_selection_loading and not self.widget.api.pending)
 
-    def test_brightness_and_motion_are_in_device_configuration_and_save_independently(self):
-        self.select_light_settings_fixture(2)
-        self.assertEqual(self.widget.brightness_controls, [self.widget.brightness])
-        self.assertFalse(self.widget.tabs.widget(3).isAncestorOf(self.widget.brightness))
-        self.assertTrue(self.widget.tabs.widget(1).isAncestorOf(self.widget.brightness))
-        self.assertNotIn("reduced", self.widget.checks)
-        self.widget.brightness.setValue(8)
-        self.wait(lambda: self.hub.transport.records["one"]["light_settings"]["brightness"] == 8 and not self.widget.api.pending)
-        self.widget.device_reduced.setChecked(True)
-        self.wait(lambda: self.hub.transport.records["one"]["light_settings"]["reduced"] and not self.widget.api.pending)
-        self.assertEqual(self.hub.transport.records["two"]["light_settings"], {"brightness": 20, "reduced": False})
-        self.assertEqual(self.hub.engine.settings["brightness"], 20)
-        self.assertFalse(self.hub.engine.settings["reduced"])
-        self.assertEqual(self.widget.brightness_value.text(), "8%")
-        self.widget.device_instances.setCurrentIndex(self.widget.device_instances.findData("two"))
-        self.wait(lambda: not self.widget.device_selection_loading and not self.widget.api.pending)
-        self.assertEqual(self.widget.brightness.value(), 20)
-        self.assertFalse(self.widget.device_reduced.isChecked())
 
     def test_pending_brightness_save_stays_with_original_device_on_selection_change(self):
         self.select_light_settings_fixture(2)
-        self.widget.brightness.setValue(7)
+        self.widget.yeelight_brightness_controls["working"].setValue(7)
         self.widget.device_instances.setCurrentIndex(self.widget.device_instances.findData("two"))
-        self.wait(lambda: self.hub.transport.records["one"]["light_settings"]["brightness"] == 7 and not self.widget.device_selection_loading and not self.widget.writing and not self.widget.api.pending)
+        self.wait(lambda: self.hub.transport.records["one"]["light_settings"]["state_brightness"]["working"] == 7 and not self.widget.device_selection_loading and not self.widget.writing and not self.widget.api.pending)
         self.assertEqual(self.widget.selected_device_id, "two")
-        self.assertEqual(self.widget.brightness.value(), 20)
         self.assertEqual(self.hub.transport.records["two"]["light_settings"]["brightness"], 20)
-        self.widget.brightness.setValue(0)
+        for control in self.widget.yeelight_brightness_controls.values():
+            control.setValue(0)
         self.wait(lambda: self.hub.transport.records["two"]["light_settings"]["brightness"] == 0 and not self.widget.api.pending)
-        self.assertFalse(self.widget.brightness_note.isHidden())
         self.assertFalse(self.widget.brightness_off())
 
-    def test_opening_network_list_scans_and_preserves_manual_input(self):
-        snapshot = self.widget.model
-        self.widget.render({**snapshot, "settings": {**snapshot["settings"], "mode": "hardware"}})
-        self.widget.navigate(1)
-        self.widget.open_device_details("ai-flame-v01")
-        self.widget.selected_device_id = "fixture-lamp"
-        self.widget.wifi_disclosure.button.setChecked(True)
-        self.widget.ssid.setText("Hidden network")
-        with patch.object(self.widget.api, "request") as request:
-            from PySide6.QtTest import QTest
-            QTest.mouseClick(self.widget.ssid, Qt.MouseButton.LeftButton)
-            self.app.processEvents()
-            self.assertTrue(self.widget.wifi_choices.view().isVisible())
-            self.assertTrue(self.widget.wifi_scan_running)
-            self.assertEqual(request.call_count, 1)
-            self.assertEqual(request.call_args.args[0], "/api/wifi-networks")
-            self.assertEqual(request.call_args.kwargs["body"], {"device_id": "fixture-lamp"})
-            self.widget.render_wifi_scan({"state": "succeeded", "message": "找到网络", "networks": [{"ssid": "Studio", "signal": -40}]})
-            self.assertEqual(request.call_count, 1)
-            self.assertEqual(self.widget.ssid.text(), "Hidden network")
-            self.widget.wifi_choices.hidePopup()
-        self.assertFalse(any(button.text() == "搜索 2.4 GHz Wi-Fi" for button in self.widget.findChildren(QPushButton)))
 
-    def test_wifi_scan_choices_preserve_manual_network_name(self):
-        self.widget.ssid.setText("Hidden network")
-        self.widget.render_wifi_scan({"state": "succeeded", "message": "找到网络", "networks": [{"ssid": "Studio", "signal": -40}, {"ssid": "Guest", "signal": -60}]})
-        self.assertEqual(self.widget.ssid.text(), "Hidden network")
-        self.assertEqual(self.widget.wifi_choices.count(), 2)
-        self.widget.wifi_choices.setCurrentIndex(1)
-        self.assertEqual(self.widget.ssid.text(), "Guest")
-        self.widget.render_wifi_scan({"state": "failed", "message": "请连接 ESP32"})
-        self.assertEqual(self.widget.ssid.text(), "Guest")
-        self.assertIn("ESP32", self.widget.wifi_scan_hint.text())
 
-    def test_invalid_wifi_is_explained_inline_without_starting_job(self):
-        with patch.object(self.hub.devices, "start") as start:
-            self.widget.ssid.setText("中" * 11)
-            self.widget.password.setText("12345678")
-            self.widget.provision()
-            self.assertFalse(self.widget.wifi_error.isHidden())
-            self.assertTrue(self.widget.ssid.property("invalid"))
-            self.widget.ssid.setText("test-network")
-            self.widget.password.setText("short")
-            self.widget.provision()
-            self.assertTrue(self.widget.password.property("invalid"))
-            start.assert_not_called()
-            self.widget.open_network.setChecked(True)
-            self.assertEqual(self.widget.password.text(), "")
-            self.assertFalse(self.widget.password.isEnabled())
 
     def test_activity_filters_tests_and_exports_only_selected_metadata(self):
         self.widget.manual("done")
@@ -951,34 +872,7 @@ class NativeDesktopTests(unittest.TestCase):
         self.assertNotIn("test-token", exported)
         self.assertNotIn("task_id", exported)
 
-    def test_missing_device_disables_usb_and_destructive_actions(self):
-        self.widget.navigate(1)
-        self.wait(lambda: not self.widget.api.pending)
-        self.widget.ports.clear()
-        self.widget.update_busy()
-        self.assertTrue(
-            all(not button.isEnabled() for button in self.widget.port_buttons)
-        )
-        self.assertFalse(self.widget.flash_button.isEnabled())
-        self.assertFalse(self.widget.firmware_disclosure.button.isChecked())
 
-    def test_initialization_uses_bundled_image_without_file_selection(self):
-        self.connect_preview_fixture()
-        self.widget.ports.clear()
-        self.widget.ports.addItem("Fixture", "/dev/cu.fixture")
-        self.widget.update_busy()
-        self.assertFalse(self.widget.flash_button.isEnabled())
-        self.widget.confirm_board.setChecked(True)
-        self.assertFalse(self.widget.flash_button.isEnabled())
-        self.widget.confirm_flash.setChecked(True)
-        self.assertTrue(self.widget.flash_button.isEnabled())
-        with patch.object(self.widget, "device_action") as action:
-            self.widget.flash_button.click()
-        action.assert_called_once_with(
-            "flash_base", confirm_board=True, confirm_flash=True
-        )
-        self.widget.confirm_board.setChecked(False)
-        self.assertFalse(self.widget.flash_button.isEnabled())
 
     def test_disconnected_service_disables_writes_and_offers_retry(self):
         self.connect_preview_fixture()
@@ -986,7 +880,7 @@ class NativeDesktopTests(unittest.TestCase):
         self.assertEqual(self.widget.device_status.toolTip(), "")
         self.assertTrue(self.widget.device_connection_icon.isHidden())
         self.assertTrue(
-            all(not control.isEnabled() for control in self.widget.brightness_controls)
+            all(not control.isEnabled() for control in self.widget.yeelight_brightness_controls.values())
         )
         self.assertFalse(self.widget.retry_button.isHidden())
         self.assertFalse(self.widget.statusbar.isHidden())
@@ -994,7 +888,7 @@ class NativeDesktopTests(unittest.TestCase):
         self.assertTrue(all(not check.isEnabled() for check in self.widget.source_checks.values()))
         self.widget.poll(force=True)
         self.wait(lambda: self.widget.ready and not self.widget.api.pending)
-        self.assertTrue(all(not control.isEnabled() for control in self.widget.brightness_controls))
+        self.assertTrue(all(not control.isEnabled() for control in self.widget.yeelight_brightness_controls.values()))
         self.assertTrue(self.widget.duration.isEnabled())
 
     def test_real_trial_without_hardware_and_transition_to_device(self):
@@ -1134,27 +1028,6 @@ class NativeDesktopTests(unittest.TestCase):
         self.assertTrue(self.widget.home_sources_row.isHidden())
         self.assertFalse(self.widget.home_sources_empty.isHidden())
 
-    def test_connection_buttons_follow_actual_transport_and_selected_port(self):
-        snapshot = self.widget.model
-        self.widget.ports.clear()
-        self.widget.ports.addItem("USB A", "COM1")
-        self.widget.ports.addItem("USB B", "COM2")
-        self.widget.render_device({"wifi_available": True, "wifi_info_current": True, "wifi_ssid": "Studio", "wifi_connected": True})
-        self.assertIn("Studio", self.widget.wifi_network.text())
-        for online, port, selected, usb_enabled, wifi_enabled in (
-            (True, "COM1", 0, False, True),
-            (True, "COM1", 1, True, True),
-            (True, "wifi://192.0.2.1:8766", 0, True, False),
-            (False, "COM1", 0, True, True),
-        ):
-            self.widget.render({**snapshot, "settings": {**snapshot["settings"], "mode": "hardware"},
-                                "device": {"online": online, "port": port}})
-            self.widget.ports.setCurrentIndex(selected)
-            self.widget.update_busy()
-            self.assertEqual(self.widget.usb_connect_button.isEnabled(), usb_enabled)
-            self.assertEqual(self.widget.wifi_connect_button.isEnabled(), wifi_enabled)
-        self.widget.render_device({"wifi_available": True, "wifi_info_current": False, "wifi_info_known": True, "wifi_ssid": "Studio"})
-        self.assertIn("上次记录", self.widget.wifi_network.text())
 
     def test_connecting_never_flashes_offline_or_claims_online(self):
         snapshot = self.widget.model
@@ -1203,7 +1076,7 @@ class NativeDesktopTests(unittest.TestCase):
         return dialog, cancel
 
     def test_app_reset_cancel_is_default_and_preserves_local_state_without_request(self):
-        self.widget.ssid.setText("Private network")
+        self.widget.yeelight_host.setText("Private network")
         self.widget.selected_device_id = "saved-device"
         dialog, cancel = self.reset_dialog_fixture(False)
         with patch("aiflame.desktop.widgets.QMessageBox", return_value=dialog), patch.object(self.widget.api, "request") as request:
@@ -1211,7 +1084,7 @@ class NativeDesktopTests(unittest.TestCase):
         dialog.setDefaultButton.assert_called_once_with(cancel)
         dialog.setEscapeButton.assert_called_once_with(cancel)
         request.assert_not_called()
-        self.assertEqual(self.widget.ssid.text(), "Private network")
+        self.assertEqual(self.widget.yeelight_host.text(), "Private network")
         self.assertEqual(self.widget.selected_device_id, "saved-device")
         self.assertFalse(self.widget.reset_pending)
         self.assertTrue(self.widget.reset_button.isEnabled())
@@ -1222,9 +1095,9 @@ class NativeDesktopTests(unittest.TestCase):
         fresh = deepcopy(self.widget.model)
         self.widget.navigate(5)
         self.widget.selected_device_id = "saved-device"
-        self.widget.selected_device_model = "ai-flame-v02"
-        self.widget.ssid.setText("Private network")
-        self.widget.password.setText("Private password")
+        self.widget.selected_device_model = "yeelight-yldp005"
+        self.widget.yeelight_host.setText("Private network")
+        self.widget.history_search.setText("Private password")
         self.widget.yeelight_host.setText("192.0.2.8")
         self.widget.cli_config_dirs["codex"].setText("/tmp/custom-cli")
         self.widget.history_search.setText("old query")
@@ -1255,15 +1128,13 @@ class NativeDesktopTests(unittest.TestCase):
         self.assertFalse(self.widget.brightness_timer.isActive())
         self.assertIsNone(self.widget.pending_device_brightness)
         self.assertIsNone(self.widget.selected_device_id)
-        self.assertEqual(self.widget.selected_device_model, "ai-flame-v01")
+        self.assertEqual(self.widget.selected_device_model, "yeelight-yltd003")
         self.assertIsNone(self.widget.manual_task)
         self.assertEqual(self.widget.device_test_deadlines, {})
         self.assertEqual(self.widget.integration_plans, {})
-        self.assertEqual(self.widget.brightness.value(), fresh["settings"]["brightness"])
-        self.assertEqual(self.widget.device_reduced.isChecked(), fresh["settings"]["reduced"])
         self.assertEqual(self.widget.device_version.text(), "连接后读取固件版本")
-        self.assertEqual(self.widget.device_model_title.text(), "AI Flame 0.1")
-        for edit in (self.widget.ssid, self.widget.password, self.widget.yeelight_host,
+        self.assertEqual(self.widget.device_model_title.text(), "Yeelight 屏幕挂灯 Pro")
+        for edit in (self.widget.yeelight_host, self.widget.history_search, self.widget.yeelight_host,
                      self.widget.cli_config_dirs["codex"], self.widget.history_search):
             self.assertEqual(edit.text(), "")
         self.assertEqual(self.widget.tabs.currentIndex(), 0)
@@ -1274,8 +1145,8 @@ class NativeDesktopTests(unittest.TestCase):
         self.assertEqual([call[0] for call in requests if call[2] is not None], ["/api/reset"])
 
     def test_app_reset_failure_preserves_inputs_and_allows_retry(self):
-        self.widget.ssid.setText("Private network")
-        self.widget.password.setText("Private password")
+        self.widget.yeelight_host.setText("Private network")
+        self.widget.history_search.setText("Private password")
         self.widget.selected_device_id = "saved-device"
         dialog, _ = self.reset_dialog_fixture(True)
         requests = []
@@ -1285,8 +1156,8 @@ class NativeDesktopTests(unittest.TestCase):
             requests[0][1]["failed"]()
         self.assertFalse(self.widget.reset_pending)
         self.assertFalse(self.widget.writing)
-        self.assertEqual(self.widget.ssid.text(), "Private network")
-        self.assertEqual(self.widget.password.text(), "Private password")
+        self.assertEqual(self.widget.yeelight_host.text(), "Private network")
+        self.assertEqual(self.widget.history_search.text(), "Private password")
         self.assertEqual(self.widget.selected_device_id, "saved-device")
         self.assertTrue(self.widget.reset_button.isEnabled())
         self.assertEqual(self.widget.message.text(), "重置失败")
@@ -1314,7 +1185,6 @@ class NativeDesktopTests(unittest.TestCase):
     def test_quiet_times_and_zero_brightness_explanation_are_conditional(self):
         self.widget.navigate(3)
         self.assertTrue(self.widget.quiet_times_box.isHidden())
-        self.assertTrue(self.widget.brightness_note.isHidden())
         self.widget.checks["quiet_enabled"].setChecked(True)
         self.wait(lambda: not self.widget.writing and not self.widget.api.pending)
         self.assertFalse(self.widget.quiet_times_box.isHidden())
@@ -1328,10 +1198,9 @@ class NativeDesktopTests(unittest.TestCase):
         self.wait(lambda: not self.widget.writing and not self.widget.api.pending)
         self.assertTrue(self.widget.quiet_times_box.isHidden())
         self.select_light_settings_fixture()
-        self.widget.brightness.setValue(0)
+        for control in self.widget.yeelight_brightness_controls.values():
+            control.setValue(0)
         self.wait(lambda: self.hub.transport.records["one"]["light_settings"]["brightness"] == 0 and not self.widget.writing and not self.widget.api.pending)
-        self.assertFalse(self.widget.brightness_note.isHidden())
-        self.assertIn("0%", self.widget.brightness_note.text())
 
     def test_activity_selection_survives_new_event_and_deselection_survives_refresh(self):
         with self.hub.lock:
@@ -1359,14 +1228,14 @@ class NativeDesktopTests(unittest.TestCase):
         with self.hub.lock:
             self.hub.engine.update_settings({'duration': 45})
             self.hub.engine.accept(make_event('local-script', 'before-reset', 'done'), 'local-script')
-        self.widget.password.setText('old draft')
+        self.widget.history_search.setText('old draft')
         self.widget.reset_pending = True
         self.widget.act('/api/reset', {'confirm': True}, self.widget.reset_finished)
         self.wait(lambda: not self.widget.writing and not self.widget.api.pending)
         self.assertNotEqual(self.hub.config['dashboard'], old_cookie)
         self.assertEqual(self.widget.model['events'], [])
         self.assertEqual(self.widget.model['settings']['duration'], 10)
-        self.assertEqual(self.widget.password.text(), '')
+        self.assertEqual(self.widget.history_search.text(), '')
         self.assertEqual(self.widget.tabs.currentIndex(), 0)
         self.widget.act('/api/settings', {'duration': 9})
         self.wait(lambda: not self.widget.writing and not self.widget.api.pending)
@@ -1397,9 +1266,9 @@ class NativeDesktopTests(unittest.TestCase):
         event = {"id": "receipt-event", "source": "local-script", "state": "done",
                  "reason": "completed", "created": time.time(), "status": "applied",
                  "delivery_summary": {"reason": "设备已确认接收指令", "devices": [
-                     {"device_id": "desk-one", "name": "AI Flame 0.1", "status": "applied",
+                     {"device_id": "desk-one", "name": "Yeelight 屏幕挂灯 Pro", "status": "applied",
                       "reason": "设备已确认接收指令"},
-                     {"device_id": "desk-two", "name": "AI Flame 0.2", "status": "offline",
+                     {"device_id": "desk-two", "name": "Yeelight W3 彩色灯泡", "status": "offline",
                       "reason": "事件到达时设备离线，未收到设备回执"},
                  ]}}
         snapshot["events"] = [event]
@@ -1421,8 +1290,8 @@ class NativeDesktopTests(unittest.TestCase):
         self.assertNotIn("AI Flame", result)
         detail = self.activity_detail_text()
         self.assertIn("处理结果：\n已确认 1/2 台设备", detail)
-        self.assertIn("设备回执\nAI Flame 0.1（desk-one）\n设备已确认接收指令", detail)
-        self.assertIn("AI Flame 0.2（desk-two）\n事件到达时设备离线", detail)
+        self.assertIn("设备回执\nYeelight 屏幕挂灯 Pro（desk-one）\n设备已确认接收指令", detail)
+        self.assertIn("Yeelight W3 彩色灯泡（desk-two）\n事件到达时设备离线", detail)
         self.assertIn("桌面通知\n系统通知权限未允许", detail)
         self.assertNotIn("已收到事件 →", detail)
         self.assertNotIn("未确认：", detail)
@@ -1437,7 +1306,7 @@ class NativeDesktopTests(unittest.TestCase):
         self.assertEqual(result, "已确认 2/2 台设备")
         self.assertEqual(self.widget.history.currentRow(), 0)
         self.assertTrue(self.widget.history.selectionModel().hasSelection())
-        self.assertIn("AI Flame 0.2（desk-two）\n设备已确认接收指令", self.activity_detail_text())
+        self.assertIn("Yeelight W3 彩色灯泡（desk-two）\n设备已确认接收指令", self.activity_detail_text())
 
     def test_activity_detail_emphasizes_result_and_escapes_device_text(self):
         snapshot = deepcopy(self.activity_delivery_fixture())
@@ -1469,7 +1338,7 @@ class NativeDesktopTests(unittest.TestCase):
         self.assertEqual(self.widget.history.item(0, 3).text(), "等待发送 · 已确认 0/2 台设备")
         detail = self.activity_detail_text()
         self.assertIn("已进入提醒调度，等待设备回执", detail)
-        self.assertIn("AI Flame 0.1（desk-one）\n等待设备确认", detail)
+        self.assertIn("Yeelight 屏幕挂灯 Pro（desk-one）\n等待设备确认", detail)
         self.assertNotIn("失败", detail)
         self.assertNotIn("internal-output", detail)
         self.assertNotIn("火焰灯：", detail)
@@ -1488,7 +1357,7 @@ class NativeDesktopTests(unittest.TestCase):
         self.assertIn("desk-two", detail)
         self.assertNotIn("已确认", result)
         self.assertNotIn("未收到设备回执", detail)
-        self.assertIn("AI Flame 0.2", detail)
+        self.assertIn("Yeelight W3 Color Bulb", detail)
         self.assertEqual(self.widget.history.item(0, 3).toolTip(), result)
         self.widget.history_search.setText("desk-two")
         self.assertEqual(self.widget.history.rowCount(), 1)
@@ -1595,9 +1464,9 @@ class NativeDesktopTests(unittest.TestCase):
 
     def test_virtual_mode_never_requests_devices_even_with_saved_pairing(self):
         self.hub.config["device_id"] = "fixture-lamp"
-        with patch.object(self.hub.devices, "ports") as ports, patch.object(self.hub.devices, "status") as status:
+        with patch("aiflame.devices.yeelight.discover") as ports, patch.object(self.hub.devices, "status") as status:
             self.widget.navigate(1)
-            self.widget.scan_ports()
+            self.widget.device_action("discover")
             self.widget.poll(force=True)
             self.wait(lambda: not self.widget.api.pending)
             ports.assert_not_called()
@@ -1605,8 +1474,7 @@ class NativeDesktopTests(unittest.TestCase):
         self.assertTrue(self.widget.hardware_notice.isHidden())
         self.assertTrue(self.widget.hardware_controls.isHidden())
         self.assertFalse(self.widget.virtual_device_card.isHidden())
-        self.assertFalse(self.widget.scan_button.isEnabled())
-        self.assertFalse(self.widget.wifi_connect_button.isEnabled())
+        self.assertFalse(self.widget.yeelight_discover_button.isEnabled())
 
     def test_mode_selection_and_persistent_hardware_warning(self):
         self.assertTrue(self.widget.mode_buttons["virtual"].isChecked())

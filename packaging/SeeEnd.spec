@@ -3,18 +3,16 @@ from pathlib import Path
 import sys
 import os
 import tomllib
-from PyInstaller.utils.hooks import collect_data_files, collect_submodules
+from PyInstaller.utils.hooks import collect_data_files
 
 root = Path(SPECPATH).parent
 version = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
-hidden = collect_submodules("mpremote")
+hidden = []
 data = [
     (str(root / "LICENSE"), "."),
     (str(root / "THIRD_PARTY_NOTICES.md"), "."),
     (str(root / "LIBRARY_REPLACEMENT.md"), "."),
     (str(root / "aiflame/assets"), "aiflame/assets"),
-    (str(root / "aiflame/devices/firmware"), "aiflame/devices/firmware"),
-    (str(root / "aiflame/devices/wifi_protocol.py"), "aiflame/devices"),
     (
         str(root / "aiflame/integrations/chatgpt_web/extension"),
         "aiflame/integrations/chatgpt_web/extension",
@@ -25,7 +23,6 @@ data = [
     ),
 ]
 data.append((str(root / "aiflame/integrations/cli_tools/opencode_bundle"), "aiflame/integrations/cli_tools/opencode_bundle"))
-data.append((os.environ["SEEEND_ESPTOOL_BUNDLE"], "third_party/esptool"))
 data.append((os.environ["SEEEND_THIRD_PARTY_LICENSES"], "third_party_licenses"))
 a = Analysis(
     [str(root / "app.py")],
@@ -37,6 +34,8 @@ a = Analysis(
     runtime_hooks=[],
     excludes=[
         "esptool",
+        "mpremote",
+        "serial",
         "readline",
         "zmq",
         "IPython",
@@ -112,6 +111,6 @@ if sys.platform == "darwin":
             "LSBackgroundOnly": False,
             "LSUIElement": False,
             "NSHighResolutionCapable": True,
-            "NSLocalNetworkUsageDescription": "SeeEnd 在局域网发现并控制你的 AI Flame 和 Yeelight 灯光设备。",
+            "NSLocalNetworkUsageDescription": "SeeEnd 在局域网发现并控制你的 Yeelight 灯光设备。",
         },
     )
