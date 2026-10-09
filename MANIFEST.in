@@ -2,8 +2,7 @@ include README.en.md LIBRARY_REPLACEMENT.md
 include app.py package.json package-lock.json CONTRIBUTING.md
 recursive-include packaging *.py *.spec *.json
 recursive-include tests *.py *.js
-# Workspace docs are added by setup.py; this rule preserves them when rebuilding
-# an extracted source distribution.
-recursive-include docs *.md *.png *.jpg *.gif
+# Documentation lives in the repository and is included directly.
+recursive-include docs *.md *.png *.jpg *.gif *.svg *.html *.json *.txt *.zip
 prune docs/reference-full-analysis
 global-exclude __pycache__ *.py[cod] .DS_Store

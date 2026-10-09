@@ -67,9 +67,9 @@ class YeelightTransport(threading.Thread):
 
     def connect(self):
         expected = self.record["device_id"]
-        candidates = discover(self.record.get("yeelight_host"), model_id=self.model["id"])
+        candidates = discover(self.record.get("yeelight_host"), model_id=self.model["id"], stopping=self.stopping)
         if not any(item["device_id"] == expected for item in candidates):
-            candidates = discover(model_id=self.model["id"])
+            candidates = discover(model_id=self.model["id"], stopping=self.stopping)
         item = next((row for row in candidates if row["device_id"] == expected and matches_model(row, self.model["id"])), None)
         if not item:
             raise OSError(f"未发现已添加的 {self.model['name']}，请检查同一局域网及 Yeelight 局域网控制开关")

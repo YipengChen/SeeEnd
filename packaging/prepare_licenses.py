@@ -11,7 +11,6 @@ import shutil
 import sys
 import subprocess
 import tarfile
-import urllib.request
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -127,7 +126,7 @@ def main(download=False):
                     target.parent.mkdir(parents=True, exist_ok=True)
                     shutil.copy2(src, target)
         (dest / 'METADATA.txt').write_text(dist.read_text('METADATA') or dist.read_text('PKG-INFO') or '')
-        if name in {'pyserial', 'pyobjc-framework-UserNotifications'}:
+        if name == 'pyobjc-framework-UserNotifications':
             index = SOURCES / (name + '-pypi.json')
             if download:
                 subprocess.run(['curl', '--fail', '--location', '--silent', '--show-error',

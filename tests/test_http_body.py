@@ -1,4 +1,4 @@
-"""Reject truncated requests before JSON parsing or firmware staging."""
+"""Reject truncated requests before JSON parsing."""
 
 from email.message import Message
 from io import BytesIO

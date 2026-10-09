@@ -19,20 +19,22 @@
 | review/TEST_INSTRUCTIONS_EN.md | 提供给审核员的英文操作指南 |
 | STORE_ID_SETUP.md | 首次上传后对接扩展 ID 的步骤 |
 | SUBMISSION_CHECKLIST.md | 提交清单与待填写信息 |
-| FILES_SHA256.json | 文件校验值 |
+| FILES_SHA256.json | 当前本地材料校验值，不代表商店已接收这些修订 |
 
 ## 填写和发布
 
 先阅读 SUBMISSION_CHECKLIST.md。发布者已确认 Yipeng Chen 和公开邮箱 ypchenmail@gmail.com，邮箱已通过后台验证。下载、资料仓库和隐私政策地址已补齐。官网是选填项，隐私页面和审核所需桌面下载地址必须可访问。
 
-privacy/index.html 为静态页面，不依赖脚本或外部字体；可放在官网或静态托管平台。尚未执行对外发布，因此目前没有可填写的公开隐私网址。
+privacy/index.html 为静态页面，不依赖脚本或外部字体；可放在官网或静态托管平台。2026-10-09 已公开托管到 https://yipengchen.github.io/SeeEnd-downloads/ ，后台填写结果见 APPLICATION_STATUS.md。
 
 截图使用 2026 年 10 月 9 日真实扩展弹窗和 SeeEnd 网页接入界面，保留实际状态，没有合成“已完成”记录。界面不是第三方 AI 平台官方产品；不包含聊天正文、凭据或个人资料。宣传图使用项目既有 SeeEnd 图标。
 
-本地桌面产物：SeeEnd-0.8.4-Darwin-arm64.zip。应在完成 STORE_ID_SETUP.md 后发布匹配 ID 的新产物，不要直接把本地路径填写给审核员。
+本地桌面产物：SeeEnd-0.8.4-Darwin-arm64.zip。商店 ID 已对接；后续改动应重新发布并验证匹配 ID 的产物，不要直接把本地路径填写给审核员。
 
 ## 官方要求
 
 [注册开发者账号](https://developer.chrome.com/docs/webstore/register/)、[发布流程](https://developer.chrome.com/docs/webstore/publish)、[图片要求](https://developer.chrome.com/docs/webstore/images)、[隐私字段](https://developer.chrome.com/docs/webstore/cws-dashboard-privacy)、[审核测试说明](https://developer.chrome.com/docs/webstore/cws-dashboard-test-instructions)。
 
 支持页：https://yipengchen.github.io/SeeEnd-downloads/support.html 。
+
+商店操作与公开下载情况以日期化记录为准；本地重新打包不会自动更新公开安装包。旧截图保留当时的提交证据。

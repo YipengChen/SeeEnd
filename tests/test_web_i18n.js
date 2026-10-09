@@ -6,9 +6,9 @@ const { JSDOM } = require("jsdom");
 const settle = () => new Promise(setImmediate);
 
 async function fixture(language = "en", fail = false) {
-  const dom = new JSDOM(`<html lang="zh-CN"><head><title>火焰实验室</title></head><body>
+  const dom = new JSDOM(`<html lang="zh-CN"><head><title>SeeEnd</title></head><body>
     <select id="languageChoice"><option value="zh-CN">中文</option><option value="en">English</option></select>
-    <p id="status">工作中</p><p id="message"></p><input id="ssid" value="我的设备" placeholder="Wi-Fi 名称">
+    <p id="status">工作中</p><p id="message"></p><input id="host" value="我的设备" placeholder="灯具 IP，例如 192.168.1.100">
     <pre>连接设备</pre><span data-user-content>我的设备</span></body></html>`, {runScripts: "outside-only"});
   const context = dom.getInternalVMContext();
   const calls = [];
@@ -27,8 +27,8 @@ test("web language changes static and live text reversibly while preserving user
   const f = await fixture();
   assert.equal(f.dom.window.document.documentElement.lang, "en");
   assert.equal(f.get("status").textContent, "Working");
-  assert.equal(f.get("ssid").value, "我的设备");
-  assert.equal(f.get("ssid").placeholder, "Wi-Fi name");
+  assert.equal(f.get("host").value, "我的设备");
+  assert.equal(f.get("host").placeholder, "Lamp IP, e.g. 192.168.1.100");
   assert.equal(f.dom.window.document.querySelector("pre").textContent, "连接设备");
   assert.equal(f.dom.window.document.querySelector("[data-user-content]").textContent, "我的设备");
   f.get("status").textContent = "演示剩余 7 秒";
@@ -36,7 +36,7 @@ test("web language changes static and live text reversibly while preserving user
   assert.equal(f.get("status").textContent, "Demo: 7 seconds remaining");
   vm.runInContext("setLanguage('zh-CN')", f.context);
   assert.equal(f.get("status").textContent, "演示剩余 7 秒");
-  assert.equal(f.get("ssid").placeholder, "Wi-Fi 名称");
+  assert.equal(f.get("host").placeholder, "灯具 IP，例如 192.168.1.100");
   vm.runInContext("observer.disconnect()", f.context);
   f.dom.window.close();
 });

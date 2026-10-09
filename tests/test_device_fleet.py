@@ -57,8 +57,8 @@ class FleetTests(unittest.TestCase):
         self.engine.update_settings({"mode": "hardware"})
         self.lock = threading.RLock()
         self.config = {"hub_id": "fixture", "devices": {
-            "one": {"device_id": "one", "port": "COM1", "hardware_model": "yeelight-yltd003"},
-            "two": {"device_id": "two", "port": "COM2", "hardware_model": "yeelight-yldp005"}}}
+            "one": {"device_id": "one", "port": "wifi://192.0.2.1:55443", "hardware_model": "yeelight-yltd003"},
+            "two": {"device_id": "two", "port": "wifi://192.0.2.2:55443", "hardware_model": "yeelight-yldp005"}}}
         self.fleet = FleetTransportManager(self.engine.flame, self.lock, self.config)
         self.engine.flame.transport = self.fleet
         self.factory = patch("aiflame.transports.manager.YeelightTransport", FakeLamp)
@@ -229,7 +229,7 @@ class FleetTests(unittest.TestCase):
         self.assertEqual(data["selected_device_id"], "two")
         self.assertNotIn("private-secret", json.dumps(data))
         with self.assertRaises(EventError):
-            self.service.start({"action": "install", "device_id": "one", "port": "COM2", "hardware_model": "yeelight-yltd003"})
+            self.service.start({"action": "install", "device_id": "one", "port": "wifi://192.0.2.2:55443", "hardware_model": "yeelight-yltd003"})
 
     def test_light_targets_one_lamp_without_changing_shared_task_or_receipts(self):
         self.emit("working")

@@ -1,5 +1,6 @@
 """Exercise the built application's native CLI helper on the target OS."""
 
+import argparse
 import os
 from pathlib import Path
 import subprocess
@@ -8,15 +9,18 @@ import sys
 
 def main():
     root = Path(__file__).resolve().parents[1]
+    parser = argparse.ArgumentParser(description="Verify the frozen SeeEnd build")
+    parser.add_argument("--dist-dir", type=Path, default=root / "dist")
+    dist = parser.parse_args().dist_dir.resolve()
     if sys.platform == "darwin":
-        helper = root / "dist/SeeEnd.app/Contents/MacOS/SeeEnd"
+        helper = dist / "SeeEnd.app/Contents/MacOS/SeeEnd"
     elif sys.platform == "win32":
-        helper = root / "dist/SeeEnd/SeeEnd Helper.exe"
+        helper = dist / "SeeEnd/SeeEnd Helper.exe"
     else:
-        helper = root / "dist/SeeEnd/SeeEnd"
+        helper = dist / "SeeEnd/SeeEnd"
     if not helper.is_file():
         raise FileNotFoundError(helper)
-    # The GPL utility is a separate executable, with no SeeEnd module archive.
+    # Inspect the frozen module archive for retired hardware dependencies.
     from PyInstaller.archive.readers import CArchiveReader
     app_archive = CArchiveReader(str(helper))
     pyz = next(name for name in app_archive.toc if name.endswith(".pyz"))

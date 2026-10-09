@@ -31,7 +31,7 @@ macOS 已有实机验证记录；Windows 和 Linux 提供共享实现与原生�
 
 ## 从源码启动
 
-需要 Python 3.11 或更新版本；项目 CI 使用 3.11／3.13。先下载源码并进入 `code/` 目录。
+需要 Python 3.11 或更新版本；项目 CI 使用 3.11／3.13。先下载源码并进入本仓库目录。
 
 ```sh
 python -m venv .venv
@@ -67,11 +67,11 @@ python -m aiflame --hub
 
 安装后的 `seeend` 和 `seeend-hub` 命令分别对应桌面与 Hub 入口；旧命令 `ai-flame`、`ai-flame-hub` 作为兼容别名保留。Python 模块名 `aiflame`、原用户数据目录、`AIFLAME_DATA_DIR` 环境变量及内部接入标识保持兼容，已有配对、偏好和任务记录可继续沿用。
 
-详细接入步骤见[使用指南](../docs/quick-start.md)和[浏览器扩展说明](aiflame/integrations/chatgpt_web/extension/README.md)。Windows 浏览器桥接需要打包版提供的 Bridge 可执行文件。
+详细接入步骤见[使用指南](docs/quick-start.md)和[浏览器扩展说明](aiflame/integrations/chatgpt_web/extension/README.md)。Windows 浏览器桥接需要打包版提供的 Bridge 可执行文件。
 
 ## 编程工具的增量接入
 
-在「应用接入」找到对应工具，展开「高级设置」，先核对实际文件及目录，再点击「连接」。六个工具分别提供自动配置说明、连接前后步骤和可复制的增量片段／插件命令，详见[使用指南](../docs/quick-start.md#编程工具配置文件与增量接入)。
+在「应用接入」找到对应工具，展开「高级设置」，先核对实际文件及目录，再点击「连接」。六个工具分别提供自动配置说明、连接前后步骤和可复制的增量片段／插件命令，详见[使用指南](docs/quick-start.md#编程工具配置文件与增量接入)。
 
 「检查接入」会区分具体配置错误、来源未开启、配置就绪但未验证、任务进行中，以及已收到同一真实任务开始与完成。失败项会给出文件或事件名称和下一步；模拟测试与历史安装结果不会代替本次真实验证。
 
@@ -118,7 +118,7 @@ GitHub Actions 对推送和 PR 运行测试；桌面构建工作流支持手动�
 
 ## 项目结构
 
-以下运行、测试和构建目录位于 `code/`，文档位于仓库根目录的 `docs/`。
+以下目录均位于本仓库内，文档统一保存在 `docs/`。
 
 ```text
 aiflame/
@@ -132,12 +132,12 @@ aiflame/
   assets/         界面资源与 Web 控制台
 tests/            自动测试和手动验收工具
 packaging/        PyInstaller 构建与归档
-setup.py          源码包文档收集与链接适配
-../docs/          使用指南、架构、历史验收及产品资料
+setup.py          源码分发入口
+docs/             使用指南、架构、历史验收及产品资料
 ```
 
-- [架构与跨平台边界](../docs/architecture.md)
-- [历史验收记录](../docs/validation.md)：记录特定版本及设备上的结果，不代表当前所有环境均已验证。
+- [架构与跨平台边界](docs/architecture.md)
+- [历史验收记录](docs/validation.md)：记录特定版本及设备上的结果，不代表当前所有环境均已验证。
 - [贡献指南](CONTRIBUTING.md)
 - [第三方资源说明](THIRD_PARTY_NOTICES.md)
 
@@ -160,7 +160,7 @@ setup.py          源码包文档收集与链接适配
 
 在「我的设备 → 对应设备」分别设置工作中、完成、异常 / 等待输入的颜色与 0–100% 亮度；仅作用于所选设备。100% 直接下发为灯具协议的亮度参数 `100`，不额外缩放，亮度上限为 100%。将某个状态设为 0% 仅关闭该状态的灯光提醒，其他状态保持各自设置。两款 Yeelight 均使用恒定颜色与设定亮度，不使用呼吸、脉动或「减少动态效果」设置。每台灯具独立连接、断开、试亮与记录回执，可与其他 Yeelight 灯具同时同步任务。重新连接时不补播旧的完成提示。
 
-接入依据：[Yeelight 官方 LAN 协议](https://www.yeelight.com/download/Yeelight_Inter-Operation_Spec.pdf)、[官方 Chroma Connector 能力判断](https://github.com/Yeelight/Yeelight-Chroma-Connector/blob/main/ChromaBroadcastSampleApplication/ChromaBroadcastSampleApplicationDlg.cpp)、[官方产品册](https://en.yeelight.com/wp-content/uploads/sites/4/2023/08/Yeelight-Fun.pdf)。以发现响应中的 `lamp15`、物理 `id` 和 `support` 方法列表识别兼容灯具；通过 SSDP 风格 UDP `239.255.255.250:1982` 搜索（手动 IP 优先定向查询），使用 TCP `55443` 上以 CRLF 结尾的 JSON 控制。自动重连按物理 ID 重新搜索，避免 IP 变更时控制其他灯具。
+接入依据：[Yeelight 官方 LAN 协议](https://www.yeelight.com/download/Yeelight_Inter-Operation_Spec.pdf)、[官方 Chroma Connector 能力判断](https://github.com/Yeelight/Yeelight-Chroma-Connector/blob/main/ChromaBroadcastSampleApplication/ChromaBroadcastSampleApplicationDlg.cpp)、[官方产品册](https://en.yeelight.com/wp-content/uploads/sites/4/2023/08/Yeelight-Fun.pdf)。以发现响应中的 `lamp15`、物理 `id` 和 `support` 方法列表识别兼容灯具；通过 SSDP 风格 UDP `239.255.255.250:1982` 搜索（手动 IP 优先定向查询），一次局域网搜索约 4 秒，间隔 1 秒自动发送 3 轮发现查询，在同一 UDP 接收窗口合并迟到响应并按物理 ID 去重；手动 IP 查询收到有效响应后立即结束。使用 TCP `55443` 上以 CRLF 结尾的 JSON 控制。自动重连按物理 ID 重新搜索，避免 IP 变更时控制其他灯具。
 
 使用 `bg_set_scene` 的原生有限 color flow；固件未声明此方法时回退到 `bg_set_power` + `bg_start_cf`，不发送前光命令。灯效结束使用官方 `action=2` 自动关闭背光。工作与保持提示采用最长 30 秒的原生灯效，每 20 秒续期；应用异常退出或网络中断后，最后一次成功提交的灯效会自行结束。控制命令间隔至少 1.1 秒，低于官方每连接每分钟 60 条配额；灯具的总配额为每分钟 144 条，与其他控制软件共用。此版本不做 UDP 实时逐帧同步。
 

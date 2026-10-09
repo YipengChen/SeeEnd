@@ -8,6 +8,9 @@ from aiflame.devices.models import YEELIGHT_MODELS, hardware_model
 
 DISCOVERY_ADDRESS = ("239.255.255.250", 1982)
 CONTROL_PORT = 55443
+DISCOVERY_TIMEOUT = 4.0
+DISCOVERY_ATTEMPTS = 3
+DISCOVERY_RETRY_INTERVAL = 1.0
 # W3 (colorb, fw_ver 7) can accept TCP before its command handler is ready.
 # Queries sent immediately may be silently lost; a bounded settle period avoids
 # this on both the maintenance connection and the persistent transport.
@@ -63,25 +66,51 @@ def parse_discovery(data, sender, model_id=None):
             "firmware_version": headers.get("fw_ver", ""), "support": sorted(support)}
 
 
-def discover(host=None, timeout=1.5, *, model_id=None):
+def discover(host=None, timeout=DISCOVERY_TIMEOUT, *, model_id=None, stopping=None):
+    """Retry lossy UDP queries on one socket and merge all verified replies.
+
+    Keep the original socket open so delayed replies to earlier rounds are not
+    lost. A targeted lookup may finish as soon as that host is verified; a LAN
+    search uses its full bounded window to include slower and multiple lamps.
+    """
     host = lan_host(host) if host else None
+    if timeout <= 0 or (stopping and stopping.is_set()):
+        return []
     found = {}
+    interval = min(DISCOVERY_RETRY_INTERVAL, timeout / DISCOVERY_ATTEMPTS)
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as udp:
         udp.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 1)
-        udp.sendto(REQUEST, (host, 1982) if host else DISCOVERY_ADDRESS)
-        end = time.monotonic() + timeout
-        while time.monotonic() < end:
-            udp.settimeout(max(.01, end - time.monotonic()))
+        udp.bind(("", 0))
+        started = time.monotonic()
+        end, next_query, attempts = started + timeout, started, 0
+        while True:
+            now = time.monotonic()
+            if now >= end or (stopping and stopping.is_set()):
+                break
+            if attempts < DISCOVERY_ATTEMPTS and now >= next_query:
+                udp.sendto(REQUEST, (host, 1982) if host else DISCOVERY_ADDRESS)
+                attempts += 1
+                next_query = now + interval
+            wait = end - time.monotonic()
+            if attempts < DISCOVERY_ATTEMPTS:
+                wait = min(wait, next_query - time.monotonic())
+            if stopping:
+                wait = min(wait, .2)
+            if wait <= 0:
+                continue
+            udp.settimeout(wait)
             try:
                 data, sender = udp.recvfrom(4096)
             except socket.timeout:
-                break
+                continue  # A quiet round is not the end of the search.
             try:
                 item = parse_discovery(data, sender[0], model_id)
             except (ValueError, UnicodeError):
                 continue
             if item and (not host or item["host"] == host):
                 found[item["device_id"]] = item
+                if host:
+                    break
     return list(found.values())
 
 

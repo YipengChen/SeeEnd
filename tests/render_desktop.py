@@ -101,11 +101,8 @@ def main():
         widget.render({**engine.snapshot(), "maintenance": False, "hardware_paired": True})
         settle()
         widget.grab().save(str(output / "paired-offline.png"))
-        engine.device.update(online=True, port="/dev/cu.fixture", firmware_version="0.4.4", protocol_version="1.0")
-        widget.render({**engine.snapshot(), "maintenance": False})
-        settle()
-        widget.grab().save(str(output / "connected-usb.png"))
-        engine.device["port"] = "wifi://192.0.2.1:8766"
+        engine.device.update(online=True, device_id="fixture", hardware_model="yeelight-yltd003",
+                             transport="yeelight", port="wifi://192.0.2.1:55443", firmware_version="38")
         widget.render({**engine.snapshot(), "maintenance": False})
         settle()
         widget.grab().save(str(output / "connected-wifi.png"))

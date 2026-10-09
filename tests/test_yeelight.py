@@ -1,5 +1,6 @@
 """Yeelight wire framing, native effects, physical identity and fleet isolation."""
 import json
+import socket
 from contextlib import nullcontext
 from pathlib import Path
 import tempfile
@@ -30,6 +31,117 @@ BULB_ID = 'yeelight:0x654321'
 BULB_INFO = {**INFO, 'device_id': BULB_ID, 'model': 'colorb', 'name': 'YLDP005',
              'support': ['get_prop', 'set_power', 'start_cf', 'set_scene']}
 BULB_REPLY = REPLY.replace(b'lamp15', b'colorb').replace(b'0x123456', b'0x654321').replace(b'bg_', b'')
+
+
+class DiscoverySocket:
+    """Virtual-time UDP socket: timeout advances the clock without sleeping."""
+    def __init__(self, on_send=None, stopping=None):
+        self.now = 0.0
+        self.timeout = 0.0
+        self.events = []
+        self.sent = []
+        self.on_send = on_send
+        self.stopping = stopping
+        self.closed = False
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        self.closed = True
+
+    def setsockopt(self, *args):
+        pass
+
+    def bind(self, address):
+        self.bound = address
+
+    def settimeout(self, timeout):
+        self.timeout = timeout
+
+    def sendto(self, packet, address):
+        self.sent.append((self.now, packet, address))
+        if self.on_send:
+            self.on_send(self, len(self.sent))
+
+    def recvfrom(self, size):
+        deadline = self.now + self.timeout
+        self.events.sort(key=lambda item: item[0])
+        if self.events and self.events[0][0] <= deadline:
+            self.now, packet, host = self.events.pop(0)
+            return packet, (host, 1982)
+        self.now = deadline
+        if self.stopping:
+            self.stopping.set()
+        raise socket.timeout()
+
+
+class DiscoveryRetryTests(unittest.TestCase):
+    def search(self, sock, *args, **kwargs):
+        with patch('aiflame.devices.yeelight.socket.socket', return_value=sock) as create, \
+             patch('aiflame.devices.yeelight.time.monotonic', side_effect=lambda: sock.now):
+            rows = discover(*args, **kwargs)
+        create.assert_called_once()
+        self.assertTrue(sock.closed)
+        return rows
+
+    def test_first_two_queries_can_be_lost_without_repeating_ui_search(self):
+        def respond(sock, attempt):
+            if attempt == 3:
+                sock.events.append((sock.now + .1, REPLY, HOST))
+        sock = DiscoverySocket(respond)
+        self.assertEqual(self.search(sock)[0]['device_id'], IDENTITY)
+        self.assertEqual([round(item[0], 2) for item in sock.sent], [0, 1, 2])
+        self.assertEqual(sock.now, 4.0)
+
+    def test_late_reply_to_first_query_is_collected_on_original_socket(self):
+        def respond(sock, attempt):
+            if attempt == 1:
+                sock.events.append((2.8, REPLY, HOST))
+        sock = DiscoverySocket(respond)
+        self.assertEqual(self.search(sock)[0]['device_id'], IDENTITY)
+        self.assertEqual(len(sock.sent), 3)
+
+    def test_lan_search_merges_duplicates_and_keeps_waiting_for_other_lamps(self):
+        def respond(sock, attempt):
+            sock.events.append((sock.now + .1, REPLY, HOST))
+            if attempt == 3:
+                sock.events.append((3.8, BULB_REPLY, HOST))
+        sock = DiscoverySocket(respond)
+        self.assertEqual({row['device_id'] for row in self.search(sock)}, {IDENTITY, BULB_ID})
+        self.assertEqual(sock.now, 4.0)
+
+    def test_targeted_search_retries_filters_invalid_replies_and_returns_promptly(self):
+        def respond(sock, attempt):
+            if attempt == 1:
+                sock.events.extend([(.1, b'\xff', HOST), (.2, REPLY, '192.168.1.45'),
+                                    (.3, BULB_REPLY, HOST)])
+            if attempt == 2:
+                sock.events.append((1.1, REPLY, HOST))
+        sock = DiscoverySocket(respond)
+        rows = self.search(sock, HOST, model_id=YEELIGHT_MODEL)
+        self.assertEqual([row['device_id'] for row in rows], [IDENTITY])
+        self.assertEqual(len(sock.sent), 2)
+        self.assertAlmostEqual(sock.now, 1.1)
+        self.assertTrue(all(item[2] == (HOST, 1982) for item in sock.sent))
+
+    def test_empty_search_keeps_deadline_bounded_even_with_short_custom_timeout(self):
+        for timeout in (4, .6):
+            with self.subTest(timeout=timeout):
+                sock = DiscoverySocket()
+                self.assertEqual(self.search(sock, timeout=timeout), [])
+                self.assertEqual(len(sock.sent), 3)
+                self.assertAlmostEqual(sock.now, timeout)
+
+    def test_reconnect_discovery_stops_without_waiting_for_full_search(self):
+        stopping = threading.Event()
+        sock = DiscoverySocket(stopping=stopping)
+        self.assertEqual(self.search(sock, stopping=stopping), [])
+        self.assertAlmostEqual(sock.now, .2)
+        self.assertEqual(len(sock.sent), 1)
+        with patch('aiflame.devices.yeelight.socket.socket') as create:
+            self.assertEqual(discover(stopping=stopping), [])
+        create.assert_not_called()
 
 
 class YeelightTests(unittest.TestCase):

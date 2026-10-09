@@ -384,9 +384,8 @@ test("hardware model cards gate configuration and route model-specific operation
   d.render();
   vm.runInContext(`globalThis.calls = []; api = async (path, body) => {
     calls.push({path, body});
-    if (path === '/api/ports') return {ports: [{description: 'ESP32', port: 'fixture'}]};
     if (path === '/api/device' && body) return {action: body.action, state: 'succeeded', progress: 100, message: 'selected'};
-    if (path.startsWith('/api/device?')) return {hardware_model: selectedHardwareModel, selected_device_id: '', device: {online: false}, devices: [], paired_device: '', transport: 'usb', job: null};
+    if (path.startsWith('/api/device?')) return {hardware_model: selectedHardwareModel, selected_device_id: '', device: {online: false}, devices: [], paired_device: '', transport: 'yeelight', job: null};
     return {job: null};
   };`, d.context);
   const nav = d.dom.window.document.querySelector('[data-tab="device"]');
@@ -440,11 +439,10 @@ test("same-model devices keep independent selection and disconnect targets", asy
   assert.match(d.get("deviceBadge").textContent, /已连接 2 台/);
   vm.runInContext(`globalThis.calls = []; api = async (path, body) => {
     calls.push({path, body});
-    if (path === '/api/ports') return {ports: lamps.map(item => ({description: item.device_id, port: item.port}))};
     if (path.startsWith('/api/device?')) {
       const id = new URL(path, location.href).searchParams.get('device_id') ?? 'one';
       return {hardware_model: 'yeelight-yltd003', selected_device_id: id, devices: lamps,
-        device: lamps.find(item => item.device_id === id), selected_port: id, paired_device: id, transport: 'usb', job: null};
+        device: lamps.find(item => item.device_id === id), selected_port: id, paired_device: id, transport: 'yeelight', job: null};
     }
     return {job: null};
   };`, d.context);

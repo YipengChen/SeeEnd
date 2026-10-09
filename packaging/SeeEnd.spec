@@ -76,7 +76,7 @@ exe = EXE(
 )
 executables = [exe]
 if sys.platform == "win32":
-    # The helper has standard streams for browser native messaging and USB tools.
+    # The helper has standard streams for browser native messaging.
     helper = EXE(
         pyz,
         a.scripts,

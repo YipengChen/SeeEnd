@@ -507,24 +507,24 @@ class NativeDesktopTests(unittest.TestCase):
     def connect_preview_fixture(self):
         with self.hub.lock:
             self.hub.engine.update_settings({"mode": "hardware"})
-            self.hub.engine.device.update(online=True, port="/dev/cu.fixture", connected_at=1)
+            self.hub.engine.device.update(online=True, port="wifi://192.0.2.1:55443", connected_at=1)
         self.widget.poll(force=True)
         self.wait(lambda: self.widget.hardware_mode() and not self.widget.api.pending)
 
-    def test_connection_status_icons_follow_actual_port_and_disappear_offline(self):
+    def test_connection_status_icons_stay_wifi_across_lamp_hosts_and_disappear_offline(self):
         self.connect_preview_fixture()
         self.assertEqual(self.widget.device_badge.text(), "已连接 1 台设备")
         self.assertEqual(self.widget.device_summary.text(), "设备已连接")
         self.assertEqual(self.widget.device_connection_icon.property("connection"), "wifi")
         self.assertFalse(self.widget.device_connection_icon.isHidden())
-        usb_image = self.widget.device_connection_icon.pixmap().toImage()
-        self.hub.engine.device["port"] = "wifi://192.0.2.1:8766"
+        wifi_image = self.widget.device_connection_icon.pixmap().toImage()
+        self.hub.engine.device["port"] = "wifi://192.0.2.2:55443"
         self.widget.poll(force=True)
         self.wait(lambda: not self.widget.api.pending)
         self.assertEqual(self.widget.device_badge.text(), "已连接 1 台设备")
         self.assertEqual(self.widget.device_connection_icon.property("connection"), "wifi")
         self.assertEqual(self.widget.device_status.toolTip(), "Wi-Fi 连接")
-        self.assertEqual(usb_image, self.widget.device_connection_icon.pixmap().toImage())
+        self.assertEqual(wifi_image, self.widget.device_connection_icon.pixmap().toImage())
         self.assertEqual(self.widget.device_summary_icon.property("connection"), "wifi")
         self.hub.engine.device["online"] = False
         self.widget.poll(force=True)
