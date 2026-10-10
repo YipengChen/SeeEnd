@@ -65,6 +65,15 @@ class NativeDesktopTests(unittest.TestCase):
             time.sleep(0.005)
         self.fail("Native UI condition timed out")
 
+    def engine_snapshot(self):
+        with self.hub.lock:
+            return self.hub.engine.snapshot()
+
+    def desired_state(self):
+        # Queries run cleanup and must share the live Hub's database lock.
+        with self.hub.lock:
+            return self.hub.engine.desired()["state"]
+
     def test_device_model_selection_precedes_configuration(self):
         self.widget.navigate(1)
         self.assertTrue(self.widget.device_selector.isVisible())
@@ -347,13 +356,13 @@ class NativeDesktopTests(unittest.TestCase):
     def test_manual_start_completion_and_pause_use_real_api(self):
         self.widget.manual("working")
         self.wait(lambda: self.widget.manual_task and not self.widget.writing)
-        self.assertEqual(self.hub.engine.desired()["state"], "working")
+        self.assertEqual(self.desired_state(), "working")
         self.widget.manual("done")
         self.wait(lambda: not self.widget.writing)
-        self.assertEqual(self.hub.engine.desired()["state"], "done")
+        self.assertEqual(self.desired_state(), "done")
         self.widget.setting("paused", True)
         self.wait(lambda: self.hub.engine.settings["paused"] and not self.widget.api.pending)
-        self.assertEqual(self.hub.engine.desired()["state"], "idle")
+        self.assertEqual(self.desired_state(), "idle")
 
     def test_chatgpt_checkbox_checks_permissions_only_on_user_enable(self):
         result = {
@@ -478,7 +487,7 @@ class NativeDesktopTests(unittest.TestCase):
         self.assertFalse(self.widget.try_light_button.isEnabled())
 
     def test_screen_preview_never_writes_settings_or_creates_events(self):
-        before = self.hub.engine.snapshot()
+        before = self.engine_snapshot()
         self.assertIs(self.widget.preview_button.parentWidget(), self.widget.scene_frame)
         self.assertIs(self.widget.preview_caption.parentWidget(), self.widget.scene_frame)
         self.widget.preview_button.click()
@@ -495,7 +504,7 @@ class NativeDesktopTests(unittest.TestCase):
         self.assertFalse(self.widget.preview_timer.isActive())
         self.assertEqual(self.widget.preview_button.text(), "灯效演示")
         self.wait(lambda: not self.widget.flame.animation_timer.isActive())
-        after = self.hub.engine.snapshot()
+        after = self.engine_snapshot()
         self.assertEqual(before["events"], after["events"])
         self.assertEqual(before["settings"], after["settings"])
 
@@ -568,7 +577,7 @@ class NativeDesktopTests(unittest.TestCase):
         self.assertEqual(self.widget.poll_timer.interval(), 1500)
         self.assertEqual(self.widget.preview_button.text(), "灯效演示")
         self.assertTrue(self.widget.statusbar.isHidden())
-        self.assertEqual(self.hub.engine.snapshot()["events"], [])
+        self.assertEqual(self.engine_snapshot()["events"], [])
 
     def test_hiding_before_preview_start_reply_cancels_pending_demo(self):
         self.connect_preview_fixture()
@@ -578,7 +587,7 @@ class NativeDesktopTests(unittest.TestCase):
         self.assertIsNone(self.hub.engine.preview)
         self.assertIsNone(self.widget.hardware_preview_id)
         self.assertFalse(self.widget.poll_timer.isActive())
-        self.assertEqual(self.hub.engine.desired()["state"], "idle")
+        self.assertEqual(self.desired_state(), "idle")
 
     def test_hardware_preview_exit_and_mode_switch_cancel_only_demo(self):
         self.connect_preview_fixture()
@@ -804,9 +813,9 @@ class NativeDesktopTests(unittest.TestCase):
         self.wait(lambda: self.hub.transport.records["one"]["light_settings"]["brightness"] == 0 and not self.widget.writing and not self.widget.api.pending)
         self.assertEqual(self.widget.notice_kind, "brightness")
         self.assertIn("0%", self.widget.notice_text.text())
-        before = len(self.hub.engine.snapshot()["events"])
+        before = len(self.engine_snapshot()["events"])
         self.widget.manual("done")
-        self.assertEqual(len(self.hub.engine.snapshot()["events"]), before)
+        self.assertEqual(len(self.engine_snapshot()["events"]), before)
         self.widget.resolve_notice()
         self.assertEqual(self.widget.tabs.currentIndex(), 1)
         self.assertTrue(self.widget.preview_button.isEnabled())
@@ -900,7 +909,7 @@ class NativeDesktopTests(unittest.TestCase):
         self.assertTrue(self.widget.duration.isEnabled())
 
     def test_real_trial_without_hardware_and_transition_to_device(self):
-        self.assertEqual(self.hub.engine.snapshot()["events"], [])
+        self.assertEqual(self.engine_snapshot()["events"], [])
         with self.hub.lock:
             self.hub.engine.accept(
                 make_event("local-script", "real-trial", "working"), "local-script"
