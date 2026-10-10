@@ -8,7 +8,7 @@ Turn AI task status into a candle flame.
 
 SeeEnd is a local AI task notification app. It receives status events from command-line tools, web conversations, and local APIs, then uses an on-screen candle, desktop notifications, or physical lamps to signal work in progress, requests for input, completion, and errors. **No hardware is required**: the first launch defaults to virtual mode.
 
-Current version: **0.8.4 desktop preview** · Python **3.11+** · **Proprietary license**
+Current version: **0.8.5 desktop preview** · Python **3.11+** · **Proprietary license**
 
 ## Features
 
@@ -16,13 +16,13 @@ Current version: **0.8.4 desktop preview** · Python **3.11+** · **Proprietary 
 - **Multiple notification channels**: on-screen candle, menu bar / system tray status, desktop notifications, and Yeelight lamps over the LAN. Desktop notifications work independently of light output.
 - **Adjustable alerts**: set each lamp’s color and brightness independently for each task state; configure alert duration and quiet hours globally; export activity to CSV.
 - **Local processing**: the Hub listens only on `127.0.0.1:8765` and authenticates requests with credentials. Integrations collect task status metadata, without saving conversation content. No model API key is required by SeeEnd.
-- **Chinese and English**: choose **中文** or **English** under **Alert preferences → Language**. The selection is saved locally and applied immediately, including the tray and notifications. The local web dashboard also provides a language selector.
+- **Chinese and English**: choose **中文** or **English** under **Help and diagnostics → Language**. The selection is saved locally and applied immediately, including the tray and notifications.
 
 ## Integrations and platform scope
 
 | Integration | Current implementation | Verification limits |
 | --- | --- | --- |
-| Command line | Codex, Claude Code, Qoder CLI, DeepSeek Harness, Gemini CLI, OpenCode | Hooks or local plugins; restart the target session after connecting and verify each tool separately |
+| Command line | Codex, Claude Code, Qoder CLI, DeepSeek Harness, Gemini CLI, OpenCode | Hooks or local plugins; load the configuration as instructed for each tool and verify a new task |
 | Browser extension | ChatGPT, DeepSeek, Qianwen, Doubao, Yuanbao, Kimi, Zhipu, Claude, Gemini | Experimental; page structure changes may affect detection. Automated tests do not replace acceptance with real accounts |
 | macOS desktop clients | Doubao, Qianwen, Yuanbao, ordinary ChatGPT conversations | Experimental and disabled by default; requires system permissions and depends on client version and control structure |
 | Local HTTP API | Report task events from your scripts and tools | Uses separate source credentials; see the architecture documentation |
@@ -54,10 +54,10 @@ python -m aiflame
 ```
 
 1. Keep the default **Virtual mode**. You do not need to buy or connect a lamp.
-2. Connect the sources you use under **App integrations**. Web integration also requires loading the Chrome extension and connecting the local bridge.
+2. Choose the sources you use under **App integrations**: use **SeeEnd Skill** for coding tools or **Install browser extension** for websites, then follow the guide to prepare and verify them.
 3. Submit a new task in the corresponding AI app and observe the candle and activity records. Simulated diagnostics only verify the event path.
 4. For desktop notifications, enable them under **Alert preferences** and grant system permission.
-5. Choose **中文 / English** under **Alert preferences → Language** to switch the interface.
+5. Choose **中文 / English** under **Help and diagnostics → Language** to switch the interface.
 
 To run only the headless Hub, install the base dependencies and use this entry point. The desktop app already includes the Hub; a separate instance is usually unnecessary.
 
@@ -70,11 +70,13 @@ After installation, `seeend` and `seeend-hub` launch the desktop app and Hub res
 
 Detailed setup steps are in the [user guide (Chinese)](docs/quick-start.md) and [browser extension documentation (Chinese)](aiflame/integrations/chatgpt_web/extension/README.md). On Windows, browser bridging requires the Bridge executable supplied with the packaged app.
 
-## Incremental setup for coding tools
+Open **App integrations → Install browser extension** for a four-stage guide with actual screenshots, path copying, expected results, and a new-task check. No manual unzipping, lamp, or model API key is required. The distribution also includes the offline illustrated instructions.
 
-Find a tool in **App integrations**, expand **Advanced settings**, confirm the actual files and directories, and click **Connect**. All six tools provide automatic configuration guidance, before-and-after steps, and copyable incremental snippets or plugin commands. See the [user guide (Chinese)](docs/quick-start.md#编程工具配置文件与增量接入).
+## Connect coding tools with SeeEnd Skill
 
-Integration checks distinguish specific configuration errors, disabled sources, configuration that is ready but unverified, tasks in progress, and receipt of both start and completion for the same real task. Failures identify the file or event and the next step. Simulated tests and historical installation results do not replace a new real verification.
+In **App integrations → Coding tools**, select **Copy installation instruction** and paste it into your coding tool. The tool installs the complete `seeend/` Skill from [SeeEnd-skill](https://github.com/YipengChen/SeeEnd-skill) and configures its local integration. Use the same Skill in your tool for verification, diagnostics, repairs, updates, and removal.
+
+The app keeps one shared Skill entry, tool status, and reminder switches. Keep SeeEnd running; no lamp or model API key for SeeEnd is needed. Follow the Skill’s loading, Hook trust, or authorization steps, then verify a new task. Written configuration or simulated events do not prove a working integration. See the [user guide (Chinese)](docs/quick-start.md#编程工具通过-skill-接入).
 
 ## Optional hardware
 
@@ -130,7 +132,7 @@ aiflame/
   desktop/        Native PySide6 desktop interface
   devices/        Yeelight discovery, connection, and configuration
   transports/     Yeelight LAN communication
-  assets/         UI assets, translation catalog, and web dashboard
+  assets/         Desktop UI assets, icons, and translation catalog
 tests/            Automated tests and manual acceptance tools
 packaging/        PyInstaller build and archiving
 setup.py          Source distribution entry point

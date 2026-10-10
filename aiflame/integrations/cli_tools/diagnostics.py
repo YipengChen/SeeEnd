@@ -63,21 +63,21 @@ def diagnostics(db, *, source=None, config_dirs=None, profiles=None,
                 elif selected in profile_errors:
                     result["issues"].append(profile_errors[selected] + "；先修正格式或权限")
                 elif selected and selected not in result["installed_profiles"]:
-                    result["issues"].append("所选 Profile 尚未接入：" + str(profile_directory() / selected / "package.json") + "；点击「连接」安装本应用插件")
+                    result["issues"].append("所选 Profile 尚未接入：" + str(profile_directory() / selected / "package.json") + "；使用 SeeEnd Skill 为这个 Profile 安装接入")
                 elif not result["installed_profiles"]:
-                    result["issues"].append("尚无 Profile 安装 SeeEnd 插件；选择实际使用的 Profile 后自动连接")
+                    result["issues"].append("尚无 Profile 安装 SeeEnd 插件；使用 SeeEnd Skill 为实际使用的 Profile 安装接入")
                 if result["installed_profiles"]:
                     bridge_path = Path(config.get("bundle", "")) / "bridge.json"
                     try:
                         bridge = json.loads(bridge_path.read_text())
                         if bridge.get("helperArgv") != command("--cli-hook", current):
-                            result["issues"].append("DeepSeek 桥接指向旧版 SeeEnd：" + str(bridge_path) + "；自动修复所选 Profile")
+                            result["issues"].append("DeepSeek 桥接指向旧版 SeeEnd：" + str(bridge_path) + "；使用 SeeEnd Skill 修复所选 Profile 的接入路径")
                     except (OSError, ValueError, AttributeError):
-                        result["issues"].append("DeepSeek 桥接配置缺失或无法读取：" + str(bridge_path) + "；自动修复所选 Profile")
+                        result["issues"].append("DeepSeek 桥接配置缺失或无法读取：" + str(bridge_path) + "；先核对读取权限，再使用 SeeEnd Skill 按具体诊断修复")
                 result["limitations"] = ["仅检查所选／已安装的 Profile；其他 Profile 需分别连接。"]
                 for executable in ("dsh", "pnpm"):
                     found = bool(shutil.which(executable))
-                    result["checks"].append({"id": executable, "status": "ok" if found else "warning", "message": executable + ("：SeeEnd 可调用" if found else "：SeeEnd 找不到，自动安装不可用"), "action": "在能运行此命令的环境启动 SeeEnd，或按引导从终端安装" if not found else ""})
+                    result["checks"].append({"id": executable, "status": "ok" if found else "warning", "message": executable + ("：SeeEnd 可调用" if found else "：SeeEnd 找不到，自动添加不可用"), "action": "在能运行此命令的环境启动 SeeEnd，再使用 SeeEnd Skill 重试" if not found else ""})
             elif current == "opencode":
                 from .opencode import wrapper
                 directory = directory_for(current, (config_dirs or {}).get(current))
@@ -89,7 +89,7 @@ def diagnostics(db, *, source=None, config_dirs=None, profiles=None,
                 for relative, content in expected.items():
                     target = directory / relative
                     if not target.exists():
-                        result["issues"].append("缺少 OpenCode 插件文件：" + str(target) + "；自动连接完整插件")
+                        result["issues"].append("缺少 OpenCode 插件文件：" + str(target) + "；使用 SeeEnd Skill 安装或修复接入，补齐插件")
                     elif target.read_bytes() != content:
                         result["issues"].append("OpenCode 插件内容不匹配：" + str(target) + "；先核对是否为第三方或手动修改，不能直接覆盖")
                     else:
@@ -98,9 +98,9 @@ def diagnostics(db, *, source=None, config_dirs=None, profiles=None,
                 try:
                     bridge = json.loads(target.read_text())
                     if bridge.get("helperArgv") != command("--cli-hook", current):
-                        result["issues"].append("OpenCode 桥接指向旧版 SeeEnd：" + str(target) + "；仅修复本应用拥有的文件")
+                        result["issues"].append("OpenCode 桥接指向旧版 SeeEnd：" + str(target) + "；使用 SeeEnd Skill 修复接入，仅更新本应用拥有的文件")
                 except (OSError, ValueError, AttributeError):
-                    result["issues"].append("OpenCode 桥接配置缺失或无效：" + str(target) + "；自动连接完整插件")
+                    result["issues"].append("OpenCode 桥接配置缺失或无效：" + str(target) + "；使用 SeeEnd Skill 核对配置位置及读取权限，按具体诊断修复")
                 result["limitations"] = ["重启 OpenCode 后加载插件；不修改 opencode.json / opencode.jsonc。"]
                 if not result["issues"]:
                     result["hooks_configured"] = list(provider.events)

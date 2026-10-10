@@ -31,6 +31,14 @@ def main():
         raise RuntimeError("Removed AI Flame modules were bundled")
     if sys.platform == "darwin" and (helper.parent.parent / "Resources/third_party/esptool").exists():
         raise RuntimeError("Removed esptool executable was bundled")
+    resources = helper.parent.parent / "Resources" if sys.platform == "darwin" else helper.parent / "_internal"
+    assets = resources / "aiflame/assets"
+    if (assets / "web").exists():
+        raise RuntimeError("Removed web console assets were bundled")
+    for filename in ("brands/codex.png", "devices/yeelight-yldp005.svg", "locales/en.json"):
+        if not (assets / filename).is_file():
+            raise RuntimeError("Missing shared desktop resource: " + filename)
+    print("Web console is absent; shared desktop icons and translations are bundled.")
     print("Desktop archive contains no AI Flame hardware modules or tools.")
     environment = {**os.environ, "AIFLAME_TEST_FROZEN_HELPER": str(helper)}
     return subprocess.call(

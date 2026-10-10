@@ -14,7 +14,7 @@ def existing_hub():
         urllib.request.ProxyHandler({}), urllib.request.HTTPCookieProcessor(jar)
     )
     try:
-        with opener.open("http://127.0.0.1:8765/", timeout=1):
+        with opener.open("http://127.0.0.1:8765/api/session", timeout=1):
             pass
         with opener.open("http://127.0.0.1:8765/api/status", timeout=1) as response:
             data = json.load(response)

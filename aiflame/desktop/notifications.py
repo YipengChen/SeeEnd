@@ -27,6 +27,25 @@ class SystemNotifications:
             except (ImportError, RuntimeError):
                 self.center = None
 
+    def status(self, completed):
+        """Read authorization without prompting or posting a notification."""
+        if sys.platform == "darwin":
+            if self.center is None:
+                completed("unavailable")
+                return
+            try:
+                def received(settings):
+                    code = int(settings.authorizationStatus())
+                    # Provisional/ephemeral authorization can also submit alerts.
+                    completed({0: "not_determined", 1: "denied", 2: "authorized",
+                               3: "authorized", 4: "authorized"}.get(code, "unknown"))
+                self.center.getNotificationSettingsWithCompletionHandler_(received)
+            except Exception:
+                completed("unknown")
+        else:
+            completed("available" if self.tray.isSystemTrayAvailable() and self.tray.supportsMessages()
+                      else "unavailable")
+
     def submit(self, message, completed):
         if sys.platform == "darwin":
             if self.center is None:
@@ -52,6 +71,8 @@ class SystemNotifications:
 
 class NotificationConsumer(QObject):
     receipt = Signal(object)
+    permission_status = Signal(str)
+    test_result = Signal(str)
 
     def __init__(self, dashboard, backend, parent=None):
         super().__init__(parent)
@@ -59,10 +80,32 @@ class NotificationConsumer(QObject):
         self.closed = False
         self.pending = False
         self.receipt.connect(self.acknowledge, Qt.ConnectionType.QueuedConnection)
+        if hasattr(dashboard, "notification_status_requested"):
+            dashboard.notification_status_requested.connect(self.check_status)
+            dashboard.notification_test_requested.connect(self.test_notification)
+            self.permission_status.connect(dashboard.update_notification_status, Qt.ConnectionType.QueuedConnection)
+            self.test_result.connect(dashboard.notification_test_finished, Qt.ConnectionType.QueuedConnection)
+            self.check_status()
         self.timer = QTimer(self)
         self.timer.setInterval(1000)
         self.timer.timeout.connect(self.poll)
         self.timer.start()
+
+    def check_status(self):
+        if not self.closed:
+            try:
+                self.backend.status(self.permission_status.emit)
+            except Exception:
+                self.permission_status.emit("unknown")
+
+    def test_notification(self):
+        if not self.closed:
+            try:
+                self.backend.submit({"event_id": "seeend-notification-test", "title": t("SeeEnd · 测试通知"),
+                                     "body": t("你已收到 SeeEnd 测试通知。此测试不代表真实任务或实体灯验证。")},
+                                    self.test_result.emit)
+            except Exception:
+                self.test_result.emit("failed")
 
     def poll(self):
         if self.closed or self.pending or not self.dashboard.ready:

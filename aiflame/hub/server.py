@@ -2,7 +2,6 @@
 
 import http.cookies
 import json
-import mimetypes
 import secrets
 import signal
 import threading
@@ -11,7 +10,7 @@ import uuid
 from urllib.parse import urlsplit, parse_qs
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from aiflame import __version__
-from aiflame.core.paths import PACKAGE, ensure_runtime, load_config
+from aiflame.core.paths import ensure_runtime, load_config
 from aiflame.core.engine import Engine
 from aiflame.core.activity import ActivityMonitor
 from aiflame.core.verification import begin_verification
@@ -19,10 +18,10 @@ from aiflame.core.verification import verification_summary
 from aiflame.core.events import EventError
 from aiflame.transports.fleet import FleetTransportManager as TransportManager
 from aiflame.devices.fleet import FleetDeviceService as DeviceService
-from aiflame.devices.models import DEFAULT_MODEL, MODELS
+from aiflame.devices.models import DEFAULT_MODEL
 from aiflame.integrations.codex.diagnostics import diagnostics
 from aiflame.integrations.manual.actions import DemoTasks, test as manual_test
-from aiflame.integrations.chatgpt_web.downloads import extension_archive
+from aiflame.integrations.chatgpt_web.downloads import extension_archive, extension_folder_info, prepare_extension_folder
 from aiflame.integrations.chatgpt_web.host import WEB_SOURCES
 from aiflame.integrations.testing import TriggerTests
 from aiflame.integrations.registry import SOURCES
@@ -227,34 +226,16 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         try:
             self.validate_host()
-            assets = {
-                "/": "index.html",
-                "/app.js": "app.js",
-                "/shared.js": "shared.js",
-                "/i18n.js": "i18n.js",
-                "/locales/en.json": "locales/en.json",
-                "/style.css": "style.css",
-                "/devices.js": "devices.js",
-            }
-            assets.update({f"/device-icons/{model['id']}.svg": f"devices/{model['id']}.svg" for model in MODELS})
-            assets.update({
-                f"/brands/{brand}.png": f"brands/{brand}.png"
-                for brand in ("codex", "claude", "qoder", "gemini", "opencode", "chatgpt", "deepseek", "qianwen", "doubao", "yuanbao", "kimi", "zhipu")
-            })
-            if self.path in assets:
-                file = PACKAGE / "assets/web" / assets[self.path]
-                self.reply(
-                    200,
-                    file.read_bytes(),
-                    mimetypes.guess_type(file.name)[0] + "; charset=utf-8",
-                    cookie=self.path == "/",
-                )
+            if not self.path.startswith(("/api/", "/v1/")):
+                raise EventError("路径不存在", 404)
+            if self.path == "/api/session":
+                self.reply(200, {"app_name": "SeeEnd", "app_version": __version__}, cookie=True)
                 return
             identity = self.identity()
             c = self.c
             if urlsplit(self.path).path in ("/api/integration-guide", "/api/integration-check"):
                 if identity != "dashboard":
-                    raise EventError("需要控制台会话", 403)
+                    raise EventError("需要桌面 App 会话", 403)
                 query = parse_qs(urlsplit(self.path).query, keep_blank_values=True)
                 if set(query) - {"source", "config_dir", "profile"} or any(len(values) != 1 for values in query.values()):
                     raise EventError("接入查询包含未知或重复参数")
@@ -295,6 +276,9 @@ class Handler(BaseHTTPRequestHandler):
             if identity == "dashboard" and urlsplit(self.path).path == "/api/device":
                 query = parse_qs(urlsplit(self.path).query, keep_blank_values=True)
                 self.reply(200, c.devices.status(query.get("model", [None])[0], query.get("device_id", [None])[0]))
+                return
+            if identity == "dashboard" and self.path == "/api/browser-extension":
+                self.reply(200, extension_folder_info(c.runtime))
                 return
             if identity == "dashboard" and self.path == "/api/trigger-test":
                 self.reply(200, c.tests.status())
@@ -433,7 +417,12 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply(code, response)
                 return
             if identity != "dashboard":
-                raise EventError("需要控制台会话", 403)
+                raise EventError("需要桌面 App 会话", 403)
+            if self.path == "/api/browser-extension/prepare":
+                if body:
+                    raise EventError("准备扩展文件夹不接受额外字段")
+                self.reply(200, prepare_extension_folder(c.runtime))
+                return
             if self.path == "/api/reset":
                 if set(body) != {"confirm"} or body["confirm"] is not True:
                     raise EventError("请先确认重置 APP")
@@ -507,7 +496,7 @@ class Handler(BaseHTTPRequestHandler):
                             from aiflame.integrations.chatgpt_web.install import install
 
                             install("chrome")
-                            message = "Chrome 共用网页桥接已安装。请加载或重新加载浏览器扩展，并刷新需要接入的 AI 网页。"
+                            message = "通信配置已准备。请刷新 AI 对话网页，并发送一条新提问验证；配置完成还不代表网页接入已验证。"
                         else:
                             raise EventError("接入方式不受支持")
                 except json.JSONDecodeError as error:
@@ -606,7 +595,7 @@ def main():
 
     signal.signal(signal.SIGTERM, stop)
     signal.signal(signal.SIGINT, stop)
-    print("SeeEnd: http://127.0.0.1:8765", flush=True)
+    print("SeeEnd local API: http://127.0.0.1:8765 (desktop App)", flush=True)
     try:
         stopped.wait()
     finally:

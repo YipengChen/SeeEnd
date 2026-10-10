@@ -21,7 +21,7 @@ from aiflame.integrations.chatgpt_web.host import (
     forward,
 )
 from aiflame.integrations.chatgpt_web.install import install
-from aiflame.integrations.chatgpt_web.downloads import extension_archive
+from aiflame.integrations.chatgpt_web.downloads import extension_archive, prepare_extension_folder, extension_folder_info, extension_folder_path
 from aiflame.core.paths import load_config
 from aiflame.core.engine import Engine
 from aiflame.core.events import EventError, make_event
@@ -253,6 +253,66 @@ class TestBrowserHost(unittest.TestCase):
                     for name in archive.namelist()
                 )
             )
+
+    def test_prepared_extension_is_stable_complete_and_updates_without_zip(self):
+        with tempfile.TemporaryDirectory() as root:
+            result = prepare_extension_folder(root)
+            folder = Path(result["path"])
+            self.assertTrue(result["prepared"])
+            manifest = json.loads((folder / "manifest.json").read_text())
+            for content in manifest["content_scripts"]:
+                for script in content["js"]:
+                    self.assertTrue((folder / script).is_file())
+            self.assertTrue((folder / manifest["background"]["service_worker"]).is_file())
+            self.assertTrue((folder / manifest["action"]["default_popup"]).is_file())
+            self.assertFalse(any(path.suffix == ".zip" for path in folder.iterdir()))
+            (folder / "providers.js").write_text("outdated")
+            self.assertFalse(extension_folder_info(root)["prepared"])
+            self.assertEqual(prepare_extension_folder(root)["path"], str(folder))
+            self.assertNotEqual((folder / "providers.js").read_text(), "outdated")
+            self.assertNotIn("credentials.json", [p.name for p in folder.iterdir()])
+            (folder / "providers.js").unlink()
+            self.assertFalse(extension_folder_info(root)["prepared"])
+            self.assertTrue(prepare_extension_folder(root)["prepared"])
+
+    def test_visible_extension_path_uses_seeend_and_custom_runtimes_stay_isolated(self):
+        for old, new in (("AI Flame", "SeeEnd"), ("ai-flame", "seeend")):
+            runtime = Path("/tmp/platform-data") / old
+            with patch("aiflame.integrations.chatgpt_web.downloads.user_data_dir", return_value=runtime):
+                self.assertEqual(extension_folder_path(runtime), runtime.parent / new / "BrowserExtension")
+        with tempfile.TemporaryDirectory() as runtime:
+            self.assertEqual(extension_folder_path(runtime), Path(runtime) / "SeeEnd" / "BrowserExtension")
+
+    def test_offline_guide_has_real_images_and_no_console_or_script(self):
+        from aiflame.integrations.chatgpt_web.guide import offline_html, STEPS, IMAGES
+        content = offline_html()
+        self.assertNotIn("<script", content)
+        self.assertNotIn("<svg", content)
+        self.assertNotIn("href=", content)
+        self.assertNotIn("SeeEnd 控制台", content)
+        for _, _, filename in STEPS:
+            if filename:
+                magic = b"\x89PNG" if filename.endswith(".png") else b"\xff\xd8"
+                self.assertTrue((IMAGES / filename).read_bytes().startswith(magic))
+        self.assertIn("加载未打包的扩展程序", content)
+        self.assertIn("BrowserExtension", content)
+        self.assertIn("等待安装文件夹路径显示", content)
+
+    def test_prepare_extension_does_not_overwrite_foreign_folders_or_follow_symlinks(self):
+        with tempfile.TemporaryDirectory() as root, tempfile.TemporaryDirectory() as outside:
+            folder = Path(root) / "SeeEnd" / "BrowserExtension"
+            folder.mkdir(parents=True)
+            personal = folder / "manifest.json"
+            personal.write_text("unrelated")
+            with self.assertRaises(EventError):
+                prepare_extension_folder(root)
+            self.assertEqual(personal.read_text(), "unrelated")
+            personal.unlink()
+            folder.rmdir()
+            folder.symlink_to(outside, target_is_directory=True)
+            with self.assertRaises(EventError):
+                prepare_extension_folder(root)
+            self.assertEqual(list(Path(outside).iterdir()), [])
 
     def event(self, state="working", seq=1):
         return make_event(

@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QGridLayout,
     QHeaderView,
+    QSizePolicy,
     QVBoxLayout,
 )
 from aiflame.desktop.localization import (
@@ -46,6 +47,35 @@ PAGES = (
 
 
 class DashboardViews:
+    def save_feedback_row(self, layout, key):
+        frame = QWidget()
+        row = QHBoxLayout(frame)
+        row.setContentsMargins(0, 0, 0, 0)
+        message = label("", True)
+        row.addWidget(message, 1)
+        retry = self.button(row, "重试", lambda: self.retry_setting(key), variant="quiet")
+        self.save_feedback[key] = (frame, message, retry)
+        frame.hide()
+        layout.addWidget(frame)
+
+    def source_section(self, layout, key):
+        frame = QWidget()
+        content = QVBoxLayout(frame)
+        content.setContentsMargins(0, 8, 0, 0)
+        content.setSpacing(8)
+        layout.addWidget(frame)
+        self.source_sections[key] = (frame, content)
+        return content
+
+    def source_block(self, layout, source):
+        frame = QWidget()
+        content = QVBoxLayout(frame)
+        content.setContentsMargins(0, 0, 0, 10)
+        content.setSpacing(8)
+        layout.addWidget(frame)
+        self.source_blocks[source] = (frame, layout)
+        return content
+
     def button(self, layout, text, action, collection=None, variant=None, glyph=None):
         result = QPushButton(text)
         result.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -67,10 +97,10 @@ class DashboardViews:
         return result
 
     def build_views(self):
+        self.save_feedback = {}
         self.checks = {}
         self.source_rows = {}
         self.source_status = {}
-        self.source_details = {}
         self.manual_buttons = []
         self.nav_buttons = []
         self.source_action_buttons = []
@@ -126,8 +156,8 @@ class DashboardViews:
         topbar = QWidget()
         topbar.setObjectName("topbar")
         bar = QHBoxLayout(topbar)
-        bar.setContentsMargins(30, 30, 30, 14)
-        self.breadcrumb = label("总览", role="pageTitle")
+        bar.setContentsMargins(30, 12, 30, 12)
+        self.breadcrumb = label("总览", role="pageTitle", elide=True)
         self.breadcrumb.setWordWrap(False)
         bar.addWidget(self.breadcrumb, alignment=Qt.AlignmentFlag.AlignTop)
         bar.addStretch()
@@ -144,7 +174,6 @@ class DashboardViews:
         self.device_connection_icon.hide()
         status.addWidget(self.device_connection_icon)
         bar.addWidget(self.device_status)
-        topbar.hide()
         column.addWidget(topbar)
         self.hardware_notice = QFrame()
         self.hardware_notice.setObjectName("hardwareNotice")
@@ -195,14 +224,14 @@ class DashboardViews:
         column.addWidget(self.statusbar)
         self.statusbar.hide()
         root.addWidget(main, 1)
+        self.tabs.widget(1).viewport().installEventFilter(self)
         self.nav_buttons[0].setChecked(True)
 
 
     def home(self, layout):
         mode_card = card(layout)
         mode_card.setContentsMargins(22, 20, 22, 20)
-        mode_card.setSpacing(14)
-        mode_card.parentWidget().setMinimumHeight(176)
+        mode_card.setSpacing(8)
         heading = QHBoxLayout()
         heading.addWidget(label("运行模式", role="title"))
         heading.addStretch()
@@ -253,6 +282,11 @@ class DashboardViews:
         scene_header.addWidget(self.scene_title)
         scene_header.addStretch()
         scene.addLayout(scene_header)
+        self.home_task_summary = label("", role="title")
+        self.home_task_context = label("", True)
+        self.home_task_context.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+        scene.addWidget(self.home_task_summary)
+        scene.addWidget(self.home_task_context)
         self.flame = FlameVisual()
         scene.addWidget(self.flame, 1)
         self.display_title = label("当前无任务")
@@ -355,14 +389,17 @@ class DashboardViews:
             summary = QHBoxLayout()
             outcome = QHBoxLayout()
             when, source, state, result = (
-                label("", True),
-                label("", role="recentSource"),
-                label("", role="recentState"),
-                label("", True),
+                label("", True, elide=True),
+                label("", role="recentSource", elide=True),
+                label("", role="recentState", elide=True),
+                label("", True, elide=True),
             )
             for item in (when, source, state, result):
                 item.setWordWrap(False)
+                item.setMinimumWidth(0)
+                item.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
             result.setAlignment(Qt.AlignmentFlag.AlignRight)
+            source.setProperty("literalText", True)
             summary.addWidget(source, 1)
             summary.addWidget(when)
             outcome.addWidget(state)
@@ -428,6 +465,8 @@ class DashboardViews:
         instance_row = QHBoxLayout(self.device_instance_panel)
         instance_row.setContentsMargins(0, 0, 0, 0)
         self.device_instances = QComboBox()
+        self.device_instances.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+        self.device_instances.setMinimumContentsLength(15)
         self.device_instances.setAccessibleName("选择具体设备或添加同型号设备")
         self.device_instances.addItem("添加此型号设备…", "")
         self.device_instances.currentIndexChanged.connect(self.choose_device_instance)
@@ -441,7 +480,7 @@ class DashboardViews:
         details = layout
         virtual = card(layout, "当前使用虚拟模式", "任务状态通过屏幕烛火呈现，设备查找与连接已关闭。")
         self.virtual_device_card = virtual.parentWidget()
-        self.button(virtual, "前往总览切换模式", lambda: self.navigate(0), variant="primary")
+        self.button(virtual, "切换为硬件提示并继续", lambda: self.choose_mode("hardware"), variant="primary")
         self.hardware_controls = QWidget()
         layout.addWidget(self.hardware_controls)
         layout = QVBoxLayout(self.hardware_controls)
@@ -512,8 +551,9 @@ class DashboardViews:
         progress.addWidget(self.device_job_feedback)
         self.progress.hide()
         device_actions = QHBoxLayout()
+        self.device_actions_layout = device_actions
         progress.addLayout(device_actions)
-        self.yeelight_reconnect_button = self.button(device_actions, "连接此设备", lambda: self.device_action("connect", transport="yeelight", host=self.yeelight_host.text().strip()), self.maintenance_buttons, "primary")
+        self.yeelight_reconnect_button = self.button(device_actions, "连接此设备", lambda: self.device_action("connect", transport="yeelight", host=self.yeelight_host.text().strip()), self.maintenance_buttons)
         self.yeelight_reconnect_button.hide()
         self.try_light_button = self.button(
             device_actions,
@@ -543,6 +583,7 @@ class DashboardViews:
         colors.setSpacing(18)
         heading = QHBoxLayout()
         heading.setSpacing(16)
+        self.color_heading_layout = heading
         heading.addWidget(label("任务提醒颜色与亮度", role="title"), 0, Qt.AlignmentFlag.AlignVCenter)
         heading.addStretch()
         self.yeelight_color_reset = self.button(heading, "恢复默认颜色与亮度", self.reset_yeelight_colors)
@@ -589,7 +630,7 @@ class DashboardViews:
             color_row = QHBoxLayout()
             button = self.button(color_row, "自定义…", lambda key=state: self.choose_yeelight_color(key))
             button.setObjectName("yeelightColorCustom")
-            button.setFixedSize(96, 36)
+            button.setMinimumHeight(36)
             self.yeelight_color_buttons[state] = button
             fields.addLayout(color_row, 0, 2)
             fields.addWidget(label("亮度", True), 1, 0)
@@ -642,6 +683,7 @@ class DashboardViews:
         status = label("等待同步", True)
         self.source_status[source] = status
         copy.addWidget(status)
+        self.save_feedback_row(copy, "source:" + source)
         row.addLayout(copy, 1)
         toggle = Toggle()
         toggle.setAccessibleName("启用" + policy.name)
@@ -650,122 +692,60 @@ class DashboardViews:
         row.addWidget(toggle)
         self.source_checks[source] = toggle
         self.source_rows[source] = frame
+        self.source_blocks.setdefault(source, (frame, layout))
         layout.addWidget(frame)
 
     def sources(self, layout):
         sources = card(layout)
         sources.setSpacing(8)
-        self.integration_guides, self.integration_plans, self.integration_copy_buttons = {}, {}, {}
-        self.integration_connect_buttons = {}
-        self.cli_messages, self.cli_config_dirs, self.cli_profiles = {}, {}, {}
-        row = QHBoxLayout()
-        row.setContentsMargins(0, 0, 0, 0)
-        row.addWidget(label("网页应用", role="sectionTitle"))
-        row.addStretch()
-        actions_column = QVBoxLayout()
-        actions_column.setContentsMargins(0, 4, 0, 0)
+        outer = sources
+        self.source_sections, self.source_blocks = {}, {}
+        category = QHBoxLayout()
+        category.setContentsMargins(0, 0, 0, 0)
+        title = label("接入应用", role="title")
+        title.setMargin(0)
+        title.setIndent(0)
+        category.addWidget(title)
+        self.source_category = QComboBox()
+        self.source_category.setAccessibleName("选择接入应用")
+        for name, key in (("网页应用", "web"), ("编程工具", "cli"), ("桌面客户端", "desktop"), ("本地 API 与测试来源", "local")):
+            self.source_category.addItem(name, key)
+        self.source_category.currentIndexChanged.connect(self.source_category_changed)
+        category.addWidget(self.source_category, 1)
+        outer.addLayout(category)
+        sources = self.source_section(outer, "web")
         actions = QHBoxLayout()
         actions.setContentsMargins(0, 0, 0, 0)
-        actions_column.addLayout(actions)
-        row.addLayout(actions_column)
-        self.button(
-            actions,
-            "下载浏览器扩展",
-            lambda: self.download(
-                "/api/browser-extension/download", "SeeEnd-Web-extension.zip"
-            ),
-        )
-        self.button(
-            actions,
-            "连接 Chrome",
-            lambda: self.install_integration("chatgpt-web"),
-            self.source_action_buttons,
-        )
-        sources.addLayout(row)
-        sources.addWidget(label("仅支持 Chrome 系列浏览器。安装并启用扩展后，点击「连接 Chrome」。", True))
+        actions.setSpacing(12)
+        self.button(actions, "安装浏览器扩展", self.open_browser_extension_guide, variant="primary")
+        self.browser_install_hint = label("首次使用需先「安装浏览器扩展」。多个网页共用一个扩展，安装一次即可；平台开关只控制是否提醒。", True)
+        actions.addWidget(self.browser_install_hint, 1)
+        sources.addLayout(actions)
         self.browser_message = label("", True)
         sources.addWidget(self.browser_message)
         self.browser_message.hide()
         for source, name in WEB_SOURCES.items():
             self.source_row(sources, source, name + " 网页")
 
-        separator(sources, "sourceDivider")
-        sources.addWidget(label("编程工具", role="sectionTitle"))
-        sources.addWidget(label("① 连接　→　② 在工具中发一条新任务　→　③ 检查\n自动备份并保留原配置；工具提示信任时，确认后再发任务。", True))
-        self.source_row(sources, "codex", "Codex")
-        row = QHBoxLayout()
-        sources.addLayout(row)
-        self.integration_connect_buttons["codex"] = self.button(
-            row,
-            "连接",
-            lambda: self.install_integration("codex"),
-            self.source_action_buttons,
-        )
-        self.button(row, "检查", self.check_codex)
-        row.addStretch()
-        self.codex_message = label("", True)
-        sources.addWidget(self.codex_message)
-        self.codex_message.hide()
-        codex_detail = Disclosure("高级设置", sources)
-        directory = QLineEdit()
-        directory.setPlaceholderText("Codex 配置目录（留空沿用已连接或默认目录）")
-        directory.setAccessibleName("Codex 配置目录")
-        self.cli_config_dirs["codex"] = directory
-        codex_detail.content.addWidget(directory)
-        directory.editingFinished.connect(lambda: self.load_integration_guide("codex"))
-        self.integration_guide_widgets(codex_detail, "codex")
-        self.codex_connection_details = label("尚未检查。", True)
-        diagnosis = Disclosure("诊断详情", codex_detail.content)
-        diagnosis.content.addWidget(self.codex_connection_details)
-        self.cli_details = {}
-        for source, name in CLI_SOURCES.items():
+        cli = self.source_section(outer, "cli")
+        sources = cli
+        skill_actions = QHBoxLayout()
+        skill_actions.setContentsMargins(0, 0, 0, 0)
+        skill_actions.setSpacing(12)
+        self.skill_copy_button = self.button(skill_actions, "复制安装指令", self.copy_coding_skill, variant="primary")
+        self.button(skill_actions, "查看 Skill 仓库", self.open_coding_skill, variant="quiet")
+        self.skill_install_hint = label("将指令粘贴到编程工具安装 Skill，接入与维护都通过 Skill 完成；下方开关只控制是否提醒。", True)
+        skill_actions.addWidget(self.skill_install_hint, 1)
+        sources.addLayout(skill_actions)
+        self.skill_notice = label("", True)
+        self.skill_notice.hide()
+        sources.addWidget(self.skill_notice)
+        for source, name in {"codex": "Codex", **CLI_SOURCES}.items():
+            sources = self.source_block(cli, source)
             self.source_row(sources, source, name)
-            detail = Disclosure("高级设置", sources)
-            config = QHBoxLayout()
-            if source == "deepseek-harness":
-                config.addWidget(label("已有 Profile", True))
-                selector = QComboBox()
-                selector.setAccessibleName(name + " Profile")
-                selector.addItem("正在查找已有 Profile…", "")
-                self.cli_profiles[source] = selector
-                selector.currentIndexChanged.connect(lambda _, s=source: self.load_integration_guide(s))
-                config.addWidget(selector, 1)
-            else:
-                directory = QLineEdit()
-                directory.setPlaceholderText("配置目录（留空沿用已连接或默认目录）")
-                directory.setAccessibleName(name + " 配置目录")
-                self.cli_config_dirs[source] = directory
-                directory.editingFinished.connect(lambda s=source: self.load_integration_guide(s))
-                config.addWidget(directory)
-            (sources if source == "deepseek-harness" else detail.content).addLayout(config)
-            actions = QHBoxLayout()
-            for text, action in (
-                ("连接", lambda s=source: self.cli_action(s, "install")),
-                ("移除接入", lambda s=source: self.cli_action(s, "uninstall")),
-                ("检查", lambda s=source: self.check_cli(s)),
-                ("模拟测试", lambda s=source: self.trigger(s)),
-            ):
-                button = self.button(actions if text in ("连接", "检查") else detail.content, text, action, self.source_action_buttons)
-                if text == "连接":
-                    self.integration_connect_buttons[source] = button
-            actions.addStretch()
-            sources.addLayout(actions)
-            message = label("尚未检查接入。", True)
-            self.cli_messages[source] = message
-            sources.addWidget(message)
-            diagnostic = label("尚未检查。", True)
-            self.cli_details[source] = diagnostic
-            self.integration_guide_widgets(detail, source)
-            diagnosis = Disclosure("诊断详情", detail.content)
-            diagnosis.content.addWidget(diagnostic)
-            sources.removeWidget(detail)
-            sources.addWidget(detail)
 
-        separator(sources, "sourceDivider")
+        sources = self.source_section(outer, "desktop")
         row = QHBoxLayout()
-        row.addWidget(label("桌面客户端", role="sectionTitle"))
-        row.addWidget(label("实验", role="badge"))
-        row.addStretch()
         self.permission_button = self.button(
             row,
             "授权接入",
@@ -773,6 +753,8 @@ class DashboardViews:
             self.source_action_buttons,
         )
         self.button(row, "刷新状态", self.check_clients)
+        row.addWidget(label("实验", role="badge"))
+        row.addStretch()
         sources.addLayout(row)
         self.chatgpt_permission_hint = label("", True)
         sources.addWidget(self.chatgpt_permission_hint)
@@ -783,90 +765,70 @@ class DashboardViews:
         for source, name in DESKTOP_SOURCES.items():
             self.source_row(sources, source, name + " 桌面客户端")
 
-        separator(sources, "sourceDivider")
-        sources.addWidget(label("本地 API 与测试来源", role="sectionTitle"))
+        sources = self.source_section(outer, "local")
         for source in ("local-script", "manual", "demo"):
             self.source_row(sources, source)
-        self.source_help(sources)
-
-    def integration_guide_widgets(self, detail, source):
-        copy = label("展开后显示实际配置文件、增量修改方式和验证步骤。", True)
-        copy.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        detail.content.addWidget(copy)
-        self.integration_guides[source] = copy
-        manual = Disclosure("手动配置", detail.content)
-        explanation = label("", True)
-        manual.content.addWidget(explanation)
-        if not hasattr(self, "integration_manual_guides"):
-            self.integration_manual_guides = {}
-        self.integration_manual_guides[source] = explanation
-        row = QHBoxLayout()
-        manual.content.addLayout(row)
-        button = self.button(row, "复制增量配置 / 命令", lambda: self.copy_integration_config(source))
-        button.setEnabled(False)
-        self.integration_copy_buttons[source] = button
-        self.button(row, "官方配置说明", lambda: self.open_integration_docs(source))
-        row.addStretch()
-        snippet = QPlainTextEdit()
-        snippet.setReadOnly(True)
-        snippet.setAccessibleName(source + " 增量配置片段")
-        snippet.setMaximumHeight(180)
-        manual.content.addWidget(snippet)
-        if not hasattr(self, "integration_snippets"):
-            self.integration_snippets = {}
-        self.integration_snippets[source] = snippet
-        detail.button.toggled.connect(lambda expanded: self.load_integration_guide(source) if expanded else None)
+        self.source_help(outer)
+        self.source_category.setCurrentIndex(1)
+        self.source_category_changed(self.source_category.currentIndex())
 
     def source_help(self, layout):
         self.integration_help_disclosure = Disclosure("接入说明", layout)
         instructions = self.integration_help_disclosure.content
-        for title, content in (
+        self.integration_help_panels = {}
+        for category, content in (
             (
-                "Codex",
-                "展开 Codex 的配置文件与步骤，核对 hooks.json 的实际位置，再点击「连接」。在 Codex 中完成 Hook 信任确认，重新打开会话并完成新任务后检查。",
+                "cli",
+                "验证、诊断、修复、更新或移除接入，都在编程工具中使用 SeeEnd Skill。需要重载或信任 Hook 时，按 Skill 提示操作。",
             ),
             (
-                "其他编程工具",
-                "Claude Code、Qoder、Gemini CLI 增量添加用户级 Hooks；OpenCode 添加独立插件；DeepSeek Harness 先选择已有 Profile，再由插件管理器安装。各工具可展开查看实际文件、修改范围与操作步骤。模拟测试不计入真实接入验证。",
+                "web",
+                "所有网页共用一个 Chrome 扩展。点击「安装浏览器扩展」按引导安装，再发送一条新提问验证接入。",
             ),
             (
-                "网页应用",
-                "所有网页共用一份浏览器扩展。下载并解压，在 Chrome 扩展页开启开发者模式、加载已解压的扩展，再点击「连接 Chrome」并刷新 AI 网页。请用真实新任务确认网页接入。",
+                "desktop",
+                "仅支持 macOS 普通文字聊天。点击「授权接入」完成授权，打开客户端后点击「刷新状态」。此接入为实验功能。",
             ),
             (
-                "桌面客户端",
-                "macOS 实验接入适用于普通文字聊天。点击「授权接入」申请辅助功能与输入监控权限；兼容性以实际客户端版本为准。网页接入结果不能替代桌面客户端验证。",
-            ),
-            (
-                "灯光与测试",
-                "在「我的设备」设置每台灯具的灯光表现，Yeelight 亮度上限为 100%；设为 0% 只关闭对应灯具，任务仍会记录。暂停、静默后不补播；模拟诊断和手动试亮不计入真实任务验证。",
+                "local",
+                "通过本地 API 上报任务，或使用手动与模拟来源测试提醒。模拟事件不计入真实接入验证。",
             ),
         ):
-            instructions.addWidget(label(title, role="title"))
-            instructions.addWidget(label(content, True))
-        details = instructions
-        for title, attribute in (
-            ("Codex", "codex_details"),
-            ("网页应用", "browser_details"),
-            ("桌面客户端", "client_details"),
-        ):
-            details.addWidget(label(title, role="title"))
-            content = label("尚未检查。", True)
-            setattr(self, attribute, content)
-            details.addWidget(content)
-        details.addWidget(label("来源状态", role="title"))
-        for source in SOURCES:
-            content = label(source.name + " · 等待同步", True)
-            self.source_details[source.id] = content
-            details.addWidget(content)
+            panel = QWidget()
+            body = QVBoxLayout(panel)
+            body.setContentsMargins(0, 0, 0, 0)
+            body.setSpacing(8)
+            body.addWidget(label(content, True))
+            if category in ("web", "desktop"):
+                details = label("", True)
+                setattr(self, "browser_details" if category == "web" else "client_details", details)
+                details.hide()
+                body.addWidget(details)
+            self.integration_help_panels[category] = panel
+            instructions.addWidget(panel)
 
     def preferences(self, layout):
         notifications = card(layout, "桌面系统通知")
         self.preference_toggle(notifications, "desktop_notifications", "任务通知", "完成、异常或等待输入时通知；独立于灯光亮度与连接。首次使用请允许系统通知。")
+        self.notification_permission = label("正在读取系统通知状态…", True)
+        notifications.addWidget(self.notification_permission)
+        notification_actions = QHBoxLayout()
+        notification_actions.setSpacing(12)
+        self.notification_test_button = self.button(notification_actions, "测试通知", self.test_notification)
+        self.button(notification_actions, "检查授权", self.request_notification_status, variant="quiet")
+        notification_actions.addStretch()
+        notifications.addLayout(notification_actions)
+        settings_action = QHBoxLayout()
+        self.button(settings_action, "打开系统通知设置", self.open_notification_settings, variant="quiet")
+        settings_action.addStretch()
+        notifications.addLayout(settings_action)
+        self.notification_test_feedback = label("", True)
+        notifications.addWidget(self.notification_test_feedback)
         light = card(layout, "提醒时机", "灯光亮度与动态效果请在「我的设备」中按设备设置。")
         row = QHBoxLayout()
         copy = QVBoxLayout()
-        copy.addWidget(label("提示时长 / 活动后熄灭延时", role="title"))
+        self.duration_title = label("提醒持续时间", role="title")
+        copy.addWidget(self.duration_title)
         row.addLayout(copy, 1)
         self.preference_toggle(light, "hold_until_activity", "完成提醒常亮", "检测到任务完成后的首次键鼠活动，再等待下方秒数结束提醒。")
         self.duration = QSpinBox()
@@ -880,6 +842,7 @@ class DashboardViews:
         )
         row.addWidget(self.duration)
         light.addLayout(row)
+        self.save_feedback_row(light, "duration")
         quiet = card(layout, "灯光暂停与静默")
         self.preference_toggle(
             quiet,
@@ -916,6 +879,8 @@ class DashboardViews:
         quiet_times.addLayout(row)
         self.quiet_note = label("使用本机时间。", True)
         quiet_times.addWidget(self.quiet_note)
+        self.save_feedback_row(quiet_times, "quiet_start")
+        self.save_feedback_row(quiet_times, "quiet_end")
         quiet.addWidget(self.quiet_times_box)
         self.quiet_times_box.hide()
 
@@ -926,6 +891,7 @@ class DashboardViews:
         copy.addWidget(label(title, role="title"))
         if hint:
             copy.addWidget(label(hint, True))
+        self.save_feedback_row(copy, key)
         row.addLayout(copy, 1)
         toggle = Toggle()
         toggle.setAccessibleName(title)
@@ -938,6 +904,7 @@ class DashboardViews:
         activity = card(layout)
         row = QHBoxLayout()
         self.history_filter = QComboBox()
+        self.history_filter.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
         self.history_filter.setAccessibleName("筛选事件类型")
         for title, key in (
             ("全部事件", "all"),
@@ -947,18 +914,26 @@ class DashboardViews:
             self.history_filter.addItem(title, key)
         self.history_filter.currentIndexChanged.connect(lambda _: self.render_history())
         row.addWidget(self.history_filter)
+        self.history_view = QComboBox()
+        self.history_view.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
+        self.history_view.setAccessibleName("活动记录显示方式")
+        self.history_view.addItem("按任务汇总", "tasks")
+        self.history_view.addItem("原始事件", "events")
+        self.history_view.currentIndexChanged.connect(lambda _: self.render_history())
+        row.addWidget(self.history_view)
+        row.addStretch()
+        self.button(row, "导出当前记录", self.export_history)
+        activity.addLayout(row)
         self.history_search = QLineEdit()
         self.history_search.setPlaceholderText("搜索应用、状态或处理结果…")
         self.history_search.setAccessibleName("搜索活动记录")
         self.history_search.setClearButtonEnabled(True)
         self.history_search.textChanged.connect(lambda _: self.render_history())
-        row.addWidget(self.history_search, 1)
-        self.button(row, "导出当前记录", self.export_history)
-        activity.addLayout(row)
-        self.history = QTableWidget(0, 4)
+        activity.addWidget(self.history_search)
+        self.history = QTableWidget(0, 5)
         self.history.setAccessibleName("最近任务事件")
         self.history.setHorizontalHeaderLabels(
-            ("时间", "应用 / 来源", "任务状态", "处理结果")
+            ("时间", "应用 / 来源", "任务状态", "处理结果", "任务标识")
         )
         self.history.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.history.setSelectionBehavior(
@@ -984,12 +959,15 @@ class DashboardViews:
         activity.addWidget(self.history_empty)
         self.history_count = label("", True)
         activity.addWidget(self.history_count)
+        activity.addWidget(label("选中记录查看任务标识、投递结果与状态事件。", True))
         details = card(layout, "记录详情")
         self.event_detail_box = details.parentWidget()
         self.event_detail = label("")
+        self.event_detail.setProperty("literalText", True)
         self.event_detail.setTextFormat(Qt.TextFormat.RichText)
         self.event_detail.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         details.addWidget(self.event_detail)
+        self.button(details, "复制任务标识", self.copy_task_id, variant="quiet")
         self.event_detail_box.hide()
 
     def testing(self, layout):
@@ -1002,6 +980,7 @@ class DashboardViews:
             lambda index: self.setting("language", self.language_choice.itemData(index))
         )
         appearance.addWidget(self.language_choice)
+        self.save_feedback_row(appearance, "language")
         help_box = card(layout, "常见问题")
         self.help_disclosures = []
         for title, content in (

@@ -10,7 +10,7 @@ LANGUAGES = ("zh-CN", "en")
 
 @lru_cache(maxsize=1)
 def english_catalog():
-    return json.loads((PACKAGE / "assets/web/locales/en.json").read_text(encoding="utf-8"))
+    return json.loads((PACKAGE / "assets/locales/en.json").read_text(encoding="utf-8"))
 
 
 @lru_cache(maxsize=1)

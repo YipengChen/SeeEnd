@@ -57,14 +57,29 @@ def brand_icon(source):
         "codex", "claude", "qoder", "gemini", "opencode", "chatgpt", "deepseek",
         "qianwen", "doubao", "yuanbao", "kimi", "zhipu"
     }:
-        asset = Path(__file__).resolve().parents[1] / "assets/web/brands" / f"{brand}.png"
+        asset = Path(__file__).resolve().parents[1] / "assets/brands" / f"{brand}.png"
         return QIcon(str(asset))
     glyph = {"local-script": "apps", "manual": "flame", "demo": "play"}.get(source, "apps")
     return icon(glyph, size=30)
 
 
-def label(text="", muted=False, role=None):
-    widget = QLabel(text)
+class ElidedLabel(QLabel):
+    """Keep full accessible text while allowing a one-line label to shrink."""
+    def minimumSizeHint(self):
+        hint = super().minimumSizeHint()
+        hint.setWidth(0)
+        return hint
+
+    def paintEvent(self, event):
+        from PySide6.QtGui import QPalette
+        painter = QPainter(self)
+        painter.setPen(self.palette().color(QPalette.ColorRole.WindowText))
+        painter.drawText(self.contentsRect(), self.alignment() | Qt.TextFlag.TextSingleLine,
+                         self.fontMetrics().elidedText(self.text(), Qt.TextElideMode.ElideRight, self.contentsRect().width()))
+
+
+def label(text="", muted=False, role=None, *, elide=False):
+    widget = ElidedLabel(text) if elide else QLabel(text)
     widget.setTextFormat(Qt.TextFormat.PlainText)
     widget.setWordWrap(role not in ("eyebrow", "badge", "brand"))
     widget.setProperty("role", role or ("muted" if muted else "body"))
@@ -121,7 +136,7 @@ class DeviceModelCard(QPushButton):
         self.thumbnail.setProperty("kind", "rgb")
         self.thumbnail.setFixedSize(96, 112)
         self.thumbnail.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        asset = Path(__file__).resolve().parents[1] / "assets/web/devices" / (model["id"] + ".svg")
+        asset = Path(__file__).resolve().parents[1] / "assets/devices" / (model["id"] + ".svg")
         self.thumbnail.setPixmap(QIcon(str(asset)).pixmap(92, 100))
         row.addWidget(self.thumbnail)
         content = QVBoxLayout()

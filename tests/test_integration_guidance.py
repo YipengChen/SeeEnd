@@ -14,7 +14,7 @@ from urllib.parse import urlencode
 from aiflame.core.events import make_event
 from aiflame.core.verification import verification_summary
 from aiflame.hub.server import Handler, Hub
-from aiflame.integrations.cli_tools.guidance import DOCS, integration_guide
+from aiflame.integrations.cli_tools.guidance import DOCS, VERIFICATION_PROMPT, integration_guide
 from aiflame.integrations.cli_tools.install import install
 from aiflame.integrations.cli_tools.diagnostics import diagnostics
 from aiflame.integrations.codex.install import install as install_codex
@@ -65,8 +65,41 @@ class IntegrationGuidanceTests(unittest.TestCase):
             self.assertIn('增量', guide['preservation'])
             self.assertTrue(guide['preparation'] and guide['next_steps'])
             self.assertTrue(guide['snippet'])
+            first_use = guide['onboarding']
+            self.assertTrue(first_use['intro'])
+            self.assertTrue(first_use['preparation'] and first_use['reload_steps'] and first_use['limitations'])
+            self.assertEqual(first_use['verification_prompt'], VERIFICATION_PROMPT)
+            self.assertIn('SeeEnd Skill', guide['automatic'])
+            self.assertEqual(guide['skill_url'], 'https://github.com/YipengChen/SeeEnd-skill')
         self.assertEqual(before, sorted(str(p.relative_to(self.root)) for p in self.root.rglob('*')))
         self.assertFalse((self.root / 'runtime').exists())
+
+    def test_reload_instructions_match_the_tool_instead_of_generic_restart(self):
+        plans = {source: integration_guide(source)['onboarding'] for source in DOCS}
+        codex = '\n'.join(plans['codex']['reload_steps'])
+        self.assertIn('/hooks', codex)
+        self.assertIn('信任当前定义', codex)
+        self.assertIn('App 或 IDE 版本', codex)
+        self.assertIn('自动读取配置变更', '\n'.join(plans['claude-code']['reload_steps']))
+        self.assertIn('QoderWork', '\n'.join(plans['qoder']['reload_steps']))
+        gemini = '\n'.join(plans['gemini-cli']['reload_steps'])
+        self.assertIn('/hooks panel', gemini)
+        self.assertNotIn('/hooks list', gemini)
+        opencode = '\n'.join(plans['opencode']['reload_steps'])
+        self.assertIn('服务进程', opencode)
+        self.assertIn('只刷新客户端界面不足', opencode)
+
+    def test_profile_guidance_uses_the_selected_profile_and_explains_its_scope(self):
+        guide = integration_guide('deepseek-harness', profile='daily work')
+        plan = guide['onboarding']
+        self.assertIn('daily work', '\n'.join(plan['reload_steps']))
+        self.assertIn(str(self.root / 'dsh/profiles/daily work/package.json'), guide['files'])
+        preparation = '\n'.join(plan['preparation'])
+        self.assertIn('一套配置', preparation)
+        self.assertIn('其他 Profile', preparation)
+        self.assertIn('dsh 和 pnpm', preparation)
+        self.assertTrue(any('WSL' in item and '不会自动读取' in item for item in plan['limitations']))
+        self.assertFalse((self.root / 'dsh').exists())
 
     def test_json_snippet_matches_installed_entries_without_replacing_original(self):
         for source in ('codex', 'claude-code', 'qoder', 'gemini-cli'):
@@ -89,9 +122,10 @@ class IntegrationGuidanceTests(unittest.TestCase):
         report = diagnostics(self.engine.db, source='qoder', config_dirs={'qoder': directory})['integrations'][0]
         self.assertEqual(report['status'], 'configuration_error')
         self.assertIn(str(directory / 'settings.json'), report['summary'])
-        self.assertIn('「连接」', report['summary'])
-        self.assertEqual(report['feedback'], '尚未连接。点击「连接」自动配置。')
-        self.assertEqual(report['connect_label'], '连接')
+        self.assertIn('SeeEnd Skill', report['summary'])
+        self.assertEqual(report['feedback'], '尚未接入。使用 SeeEnd Skill 安装并验证接入。')
+        self.assertEqual(report['connect_label'], '使用 SeeEnd Skill')
+        self.assertIn('SeeEnd Skill', report['next_action'])
         directory.mkdir()
         path = directory / 'settings.json'
         path.write_text('{\n BAD PRIVATE-TOKEN')
@@ -110,6 +144,8 @@ class IntegrationGuidanceTests(unittest.TestCase):
         report = diagnostics(self.engine.db, source='gemini-cli')['integrations'][0]
         self.assertFalse(report['configuration_ready'])
         self.assertIn('hooksConfig.enabled=false', str(report['issues']))
+        self.assertIn('在 Gemini CLI 中', str(report['issues']))
+        self.assertIn('Gemini CLI', report['next_action'])
         self.assertFalse(json.loads(path.read_text())['hooksConfig']['enabled'])
         data.pop('hooksConfig')
         data['hooks']['AfterAgent'][0]['hooks'][0]['command'] = '/Applications/Old/SeeEnd.app/Contents/MacOS/SeeEnd --cli-hook gemini-cli'
@@ -123,6 +159,8 @@ class IntegrationGuidanceTests(unittest.TestCase):
         def report():
             return diagnostics(self.engine.db, source='claude-code', source_enabled=self.engine.settings['source_enabled'], verification=verification_summary(self.engine))['integrations'][0]
         self.assertEqual(report()['status'], 'ready_unverified')
+        self.assertIn('SeeEnd Skill', report()['feedback'])
+        self.assertIn('加载与授权', report()['next_action'])
         for seq, state in ((1, 'working'), (2, 'done')):
             event = make_event('claude-code', 'simulation', state, seq)
             self.engine.db.execute('INSERT INTO self_tests VALUES (?,?)', (event['event_id'], 0))
@@ -136,6 +174,8 @@ class IntegrationGuidanceTests(unittest.TestCase):
         self.assertIn('同一真实任务', report()['summary'])
         self.engine.update_settings({'source_enabled': {**self.engine.settings['source_enabled'], 'claude-code': False}})
         self.assertEqual(report()['status'], 'disabled')
+        self.assertIn('开启此工具的来源开关', report()['feedback'])
+        self.assertIn('SeeEnd Skill', report()['next_action'])
 
     def test_unrelated_start_and_finish_cannot_claim_connected(self):
         install_codex(self.root / 'codex')

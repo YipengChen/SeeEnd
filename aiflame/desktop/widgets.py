@@ -16,9 +16,12 @@ from aiflame.desktop.localization import QTableWidgetItem, QWidget
 
 from .components import Disclosure, icon, restyle
 from .network import LocalAPI
+from .interaction import DashboardInteraction
 from .theme import STYLE
 from .views import DashboardViews, PAGES
 from .localization import set_language, language, source_text, t
+from aiflame.integrations.chatgpt_web.host import WEB_SOURCES
+from aiflame.integrations.cli_tools.providers import CLI_SOURCES
 from aiflame.devices.models import DEFAULT_MODEL, YEELIGHT_MODELS, hardware_model
 from aiflame.core.delivery import REASONS as DELIVERY_REASONS
 
@@ -58,18 +61,6 @@ VERIFICATION_STATUS = {
     "disabled": "已关闭",
 }
 
-VERIFICATION_DETAILS = {
-    "needs_input": "任务等待你的输入或授权，可在来源应用继续。",
-    "unknown": "尚不能确定任务结果，请检查来源应用。",
-    "waiting": "尚未收到真实任务，请在对应应用发起新任务。",
-    "working": "已收到开始，等待同一任务完成。",
-    "verified": "已收到同一任务的开始与完成。",
-    "cancelled": "本轮已取消，请另发一条完整任务。",
-    "error": "本轮报告异常，请检查对应应用后重试。",
-    "timeout": "工作状态已超时，尚未确认完成。",
-    "incomplete": "事件不完整，尚不能确认此用法。",
-    "disabled": "来源已关闭，请先开启接入。",
-}
 CLIENT_STATUS = {
     "checking": "正在检查",
     "unsupported": "系统暂不支持",
@@ -98,8 +89,10 @@ def quiet_now(settings):
     return start <= now < end if start < end else now >= start or now < end
 
 
-class Dashboard(DashboardViews, QWidget):
+class Dashboard(DashboardInteraction, DashboardViews, QWidget):
     state_changed = Signal(object)
+    notification_status_requested = Signal()
+    notification_test_requested = Signal()
 
     def __init__(self, parent=None, port=8765):
         super().__init__(parent)
@@ -110,8 +103,13 @@ class Dashboard(DashboardViews, QWidget):
         self.model = None
         self.ready = False
         self.source_checks, self.source_values = {}, {}
+        self.confirmed_source_values = {}
+        self.setting_saves = {}
+        self.notification_status = "unknown"
+        self.notification_testing = False
+        self.last_status_at = None
+        self.initial_source_category = False
         self.chatgpt_permission_pending = False
-        self.codex_action_notice = ""
         self.history_key = None
         self.visible_events = []
         self.manual_task, self.manual_seq = None, 0
@@ -156,9 +154,11 @@ class Dashboard(DashboardViews, QWidget):
         self.built = True
         self.tabs.currentChanged.connect(self.tab_changed)
         self.update_busy()
-        self.api.request("/", self.connected, raw=True)
+        self.api.request("/api/session", self.connected)
 
     def tell(self, text, *, error=False):
+        if not error and any(item["state"] == "failed" for item in self.setting_saves.values()):
+            text, error = "部分设置未保存，请查看标记项并重试。", True
         self.retry_button.hide()
         self.message_timer.stop()
         self.message_error = error
@@ -199,8 +199,9 @@ class Dashboard(DashboardViews, QWidget):
 
     def act(self, path, body, callback=None, failed=None):
         self.message_timer.stop()
-        self.message_error = False
-        self.statusbar.hide()
+        if not any(item["state"] == "failed" for item in self.setting_saves.values()):
+            self.message_error = False
+            self.statusbar.hide()
         self.generation += 1
         self.actions.append((path, body, callback, failed))
         if not self.writing:
@@ -215,8 +216,13 @@ class Dashboard(DashboardViews, QWidget):
         self.writing = True
         self.update_busy()
         path, body, callback, failed = self.actions.popleft()
+        outgoing = body
+        if path == "/api/settings" and "source_enabled" in body:
+            outgoing = {**body, "source_enabled": {**self.confirmed_source_values, **body["source_enabled"]}}
 
         def received(data):
+            if path == "/api/settings" and "source_enabled" in body:
+                self.confirmed_source_values = dict(data.get("settings", {}).get("source_enabled", outgoing["source_enabled"]))
             if path != "/api/preview" and not (path == "/api/settings" and set(body) == {"mode"}):
                 self.tell(
                     data.get(
@@ -235,7 +241,7 @@ class Dashboard(DashboardViews, QWidget):
                 failed()
             self.next_action()
 
-        self.api.request(path, received, body, failed=rejected)
+        self.api.request(path, received, outgoing, failed=rejected)
 
     def reset_app(self):
         if self.reset_pending or not self.reset_button.isEnabled():
@@ -276,7 +282,6 @@ class Dashboard(DashboardViews, QWidget):
         self.job_busy = self.test_busy = False
         self.reset_pending = False
         self.chatgpt_permission_pending = False
-        self.codex_action_notice = ""
         self.clients_supported = True
         self.device_test_deadlines.clear()
         self.selected_device_id = None
@@ -287,35 +292,25 @@ class Dashboard(DashboardViews, QWidget):
         self.device_operation_id = self.rendered_yeelight_discovery = None
         self.connection_paused = False
         self.source_values.clear()
-        for edit in [self.yeelight_host, *self.cli_config_dirs.values(), self.history_search]:
+        self.setting_saves.clear()
+        self.initial_source_category = False
+        for edit in [self.yeelight_host, self.history_search]:
             with QSignalBlocker(edit):
                 edit.clear()
-        for choices in [self.yeelight_choices, self.device_instances, *self.cli_profiles.values()]:
+        for choices in [self.yeelight_choices, self.device_instances]:
             with QSignalBlocker(choices):
                 choices.clear()
         with QSignalBlocker(self.device_instances):
             self.device_instances.addItem("添加此型号设备…", "")
-        for choices in self.cli_profiles.values():
-            with QSignalBlocker(choices):
-                choices.addItem("正在查找已有 Profile…", "")
         self.device_test_caption.hide()
         self.device_version.setText("连接后读取固件版本")
         with QSignalBlocker(self.history_filter):
             self.history_filter.setCurrentIndex(0)
-        self.integration_plans.clear()
-        for source, guide in self.integration_guides.items():
-            guide.setText("展开后显示实际配置文件、增量修改方式和验证步骤。")
-            self.integration_manual_guides[source].clear()
-            self.integration_snippets[source].clear()
-            self.integration_copy_buttons[source].setEnabled(False)
-            self.integration_copy_buttons[source].setText("复制增量配置 / 命令")
-        for message in [*self.cli_messages.values(), *self.cli_details.values(), self.codex_connection_details]:
-            message.setText("尚未检查。")
-        for message in [self.browser_message, self.client_message, self.chatgpt_permission_hint,
+        for message in [self.skill_notice, self.browser_message, self.browser_details,
+                        self.client_message, self.client_details, self.chatgpt_permission_hint,
                         self.test_message, self.test_details, self.job_message]:
             message.clear()
             message.hide()
-        self.client_details.clear()
         self.test_details.setText("尚未运行诊断。")
         self.progress.hide()
         for disclosure in self.findChildren(Disclosure):
@@ -335,7 +330,7 @@ class Dashboard(DashboardViews, QWidget):
                 self.quiet_times_box.setVisible(value)
                 for edit in self.times.values():
                     edit.setEnabled(value)
-            self.act("/api/settings", {key: value})
+            self.save_setting(key, value)
 
     def hardware_mode(self):
         return bool(self.model and self.model["settings"].get("mode") == "hardware")
@@ -429,22 +424,13 @@ class Dashboard(DashboardViews, QWidget):
             if value:
                 self.chatgpt_permission_hint.setText("正在检查 ChatGPT 桌面接入权限…")
         if self.model:
-
-            def save_failed():
-                if source == "chatgpt-desktop" and value:
-                    self.chatgpt_permission_hint.setText(
-                        "来源设置未保存，权限检查未开始。请重新勾选后重试。"
-                    )
-
-            self.act(
-                "/api/settings",
-                {"source_enabled": dict(self.source_values)},
-                lambda _: (
+            self.save_setting(
+                "source:" + source, value,
+                callback=lambda _: (
                     self.check_chatgpt_permissions()
                     if source == "chatgpt-desktop" and value
                     else None
                 ),
-                save_failed,
             )
 
     def request_client_permissions(self):
@@ -624,13 +610,7 @@ class Dashboard(DashboardViews, QWidget):
     def resizeEvent(self, event):
         super().resizeEvent(event)
         if self.built:
-            columns = 1 if self.width() < 850 else 2
-            if columns != self.device_card_columns:
-                self.device_card_columns = columns
-                for button in self.device_model_buttons.values():
-                    self.device_cards_layout.removeWidget(button)
-                for index, button in enumerate(self.device_model_buttons.values()):
-                    self.device_cards_layout.addWidget(button, index // columns, index % columns)
+            self.reflow_device_controls()
             compact = self.width() < 1050
             self.scene_frame.setMaximumHeight(500 if compact else 16777215)
             self.home_top.setDirection(
@@ -740,7 +720,10 @@ class Dashboard(DashboardViews, QWidget):
             self.preview_button.setText("灯效演示")
             self.preview_caption.hide()
             self.flame.set_state("idle", reduced=reduced)
-            self.display_title.setText("当前无任务")
+            self.display_title.setText("任务状态暂不可用" if not self.ready else "正在读取任务状态…")
+            if self.model and self.last_status_at:
+                self.display_hint.setText("最近更新时间：" + self.last_status_at.strftime("%H:%M:%S") + " · " + NAMES.get(self.displayed_task_state(), "状态未知"))
+                self.display_hint.show()
             return
         data = self.model
         settings, state = data["settings"], data["display"]["state"]
@@ -768,7 +751,7 @@ class Dashboard(DashboardViews, QWidget):
         elif quiet_now(settings):
             title = "静默中"
         else:
-            title = NAMES.get(state, "当前无任务")
+            title = NAMES.get(self.displayed_task_state(), "当前无任务")
         self.display_title.setText(title)
 
     def render_notice(self):
@@ -799,6 +782,8 @@ class Dashboard(DashboardViews, QWidget):
                 else f"正处于静默时段，{settings['quiet_end']} 后恢复提醒。",
                 "调整时段",
             )
+        elif self.displayed_task_state() == "needs_input":
+            kind, text, action = ("task", "任务等待输入或授权，请到对应应用继续。", "查看记录")
         elif data["display"]["state"] == "error":
             kind, text, action = ("task", "任务报告异常，请查看对应应用。", "查看记录")
         else:
@@ -828,12 +813,14 @@ class Dashboard(DashboardViews, QWidget):
             self.navigate(1)
 
     def render(self, data):
+        self.last_status_at = datetime.now()
         chosen_language = data["settings"].get("language", "zh-CN")
         if chosen_language != language():
             set_language(chosen_language)
             self.history_key = None
         self.sidebar.setFixedWidth(250 if chosen_language == "en" else 198)
         self.duration.setFixedWidth(140 if chosen_language == "en" else 105)
+        self.reflow_device_controls()
         with QSignalBlocker(self.language_choice):
             self.language_choice.setCurrentIndex(self.language_choice.findData(chosen_language))
         for item in data.get("devices", []):
@@ -847,6 +834,9 @@ class Dashboard(DashboardViews, QWidget):
             data["device"],
             data["settings"],
         )
+        if not self.writing:
+            self.confirmed_source_values = dict(settings["source_enabled"])
+        self.duration_title.setText("活动后熄灭延时" if settings["hold_until_activity"] else "提醒持续时间")
         hardware = self.hardware_mode()
         online = hardware and device["online"]
         connecting = hardware and not online and device.get("connecting", False) and not data["maintenance"]
@@ -927,6 +917,12 @@ class Dashboard(DashboardViews, QWidget):
                 if settings["quiet_start"] == settings["quiet_end"]
                 else ""
             )
+        if not self.initial_source_category:
+            category = "cli" if any(settings["source_enabled"].get(s) for s in ("codex", *CLI_SOURCES)) else "web"
+            self.source_category.setCurrentIndex(self.source_category.findData(category))
+            self.initial_source_category = True
+        self.order_sources()
+        self.render_task_context({s["id"]: s["name"].replace("（实验）", "") for s in data["sources"]})
         enabled_sources = {source["id"]: source["name"].replace("（实验）", "")
                            for source in data["sources"] if source["enabled"]}
         for source, button in self.home_source_icons.items():
@@ -944,18 +940,11 @@ class Dashboard(DashboardViews, QWidget):
             if not self.writing:
                 with QSignalBlocker(self.source_checks[sid]):
                     self.source_checks[sid].setChecked(source["enabled"])
-            text = "等待新任务" if source["enabled"] else "已关闭"
+            text = ("尚未验证 · 安装扩展后发一条新提问" if sid in WEB_SOURCES else "等待新任务") if source["enabled"] else "已关闭"
             evidence = data.get("verification", {}).get(sid)
-            if evidence and source["enabled"]:
+            if evidence and source["enabled"] and (sid not in WEB_SOURCES or evidence["status"] != "waiting"):
                 text = VERIFICATION_STATUS.get(evidence["status"], "等待新任务")
             self.source_status[sid].setText(text)
-            detail_status = (
-                "disabled" if not source["enabled"]
-                else evidence["status"] if evidence else "waiting"
-            )
-            self.source_details[sid].setText(
-                source["name"] + "：" + VERIFICATION_DETAILS.get(detail_status, text)
-            )
         key = (
             [(e["id"], e["status"], e["reason"], e.get("delivery_summary")) for e in data["events"]],
             [(r["event"], r["output"], r["status"], r.get("detail")) for r in data.get("deliveries", [])],
@@ -995,13 +984,19 @@ class Dashboard(DashboardViews, QWidget):
         return count if event["status"] == "applied" else result + " · " + count
 
     def event_search_text(self, event):
-        values = list(self.event_values(event))
+        values = [*self.event_values(event), (event.get("task") or t("未提供"))]
         for device in (event.get("delivery_summary") or {}).get("devices", []):
             values.extend((self.delivery_device_name(device), device["reason"]))
         return " ".join(values + [t(value) for value in values]).casefold()
 
     def render_recent(self):
-        events = self.model["events"][:len(self.recent_rows)]
+        seen, events = set(), []
+        for event in self.model["events"]:
+            identity = self.event_key(event)
+            if identity not in seen:
+                seen.add(identity)
+                events.append(event)
+        events = events[:len(self.recent_rows)]
         self.recent_empty.setVisible(not events)
         full = len(events) == len(self.recent_rows)
         for index, (gap_index, gap) in enumerate(self.recent_gaps):
@@ -1020,6 +1015,11 @@ class Dashboard(DashboardViews, QWidget):
                     values[3] = RESULTS.get(event["status"], event["status"])
                 for item, value in zip(labels, values):
                     item.setText(value)
+                    item.setToolTip(value)
+                task = event.get("task") or t("未提供")
+                short_task = task if len(task) <= 16 else task[:6] + "…" + task[-6:]
+                labels[1].setText(t(values[1]) + " · " + short_task)
+                labels[1].setToolTip(t(values[1]) + " · " + (event.get("task") or t("未提供")))
                 labels[3].setToolTip(detail)
                 restyle(labels[2], "recentTone", event["state"])
 
@@ -1034,6 +1034,12 @@ class Dashboard(DashboardViews, QWidget):
             if (kind == "all" or is_test(e) == (kind == "test"))
             and (not query or query in self.event_search_text(e))
         ]
+        self.event_groups = {}
+        for event in events:
+            self.event_groups.setdefault(self.event_key(event), []).append(event)
+        grouped = self.history_view.currentData() == "tasks"
+        if grouped:
+            events = [items[0] for items in self.event_groups.values()]
         selection = self.history.currentRow()
         selected_id = (
             self.visible_events[selection]["id"]
@@ -1041,17 +1047,18 @@ class Dashboard(DashboardViews, QWidget):
             and 0 <= selection < len(self.visible_events)
             else None
         )
+        selected_identity = (self.event_key(self.visible_events[selection])
+                             if selected_id is not None and grouped else None)
         self.visible_events = events
         with QSignalBlocker(self.history):
             self.history.setRowCount(len(events))
             selected_row = -1
             for row, event in enumerate(events):
-                if event["id"] == selected_id:
+                if event["id"] == selected_id or self.event_key(event) == selected_identity:
                     selected_row = row
-                for column, value in enumerate(self.event_values(event)):
-                    item = QTableWidgetItem(value)
-                    if column == 3:
-                        item.setToolTip(t(value))
+                for column, value in enumerate((*self.event_values(event), (event.get("task") or t("未提供")))):
+                    item = QTableWidgetItem(value, literal=column == 4)
+                    item.setToolTip(value if column == 4 else t(value))
                     if column == 3 and event["status"] == "applied":
                         item.setForeground(QColor("#38735b"))
                     elif column == 2 and event["state"] == "error":
@@ -1069,7 +1076,8 @@ class Dashboard(DashboardViews, QWidget):
             else "还没有记录。接入应用后，新任务会自动出现在这里。"
         )
         self.history_count.setText(
-            f"显示 {len(events)} 条 / 最近 {len(self.model['events'])} 条事件"
+            f"显示 {len(events)} 项任务 / 最近 {len(self.model['events'])} 条事件" if grouped
+            else f"显示 {len(events)} 条 / 最近 {len(self.model['events'])} 条事件"
         )
         self.show_event_detail()
 
@@ -1081,12 +1089,13 @@ class Dashboard(DashboardViews, QWidget):
             return
         self.event_detail_box.show()
         event = self.visible_events[row]
-        def paragraph(text, style):
-            return '<p style="' + style + '">' + escape(text) + '</p>'
+        def paragraph(text, style, *, literal=False):
+            return '<p style="' + style + '">' + escape(text if literal else t(text)) + '</p>'
 
         secondary = "font-size:12px; color:#75736b; font-weight:400;"
         heading = "font-size:14px; font-weight:600; color:#292824; margin-top:18px; margin-bottom:8px;"
         blocks = [paragraph(" · ".join(self.event_values(event)[:3]), secondary)]
+        blocks.append(paragraph(t("任务标识：") + (event.get("task") or t("未提供")), secondary, literal=True))
         blocks.append(paragraph("处理结果：", "font-size:11px; color:#75736b; margin-bottom:4px;"))
         blocks.append(paragraph(self.event_delivery_result(event),
                                 "font-size:20px; font-weight:600; color:#292824; margin-top:0px; margin-bottom:8px;"))
@@ -1101,10 +1110,10 @@ class Dashboard(DashboardViews, QWidget):
             for device in devices:
                 color = "#38735b" if device["status"] == "applied" else "#75736b"
                 blocks.append('<p style="font-size:13px; font-weight:600; color:#292824; margin-top:0px; margin-bottom:10px;">'
-                              + escape(device["name"]) + '<span style="' + secondary + '">（'
+                              + escape(t(device["name"]) if device["name"] in ("Yeelight 屏幕挂灯 Pro", "Yeelight W3 彩色灯泡") else device["name"]) + '<span style="' + secondary + '">（'
                               + escape(device["device_id"]) + '）</span><br>'
                               + '<span style="font-size:12px; font-weight:400; color:' + color + ';">'
-                              + escape(device["reason"]) + '</span></p>')
+                              + escape(t(device["reason"])) + '</span></p>')
         statuses = {"pending": "等待桌面应用领取", "claimed": "桌面应用处理中", "submitted": "已提交系统（显示取决于系统通知设置）",
                     "denied": "系统通知权限未允许", "unavailable": "系统通知不可用", "failed": "投递失败", "disabled": "已关闭",
                     "not_requested": "本事件无需弹窗", "interrupted": "进程重启，未重播", "unconfirmed": "提交结果未确认", "superseded": "任务状态已变化"}
@@ -1114,6 +1123,10 @@ class Dashboard(DashboardViews, QWidget):
         if notifications:
             blocks.append(paragraph("桌面通知", heading))
             blocks.extend(paragraph(notification, secondary) for notification in notifications)
+        related = self.event_groups.get(self.event_key(event), [])
+        if len(related) > 1:
+            blocks.append(paragraph("状态事件（当前筛选范围）", heading))
+            blocks.extend(paragraph(" · ".join(self.event_values(item)), secondary) for item in reversed(related))
         self.event_detail.setText("".join(blocks))
 
     def export_history(self):
@@ -1128,8 +1141,8 @@ class Dashboard(DashboardViews, QWidget):
         try:
             with Path(path).open("w", encoding="utf-8-sig", newline="") as stream:
                 writer = csv.writer(stream)
-                writer.writerow(t(value) for value in ("时间", "应用 / 来源", "任务状态", "处理结果"))
-                writer.writerows([t(value) for value in self.event_values(e)] for e in self.visible_events)
+                writer.writerow(t(value) for value in ("时间", "应用 / 来源", "任务状态", "处理结果", "任务标识"))
+                writer.writerows([*[t(value) for value in self.event_values(e)], e.get("task", "")] for e in self.visible_events)
             self.tell(f"已导出 {len(self.visible_events)} 条记录。")
         except OSError:
             self.on_error("保存失败，请检查所选目录的权限。")
@@ -1138,7 +1151,7 @@ class Dashboard(DashboardViews, QWidget):
         if not force and not self.isVisible():
             return
         if not self.ready:
-            self.api.request("/", self.connected, raw=True)
+            self.api.request("/api/session", self.connected)
             return
         generation = self.generation
 
@@ -1174,9 +1187,8 @@ class Dashboard(DashboardViews, QWidget):
             self.stop_preview()
         if index == 1:
             self.show_device_selector()
-        if index == 2:
-            self.check_cli()
-            self.check_codex()
+        if index == 3:
+            self.request_notification_status()
         self.poll(force=True)
 
 
@@ -1338,6 +1350,7 @@ class Dashboard(DashboardViews, QWidget):
     def update_busy(self):
         if not self.built:
             return
+        self.render_save_feedback()
         connected = self.ready and self.model is not None
         busy = (
             self.reset_pending
@@ -1404,44 +1417,46 @@ class Dashboard(DashboardViews, QWidget):
         for edit in self.times.values():
             edit.setEnabled(connected and self.checks["quiet_enabled"].isChecked())
 
-    def integration_parameters(self, source):
-        body = {"source": source}
-        if source in self.cli_config_dirs:
-            directory = self.cli_config_dirs[source].text().strip()
-            if directory:
-                body["config_dir"] = directory
-        if source in self.cli_profiles:
-            profile = self.cli_profiles[source].currentData()
-            if profile:
-                body["profile"] = profile
-        return body
-
-    def load_integration_guide(self, source):
-        if source not in self.integration_guides:
-            return
-        query = urlencode(self.integration_parameters(source))
-        self.integration_copy_buttons[source].setEnabled(False)
+    def prepare_browser_extension(self, callback=None):
+        self.browser_message.setText("正在准备扩展文件夹…")
+        self.browser_message.show()
 
         def received(data):
-            if query != urlencode(self.integration_parameters(source)):
-                return
-            from aiflame.integrations.cli_tools.guidance import guide_text
-            self.integration_plans[source] = data
-            self.integration_guides[source].setText(guide_text(data))
-            self.integration_manual_guides[source].setText(data["manual"] + "\n\n" + "\n".join(data["preparation"]))
-            self.integration_snippets[source].setPlainText(data["snippet"])
-            self.integration_copy_buttons[source].setText(data["copy_label"])
-            self.integration_copy_buttons[source].setEnabled(True)
+            from PySide6.QtCore import QUrl
+            from PySide6.QtGui import QDesktopServices
+            self.browser_message.setText(data["message"] + "\n" + data["path"] +
+                                         "\n请按安装图文教程，在 Chrome 中选择此文件夹。")
+            if callable(callback):
+                callback(data)
+            QDesktopServices.openUrl(QUrl.fromLocalFile(data["path"]))
 
-        self.api.request("/api/integration-guide?" + query, received,
-                         failed=lambda: self.integration_guides[source].setText("无法加载接入步骤，请检查 SeeEnd 服务后重新展开。"))
+        self.act("/api/browser-extension/prepare", {}, received,
+                 lambda: self.browser_message.setText(source_text(self.message)))
 
-    def copy_integration_config(self, source):
+    def open_browser_extension_guide(self):
+        from aiflame.desktop.extension_guide import ExtensionGuide
+        dialog = getattr(self, "extension_guide", None)
+        if dialog is None:
+            dialog = self.extension_guide = ExtensionGuide(self)
+        dialog.show()
+        dialog.raise_()
+        dialog.activateWindow()
+
+    def copy_coding_skill(self):
         from PySide6.QtWidgets import QApplication
-        plan = self.integration_plans.get(source)
-        if plan and self.integration_copy_buttons[source].isEnabled():
-            QApplication.clipboard().setText(plan["snippet"])
-            self.integration_copy_buttons[source].setText("已复制")
+        from aiflame.integrations.cli_tools.skill import installation_prompt
+        QApplication.clipboard().setText(installation_prompt(translate=t))
+        self.skill_notice.setText("安装指令已复制。请到编程工具粘贴并发送。")
+        self.skill_notice.show()
+        QTimer.singleShot(8000, self.skill_notice.hide)
+
+    def open_coding_skill(self):
+        from PySide6.QtCore import QUrl
+        from PySide6.QtGui import QDesktopServices
+        from aiflame.integrations.cli_tools.skill import SKILL_URL
+        if not QDesktopServices.openUrl(QUrl(SKILL_URL)):
+            self.skill_notice.setText("无法打开浏览器。安装指令中包含 Skill 仓库地址，可复制后打开。")
+            self.skill_notice.show()
 
     def open_web_app(self, source):
         from PySide6.QtCore import QUrl
@@ -1449,121 +1464,17 @@ class Dashboard(DashboardViews, QWidget):
         from aiflame.integrations.chatgpt_web.host import WEB_URLS
         QDesktopServices.openUrl(QUrl(WEB_URLS[source]))
 
-    def open_integration_docs(self, source):
-        from PySide6.QtCore import QUrl
-        from PySide6.QtGui import QDesktopServices
-        from aiflame.integrations.cli_tools.guidance import DOCS
-        QDesktopServices.openUrl(QUrl(DOCS[source]))
-
-    @staticmethod
-    def integration_report_text(data):
-        lines = [data.get("summary", "配置已就绪，尚需真实任务验证。" if data.get("configuration_ready") else "接入配置有问题。")]
-        if data.get("next_action"):
-            lines.append("下一步：" + data["next_action"])
-        for check in data.get("checks", []):
-            mark = {"ok": "✓", "error": "!", "warning": "!", "pending": "○"}.get(check["status"], "○")
-            lines.append(mark + " " + check["message"] + ("\n  " + check["action"] if check.get("action") else ""))
-        if not data.get("checks"):
-            lines.extend(data.get("issues", []))
-        lines.extend(s["name"] + f"：收到 {s['received']} / 设备确认 {s['applied']}" for s in data.get("signals", {}).values())
-        limitations = data.get("limitations", [])
-        lines.extend([limitations] if isinstance(limitations, str) else limitations)
-        if data.get("evidence_scope"):
-            lines.append(data["evidence_scope"])
-        return "\n".join(lines)
-
     def install_integration(self, source):
-        target = self.codex_message if source == "codex" else self.browser_message
-        target.setText("正在增量配置连接，请稍候…")
-        target.show()
+        self.browser_message.setText("正在增量配置连接，请稍候…")
+        self.browser_message.show()
 
         def received(data):
-            message = data.get("message", "连接配置已更新，请发起新任务。")
-            if source == "codex":
-                self.codex_action_notice = message
-                target.setText(message)
-                self.codex_details.setText(message)
-                self.check_codex()
-            else:
-                self.browser_details.setText(message)
-                target.setText("请加载或重新加载扩展，并刷新 AI 网页。")
+            self.browser_details.setText(data.get("message", "连接配置已更新，请发起新任务。"))
+            self.browser_details.show()
+            self.browser_message.setText("请加载或重新加载扩展，并刷新 AI 网页。")
 
-        self.act("/api/integrations/install",
-                 self.integration_parameters(source) if source == "codex" else {"source": source},
-                 received, lambda: target.setText(source_text(self.message)))
-
-    def cli_action(self, source, action):
-        body = self.integration_parameters(source)
-        if source in self.cli_profiles and "profile" not in body:
-            self.cli_messages[source].setText("请选择实际使用的已有 Profile。")
-            return
-        target = self.cli_messages[source]
-        target.setText("正在增量配置…" if action == "install" else "正在移除本应用接入…")
-        self.act("/api/integrations/" + action, body,
-                 lambda data: (target.setText(data.get("message", "接入已更新。")), self.check_cli(source)),
-                 lambda: target.setText(source_text(self.message)))
-
-    def check_cli(self, source=None):
-        query = urlencode(self.integration_parameters(source)) if source else None
-        if source:
-            self.cli_messages[source].setText("正在检查配置和真实任务接收记录…")
-
-        def received(data):
-            if source and query != urlencode(self.integration_parameters(source)):
-                return
-            for item in data.get("integrations", [data] if source else []):
-                current = item["source_id"]
-                if current not in self.cli_messages or (source and source != current):
-                    continue
-                notes = []
-                if item.get("config_dir"):
-                    notes.append("配置目录：" + item["config_dir"])
-                if item.get("installed_profiles"):
-                    notes.append("已连接 Profile：" + "、".join(item["installed_profiles"]))
-                self.cli_details[current].setText(self.integration_report_text(item) + "\n" + "\n".join(notes))
-                self.cli_messages[current].setText(item.get("feedback") or item.get("summary", "配置已就绪，尚需真实任务验证。" if item["configuration_ready"] else "接入配置有问题：" + "；".join(item.get("issues", [])[:1])))
-                self.integration_connect_buttons[current].setText(item.get("connect_label", "连接"))
-                self.cli_messages[current].setStyleSheet("color: #397052;" if item.get("status") == "connected" else "color: #a0472c;" if item.get("status") in ("configuration_error", "disabled") else "")
-                if current in self.cli_profiles:
-                    selector = self.cli_profiles[current]
-                    selected = selector.currentData() or item.get("profile")
-                    blocker = QSignalBlocker(selector)
-                    selector.clear()
-                    selector.addItem("请选择已有 Profile", "")
-                    for profile in item.get("profiles", []):
-                        selector.addItem(profile, profile)
-                    if not selected and len(item.get("profiles", [])) == 1:
-                        selected = item["profiles"][0]
-                    index = selector.findData(selected)
-                    if index >= 0:
-                        selector.setCurrentIndex(index)
-                    del blocker
-                    self.load_integration_guide(current)
-
-        def failed():
-            for current, message in self.cli_messages.items():
-                if source is None or source == current:
-                    message.setText("检查未完成：" + source_text(self.message))
-        self.api.request("/api/integration-check?" + query if source else "/api/cli-integrations", received, failed=failed)
-
-    def check_codex(self):
-        query = urlencode(self.integration_parameters("codex"))
-        self.codex_message.setText("正在检查 Codex 配置和真实任务接收记录…")
-        self.codex_message.show()
-
-        def received(data):
-            if query != urlencode(self.integration_parameters("codex")):
-                return
-            self.codex_message.setText(data.get("feedback") or data.get("summary", "配置已就绪，尚需真实任务验证。" if data.get("configuration_ready") else "接入配置有问题。"))
-            self.integration_connect_buttons["codex"].setText(data.get("connect_label", "连接"))
-            self.codex_message.setStyleSheet("color: #397052;" if data.get("status") == "connected" else "color: #a0472c;" if data.get("status") in ("configuration_error", "disabled") else "")
-            details = self.integration_report_text(data)
-            self.codex_details.setText(details)
-            self.codex_connection_details.setText(details)
-            self.load_integration_guide("codex")
-
-        self.api.request("/api/integration-check?" + query, received,
-                         failed=lambda: self.codex_message.setText("检查未完成：" + source_text(self.message)))
+        self.act("/api/integrations/install", {"source": source}, received,
+                 lambda: self.browser_message.setText(source_text(self.message)))
 
     def check_clients(self):
         def received(data):
@@ -1586,6 +1497,7 @@ class Dashboard(DashboardViews, QWidget):
                 for c in data["clients"]
             ]
             self.client_details.setText("\n".join(lines))
+            self.client_details.setVisible(bool(lines))
             missing = []
             if not data["permissions"]["accessibility"]:
                 missing.append("辅助功能")
@@ -1633,6 +1545,7 @@ class Dashboard(DashboardViews, QWidget):
 
 
     def shutdown(self):
+        self.built = False
         self.device_test_timer.stop()
         self.poll_timer.stop()
         self.brightness_timer.stop()

@@ -45,6 +45,8 @@ class Localized:
     def retranslate(self):
         with QSignalBlocker(self):
             for method, source in self._source_text.items():
+                if method in ("setText", "setToolTip") and self.property("literalText"):
+                    continue
                 getattr(super(), method)(t(source))
             if isinstance(self, QtWidgets.QComboBox) and not self.isEditable():
                 for index in range(self.count()):
@@ -59,7 +61,7 @@ class Localized:
                 for row in range(self.rowCount()):
                     for column in range(self.columnCount()):
                         item = self.item(row, column)
-                        if item:
+                        if item and not item.data(Qt.ItemDataRole.UserRole + 100):
                             QtWidgets.QTableWidgetItem.setText(item, t(item.data(Qt.ItemDataRole.UserRole + 99) or item.text()))
 
 
@@ -70,7 +72,7 @@ def source_text(control):
 def text_setter(base, method):
     def setter(self, text):
         self._source_text[method] = text
-        getattr(base, method)(self, t(text))
+        getattr(base, method)(self, text if method in ("setText", "setToolTip") and self.property("literalText") else t(text))
     return setter
 
 
@@ -110,7 +112,7 @@ def set_headers(self, texts):
 
 def localized_type(base):
     methods = {}
-    for method in ("setToolTip", "setAccessibleName", "setAccessibleDescription", "setPlaceholderText", "setSuffix"):
+    for method in ("setToolTip", "setAccessibleName", "setAccessibleDescription", "setPlaceholderText", "setSuffix", "setWindowTitle"):
         if hasattr(base, method):
             methods[method] = text_setter(base, method)
     if issubclass(base, (QtWidgets.QLabel, QtWidgets.QAbstractButton, QtGui.QAction)):
@@ -127,17 +129,18 @@ def localized_type(base):
 for _name in (
     "QLabel", "QPushButton", "QCheckBox", "QComboBox", "QFrame", "QLineEdit",
     "QPlainTextEdit", "QProgressBar", "QScrollArea", "QSlider", "QSpinBox",
-    "QStackedWidget", "QTableWidget", "QTimeEdit", "QWidget", "QSystemTrayIcon",
+    "QStackedWidget", "QTableWidget", "QTimeEdit", "QWidget", "QDialog", "QSystemTrayIcon",
 ):
     globals()[_name] = localized_type(getattr(QtWidgets, _name))
 QAction = localized_type(QtGui.QAction)
 
 
 class QTableWidgetItem(QtWidgets.QTableWidgetItem):
-    def __init__(self, text=""):
-        super().__init__(t(text))
+    def __init__(self, text="", *, literal=False):
+        super().__init__(text if literal else t(text))
         self.setData(Qt.ItemDataRole.UserRole + 99, text)
+        self.setData(Qt.ItemDataRole.UserRole + 100, literal)
 
     def setText(self, text):
         self.setData(Qt.ItemDataRole.UserRole + 99, text)
-        super().setText(t(text))
+        super().setText(text if self.data(Qt.ItemDataRole.UserRole + 100) else t(text))

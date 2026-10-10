@@ -306,28 +306,42 @@ class HTTPTests(unittest.TestCase):
         return self.opener.open(request, timeout=2)
 
 
-    def test_assets_and_download_exclude_credentials(self):
-        brands = json.loads((Path(__file__).resolve().parents[1] / "aiflame/assets/web/brands/sources.json").read_text())
-        for path in (
-            "/",
-            "/style.css",
-            *[f"/brands/{brand}.png" for brand in brands],
-            "/app.js",
-            "/devices.js",
-            "/shared.js",
-            "/i18n.js",
-            "/locales/en.json",
-            "/api/browser-extension/download",
-        ):
-            with self.request(path) as response:
-                body = response.read()
-                self.assertNotIn(b"cookie-secret", body)
-                self.assertNotIn(b"api-secret", body)
-                self.assertEqual(response.status, 200)
-                if path.startswith("/brands/"):
-                    self.assertEqual(response.headers.get_content_type(), "image/png")
-                    self.assertTrue(body.startswith(b"\x89PNG\r\n\x1a\n"))
+    def test_extension_folder_preparation_is_console_only_and_cannot_choose_path(self):
+        with self.request("/api/browser-extension/prepare", {}) as response:
+            result = json.load(response)
+        self.assertEqual(Path(result["path"]), Path(self.temp.name) / "SeeEnd" / "BrowserExtension")
+        self.assertTrue((Path(result["path"]) / "manifest.json").is_file())
+        for body, headers, status in (({"path": "/tmp/other"}, None, 400),
+                                      ({}, {"Cookie": "", "Authorization": "Bearer web-secret"}, 403)):
+            with self.assertRaises(urllib.error.HTTPError) as error:
+                self.request("/api/browser-extension/prepare", body, headers)
+            self.assertEqual(error.exception.code, status)
+            error.exception.close()
+        with self.request("/api/browser-extension") as response:
+            self.assertTrue(json.load(response)["prepared"])
 
+    def test_web_console_routes_are_removed_and_desktop_session_is_json(self):
+        for path in ("/", "/index.html", "/app.js", "/style.css", "/devices.js",
+                     "/shared.js", "/i18n.js", "/locales/en.json",
+                     "/brands/codex.png", "/device-icons/yeelight-yldp005.svg"):
+            for cookie in ("", "aiflame=cookie-secret"):
+                with self.subTest(path=path, cookie=bool(cookie)):
+                    with self.assertRaises(urllib.error.HTTPError) as error:
+                        self.request(path, headers={"Cookie": cookie})
+                    self.assertEqual(error.exception.code, 404)
+                    self.assertNotIn("Set-Cookie", error.exception.headers)
+                    error.exception.close()
+        with self.request("/api/session", headers={"Cookie": ""}) as response:
+            self.assertEqual(response.headers.get_content_type(), "application/json")
+            self.assertEqual(json.load(response)["app_name"], "SeeEnd")
+            self.assertIn("Set-Cookie", response.headers)
+
+    def test_extension_download_excludes_credentials(self):
+        with self.request("/api/browser-extension/download") as response:
+            body = response.read()
+            self.assertNotIn(b"cookie-secret", body)
+            self.assertNotIn(b"api-secret", body)
+            self.assertEqual(response.status, 200)
 
     def test_device_mutations_require_dashboard_and_same_origin(self):
         for headers in (

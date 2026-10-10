@@ -1,6 +1,6 @@
 # SeeEnd 桌面预览版使用
 
-当前版本支持 Yeelight YLTD003 与 YLDP005 两款局域网灯具，以及无需灯具的虚拟模式。沿用旧版数据目录，已有 Yeelight 设置保留；AI Flame 0.1 / 0.2 记录不再加载。用 SeeEnd.app 替换旧 App 后，在「应用接入」为已使用的工具执行「连接」，让包含旧程序绝对路径的 Hooks 和浏览器桥接更新到新版位置；随后重启对应工具会话。
+当前版本支持 Yeelight YLTD003 与 YLDP005 两款局域网灯具，以及无需灯具的虚拟模式。沿用旧版数据目录，已有 Yeelight 设置保留；AI Flame 0.1 / 0.2 记录不再加载。用 SeeEnd.app 替换旧 App 后，在「应用接入」使用 SeeEnd Skill 为编程工具更新接入，并按工具提示加载配置；网页扩展通过「安装浏览器扩展」引导更新。这样会更新指向旧 App 的接入路径。
 
 ## 打开 App
 
@@ -23,9 +23,9 @@
 
 ## 没有火焰灯：先验证你的用法
 
-1. 在总览点击「应用接入」，在统一列表中开启实际使用的来源。网页、桌面客户端和本地 API 是不同接入，不能互相替代验证。
-2. 按下方说明完成接入：Codex 连接后重开会话；网页加载 Chrome 扩展、连接桥接并刷新对应网页；macOS 桌面实验接入需开启来源并完成权限授权。未列出的工具不会自动识别，可自行通过本地 API 上报状态。
-3. 回到所选 AI 应用发送一条新任务，无需启动额外的验证流程。
+1. 在总览点击「应用接入」，在「接入应用」中选择类型并开启实际使用的来源。「接入说明」只展示当前类型的操作方法。网页、桌面客户端和本地 API 是不同接入，不能互相替代验证。
+2. 按当前类型的说明完成接入：编程工具通过 SeeEnd Skill 安装并验证；网页点击「安装浏览器扩展」并完成四步引导；macOS 桌面实验接入需开启来源并完成权限授权。未列出的工具不会自动识别，可自行通过本地 API 上报状态。
+3. 按所选接入的提示，在对应 AI 应用发送一条新任务。
 4. 观察总览屏幕火焰或菜单栏从「工作中」到「已完成」。屏幕实时火焰会呼吸 / 跃动，完成和异常按设定时长结束；实体灯具以常亮颜色区分任务状态。
 5. 在接入列表查看来源状态，到「活动记录」查看开始、完成时间及处理结果。只有真实来源同一任务完整配对才显示「已收到同一任务的开始与完成」；取消、异常、超时与不完整事件分别提示。活动记录可导出 CSV。
 
@@ -55,61 +55,52 @@ YLTD003 仅控制后方 RGB 背光，前方白光沿用灯具设置；YLDP005 �
 
 这些是明确标记的适配器模拟测试。实际 Codex 还需发送新消息验证 Hook 派发；实际网页版对话还需在对应平台验证 Chrome 扩展与页面识别。ChatGPT 桌面普通 Chat 来源使用原生控件识别，与 Codex Hook 分开；真实客户端识别需另行验收。
 
-## 编程工具配置文件与增量接入
+## 编程工具通过 Skill 接入
 
-在「应用接入」点击「连接」，重开工具并发一条新任务，等回复结束后点击「检查」。工具提示信任时先确认；DeepSeek 只有一个已有 Profile 时会自动选中，多个时选择实际使用的那个。
+先确认工具已在这台电脑安装并能正常回复。保持 SeeEnd 运行，默认虚拟模式即可，无需灯具或向 SeeEnd 提供模型 API Key。macOS 请先把 SeeEnd.app 放入「应用程序」，避免之后移动 App 使接入路径失效。
 
-无需手动编辑文件。自定义目录、修改范围和文件位置在「高级设置」中；「手动配置」和「诊断详情」按需展开。下表为默认位置，`~` 表示当前用户的主目录；填写自定义目录时以 APP 显示的实际路径为准。留空会沿用已连接目录，再按环境变量或默认目录定位。
+在「应用接入 → 编程工具」点击「复制安装指令」，粘贴到实际使用的工具并发送：
 
-| 工具 | 涉及文件 | 修改方式与自动条件 |
-| --- | --- | --- |
-| Codex | `~/.codex/hooks.json`，或 `CODEX_HOME/hooks.json` | 自动向生命周期事件数组添加 SeeEnd Hook 组；不修改 `config.toml`。可指定目录；信任新增 Hooks 需在 Codex 中自行完成。 |
-| Claude Code | `~/.claude/settings.json`，或 `CLAUDE_CONFIG_DIR/settings.json` | 自动增量合并 `hooks`；保留模型、权限、环境变量及原有 Hook 组。 |
-| Qoder CLI | `~/.qoder/settings.json` | 自动增量合并用户级 `hooks`，保留其他设置；可指定实际配置目录。 |
-| Gemini CLI | `~/.gemini/settings.json` | 自动增量合并 `hooks`，保留 `hooksConfig` 及其他设置；不会擅自启用被禁用的 Hooks。 |
-| OpenCode | `~/.config/opencode/plugins/aiflame.js` 和 `aiflame/` 下的模块、桥接及 `.seeend-owned.json` | 自动添加专用插件文件，不修改 `opencode.json`／`opencode.jsonc`。沿用 `OPENCODE_CONFIG_DIR` 或 `XDG_CONFIG_HOME`；同名非本应用文件拒绝覆盖。 |
-| DeepSeek Harness | `~/.dsh/profiles/<Profile>/package.json`、`pnpm-lock.yaml`，或 `DSH_HOME` 下对应文件 | 先检查并选择已有 Profile，再由 `dsh plugin`／pnpm 添加本应用依赖和 bundle 条目。需 SeeEnd 能调用 `dsh` 和 `pnpm`；不创建 Profile、不替换整个配置。 |
+> 请安装此 Skill，并用它为当前编程工具接入 SeeEnd：
+> https://github.com/YipengChen/SeeEnd-skill
 
-**不会用完整模板覆盖原配置。** 自动配置前验证现有结构，仅添加或更新本应用拥有的条目，保留其他字段、事件组、matcher 及插件。实际修改前以 `原文件名.seeend-backup-编号` 保存原始字节；备份编号递增，不覆盖旧备份。重复连接不会重复追加 Hook，内容不变时不重写 JSON。发现未知格式、第三方同名文件或符号链接时停止，并提示具体原因。DeepSeek 的依赖和锁文件由外部管理器维护，失败时需核对管理器提示；备份不等同于依赖事务回滚。
+工具安装完整的 `seeend/` 目录，保留 `references/`、`scripts/` 和 `agents/`，再通过 Skill 配置本机接入。具体 Skill 加载位置和调用方式由宿主决定。
 
-需要手动配置时，使用该工具的「复制增量 Hooks 片段」或插件文件清单／命令。Hooks 片段只包含新增组：把每个事件下的 SeeEnd 组追加到原数组，保留其他组和字段；已有 SeeEnd 条目只修复本应用内容。OpenCode 的文件清单包含实际模块来源及桥接参数，不要只创建入口文件。DeepSeek 应通过插件管理器操作，不手动替换整个 `package.json` 或锁文件。
+![SeeEnd 编程工具接入：统一 Skill 入口与提醒开关](images/coding-skill-page.png)
 
-自动配置后重新打开目标工具会话，完成工具要求的 Hooks 信任确认，在该工具中发起一条新任务，等回复结束后点击「检查接入」。安装／修复后重新计算真实接收证据，旧任务不会直接把新接入判定为正常。
+截图为隔离数据下的原生 Qt 界面示例，不代表实际安装或真实任务验收。App 中各工具只显示状态和提醒开关；开关不触发安装或修复。
 
-| 检查反馈 | 含义与下一步 |
-| --- | --- |
-| 接入配置有问题 | 显示缺失文件、JSON 行列、具体事件、旧安装路径、禁用设置、Profile 或插件组件。按失败项提示修复后再次检查。 |
-| 来源未开启 | 配置可能齐全，但该来源不会产生提醒；开启来源后验证新任务。 |
-| 配置已就绪，但尚未验证真实任务接入 | 文件检查通过，无法证明工具已经加载或信任 Hook。重开会话、核对信任并完成新任务。 |
-| 已收到真实任务开始，正在等待本次完成 | 开始信号已到达，等本次回复结束后再检查。 |
-| 接入正常 | 已收到同一真实任务的开始与完成，模拟事件不会计入。 |
-| 最近任务失败／取消／超时／等待输入 | 已收到信号，但本次不是完整成功任务；按工具实际状态处理，不直接当成配置故障。 |
-| 检查未完成 | SeeEnd 服务不可达或检查请求失败；恢复服务后重试，不显示虚假的成功状态。 |
+### 验证与诊断
 
-文件检查不能读取工具实际加载的配置层或 Hook 信任状态。真实接收记录按工具汇总，切换配置目录、Profile、客户端版本或运行模式后，应在对应会话中验证新任务；APP 接收状态也不等于实体灯具已经发光。
+在编程工具中请求“使用 SeeEnd Skill 验证当前工具的接入”。按 Skill 提示完成重载、Hook 信任或授权，并开始验证，再发送一条新任务并等回复结束。只有收到同一新任务的开始与回复完成，才确认本次接入；历史任务、配置文件检查和模拟测试不计入本次验证。已有接入也通过 Skill 复验。
 
-官方机制：[Codex Hooks](https://learn.chatgpt.com/docs/hooks)、[Claude Code Hooks](https://code.claude.com/docs/en/hooks)、[Qoder Hooks](https://docs.qoder.com/cli/hooks)、[Gemini CLI Hooks](https://geminicli.com/docs/hooks/)、[OpenCode 插件](https://opencode.ai/docs/plugins/)、[DeepSeek 插件安装](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/user/develop/basic/publish.md)。
+测试提问可以使用：
 
-## Claude Code / DeepSeek Harness / Qoder CLI
+> 请只回复：SeeEnd 接入测试成功。不要读取或修改文件，也不要调用工具。
 
-在桌面或 Web 控制台的「应用接入」连接来源，连接成功后自动开启该来源。三种 CLI 默认关闭，仍需自行安装目标工具并完成其登录；SeeEnd 不需要模型 API Key。
+提问由你自行发送，按工具账号计入额度或费用，也可用接下来要做的任务验证。若任务取消、异常或等待输入，先处理工具中的提示，再完成一条新任务；任务失败不一定意味着接入故障。
 
-- **Claude Code、Qoder**：点击「连接」，分别向 `~/.claude/settings.json`、`~/.qoder/settings.json` 合并 SeeEnd Hooks；Claude 设置 `CLAUDE_CONFIG_DIR` 时沿用该目录。工具使用自定义配置目录时，在输入框指定目录。重新连接可修复应用路径，保留其他 Hooks 和设置。
-- **DeepSeek Harness**：选择已有 Profile 后点击「连接」；只有一个时自动选中。SeeEnd 将随应用分发的本地 Cordis 插件安装到该 Profile；需要 `dsh` 和 `pnpm` 在应用进程的 PATH 中。不会创建 Profile。使用 `DSH_HOME` 时须让 SeeEnd 继承同一环境。
-- 完成配置后重启目标会话，完成工具要求的信任确认，再提交新请求。「模拟测试」经过真实 helper 与 HTTP 通路，但不计入真实接入验证；DeepSeek 插件另有 Node 自动化测试。
-- 「移除接入」仅移除 SeeEnd 的 Hook 或所选 Profile 的插件。多个 DeepSeek Profiles 需分别安装或移除。
+需要检查目录、DeepSeek Harness Profile、配置文件或接收记录时，在工具中请求“使用 SeeEnd Skill 诊断当前接入”。使用自定义配置目录或 Profile 时告诉 Skill；更换目录或 Profile 后，在对应会话中重新验证。多个 DeepSeek Profiles 需分别安装与验证；Skill 不会自动创建 Profile。
 
-完成单位为一轮主回复，单次工具执行、子代理完成和历史恢复不会独立提醒。DeepSeek 依据实时 `turn/end` 区分完成、取消和异常；Claude / Qoder 使用 `Stop`、`StopFailure`。没有可靠的通用用户中断 Hook 时，工作灯按 Hub 租约到期回空闲，新请求或会话退出也会清理残留任务，不把中断当成成功。无原生轮次标识时，无法完全分辨跨轮次迟到事件；其他 Stop Hooks 继续执行任务时，观察到的 Stop 不能保证它们最终允许停止。
+Codex 需要审阅并信任新增 Hook；OpenCode 需要重启实际运行插件的进程；DeepSeek Harness 需使用同一个 Profile 启动。具体加载方式由 Skill 按当前宿主版本指导。
 
-桥接只保存来源、会话、轮次、状态和序号；不读取 transcript 文件，不保存或转发提问、回答、工具参数和错误正文。缺凭据或 Hub 不可用时静默失败，不改变工具的权限决定。
+文件检查不能读取工具实际加载的配置层或 Hook 信任状态。真实接收记录按工具汇总，不能自动区分同品牌客户端或 Profile，验证期间请只在选定会话发送任务。App 接收到任务也不等于实体灯具已经发光；未看到提醒时检查暂停、静默、系统通知权限与设备连接。
 
-接口依据：[Claude Code Hooks](https://code.claude.com/docs/en/hooks)、[Qoder CLI Hooks](https://docs.qoder.com/cli/hooks)、[DeepSeek 插件安装](https://github.com/deepseek-ai/deepseek-harness/blob/master/apps/cli/reference/README.md)。这三个 CLI 当前未在开发机安装，真实客户端及实体灯具验收仍待执行。
+### 维护与运行范围
+
+检查、排查、修复、更新或移除，均在工具中请求同一 SeeEnd Skill，例如“使用 SeeEnd Skill，只检查现有接入，不修改配置”或“使用 SeeEnd Skill，修复当前工具的接入”。移除只处理所选工具的 SeeEnd Hook 或插件，保留其他设置；多个 Profiles 分别维护。
+
+Skill 优先使用当前 App 的增量安装接口，保留其他 Hook、插件与配置，修改前备份。App 保留安装与检查接口供 Skill 调用，接入页面不再提供手动 JSON、插件命令或直接移除入口。
+
+接入用于本机当前用户。网页、SSH、容器、WSL、云端或远程后端不自动读取本机配置，远程环境的 localhost 也不代表用户电脑。未预设工具只能在原生扩展能力允许时尝试 `local-script` 实验接入，不能伪造独立来源或支持状态。
+
+完成单位为一轮主回复；单次工具执行、子代理完成和历史恢复不会独立提醒。取消、未知、异常与等待输入不映射为根任务成功。桥接只保存生命周期元数据，不读取 transcript 文件，不保存提问、回答、工具参数或错误正文。
 
 ## 网页对话接入
 
 共用一个扩展和一份本机桥接，支持 ChatGPT、DeepSeek、千问、豆包、元宝、Kimi、智谱清言、Claude、Gemini 的普通文字对话。各平台在「应用接入」有独立来源开关，在「活动记录」有来源标识；可在「帮助与诊断」选择来源并开始诊断。无需模型 API Key。
 
-升级已有接入：重启新版 App，在「应用接入」点击「2. 连接 Chrome」，用新版扩展文件覆盖当前已加载的扩展目录，再在 `chrome://extensions/` 点击重新加载。浏览器可能要求确认新增网站权限；随后刷新对应平台的对话网页。扩展 ID 与原 ChatGPT 接入相同，不必新增第二个扩展。
+首次使用：在「应用接入」点击「安装浏览器扩展」，按四步引导操作。文件由 App 准备，无需下载或解压；Chrome 加载完成后，在引导中允许扩展连接 SeeEnd。刷新 AI 网页，发一条新的普通文字提问；收到任务开始和回答完成后，才显示接入已验证。平台开关开启、文件已准备和通信配置完成都不代表真实任务已验证。升级说明可在引导的「遇到问题」中查看。
 
 首次接入、网站地址、页面诊断和验收边界见[网页扩展说明](../aiflame/integrations/chatgpt_web/extension/README.md)。原有七个平台的历史实机与结构测试范围见扩展说明；0.2.6 新增 Claude／Gemini，目前仅完成结构化控件回归，真实账号验收仍待执行。
 
@@ -157,7 +148,7 @@ python packaging/archive.py --dist-dir dist/staging
 
 系统安装版数据分别存放在 macOS Application Support、Windows LOCALAPPDATA、Linux XDG_DATA_HOME 中。移动 App 不会删除配置。
 
-首次接入可在「应用接入」点击「连接」或「2. 连接 Chrome」。共用网页扩展也可从该页面下载，解压后在 Chrome 扩展管理页面加载。
+网页应用首次接入统一从「应用接入 → 安装浏览器扩展」开始；普通文字网页任务共用一个 Chrome 扩展，只需安装一次。Codex 和其他编程工具的安装、验证与维护统一通过 SeeEnd Skill 发起。
 
 等价的安装命令（源码环境）：
 
@@ -166,13 +157,13 @@ python -m aiflame.integrations.codex.install
 python -m aiflame.integrations.chatgpt_web.install --browser chrome
 ```
 
-Codex 可能需要信任 Hook；Chrome 扩展仍需通过扩展管理页面加载 `aiflame/integrations/chatgpt_web/extension`。Windows 的 Native Messaging 桥接要求打包版中提供的 Bridge 可执行文件。商店提交记录见 [申请进度](chrome-web-store/APPLICATION_STATUS.md)；该记录不代表商店当前已审核通过。
+Codex 可能需要信任 Hook。网页应用的 Chrome 扩展请按 App 内安装引导加载 App 准备的目录。Windows 使用包含 Bridge 可执行文件的打包版。商店提交历史记录见 [申请进度](chrome-web-store/APPLICATION_STATUS.md)，当前引导使用本机加载方式。
 
 ## 配置与接入维护
 
 事件历史保留最近 7 天、最多 10,000 条；已失活任务保留 7 天，去重记录保留 24 小时。清理在启动和运行中定期执行，正在运行的任务不会因历史清理被删除。
 
-移动 App 后，在新位置打开 App 并到「应用接入」重新连接对应来源，使 Codex Hooks 和浏览器桥接指向新位置。Codex 安装器会合并本应用的新旧注册；卸载只移除可识别的 SeeEnd 注册，保留其他应用配置。现有 Codex 会话可能仍缓存旧命令，需要新建会话或重新加载客户端配置。
+移动 App 后，在新位置打开 App，使用 SeeEnd Skill 更新编程工具的接入，通过「安装浏览器扩展」更新网页通信配置，使它们指向新位置。Codex 安装器会合并本应用的新旧注册；卸载只移除可识别的 SeeEnd 注册，保留其他应用配置。现有 Codex 会话可能仍缓存旧命令，按引导重新打开会话并审阅当前 Hooks。
 
 ## 菜单栏灯光状态
 
@@ -182,7 +173,7 @@ Codex 可能需要信任 Hook；Chrome 扩展仍需通过扩展管理页面加�
 
 在「提醒偏好」开启「任务通知」，首次通知时允许 macOS 系统授权。灯具不在线或亮度为零也能接收通知；可在任务记录详情中分别查看火焰灯、桌面通知的投递结果。仅运行命令行 Hub 时，通知会等待桌面应用领取，过期不补发。
 
-「应用接入」新增 Gemini CLI 与 OpenCode。点击「连接」后重启相应 CLI：Gemini 使用用户 `.gemini/settings.json` 的原生 Hook；OpenCode 安装本地插件到配置目录 `plugins/aiflame.js`，不覆盖其他插件。目录可手动指定，默认遵循 OpenCode 配置目录环境变量。移除只移除 SeeEnd 接入。需要信任本地 Hook 的 CLI，请在自身界面完成确认。
+Gemini CLI 与 OpenCode 同样使用 SeeEnd Skill 安装接入：Gemini 使用用户 `.gemini/settings.json` 的原生 Hook；OpenCode 安装本地插件到配置目录 `plugins/aiflame.js`，不覆盖其他插件。目录可手动指定，默认遵循 OpenCode 配置目录环境变量。按各工具的说明加载配置并验证新任务，移除只移除 SeeEnd 接入。需要信任本地 Hook 的 CLI，请在自身界面完成确认。
 
 网页扩展 0.2.6 新增 Claude/Gemini。重新加载扩展并刷新网页；两站当前仅完成结构化控件回归，需用真实账号分别验证开始、完成和主动停止。所有网页适配仍为实验功能，不读取聊天内容。
 
@@ -190,6 +181,8 @@ Codex 可能需要信任 Hook；Chrome 扩展仍需通过扩展管理页面加�
 
 1. 退出旧版，打开新版 SeeEnd.app；允许通知，在系统通知设置中开启横幅。触发一次模拟完成，确认通知出现，再将亮度设为 0，用已接入的 AI 应用完成一轮新任务，复测独立通知。
 2. 重新加载浏览器扩展，刷新 Claude/Gemini，在各站发起一轮新对话并测试停止；检查独立来源记录。
-3. 在应用接入中连接 Gemini CLI/OpenCode，重启 CLI，完成一次任务与一次等待权限/中断场景。检查开始、等待输入、恢复、结束的记录。
+3. 使用 SeeEnd Skill 接入 Gemini CLI/OpenCode，重启 CLI，完成一次任务与一次等待权限/中断场景。检查开始、等待输入、恢复、结束的记录。
 
 这些步骤涉及系统授权、CLI 信任或登录账号，自动回归不会代替你操作，也不会自动发送真实任务或测试通知。桌面通知独立于灯具连接和亮度设置。
+
+扩展安装目录与旧配置目录分开：macOS 为 `~/Library/Application Support/SeeEnd/BrowserExtension`，Windows 为 `%LOCALAPPDATA%/SeeEnd/BrowserExtension`，Linux 为 `$XDG_DATA_HOME/seeend/BrowserExtension`（默认 `~/.local/share/seeend/BrowserExtension`）。旧配置仍沿用原目录以保留配对和偏好。

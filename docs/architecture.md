@@ -22,7 +22,7 @@ aiflame/
     desktop_clients/           macOS 客户端身份、原生控件识别与诊断
     local_api/                 鉴权 HTTP 客户端
     manual/                    手动模拟事件
-  assets/                      图标、Web 控制台与翻译
+  assets/                      桌面图标与翻译资源
 packaging/                     构建、产物验证、许可证准备与归档
 tests/                         自动回归、隔离截图夹具与实机辅助测试
 docs/                          使用指南、架构、历史验收及发布资料

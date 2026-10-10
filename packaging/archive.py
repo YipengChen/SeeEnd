@@ -16,6 +16,11 @@ args = parser.parse_args()
 dist = args.dist_dir.resolve()
 version = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
 name = f"SeeEnd-{version}-{platform.system()}-{platform.machine()}"
+# Include an offline, self-contained illustrated installation guide.
+sys.path.insert(0, str(root))
+from aiflame.integrations.chatgpt_web.guide import offline_html
+guide = dist / "SeeEnd-browser-extension-install.html"
+guide.write_text(offline_html(), encoding="utf-8")
 if sys.platform == "darwin":
     subprocess.run(
         [
@@ -50,6 +55,7 @@ with zipfile.ZipFile(source_zip, "w", zipfile.ZIP_DEFLATED) as archive:
 if sys.platform in ("darwin", "win32"):
     with zipfile.ZipFile(dist / (name + ".zip"), "a", zipfile.ZIP_DEFLATED) as archive:
         archive.write(source_zip, source_zip.name)
+        archive.write(guide, guide.name)
         for filename in ("LICENSE", "THIRD_PARTY_NOTICES.md", "LIBRARY_REPLACEMENT.md"):
             archive.write(root / filename, filename)
 else:
@@ -57,6 +63,7 @@ else:
     with tarfile.open(dist / (name + ".tar"), "w") as archive:
         archive.add(dist / "SeeEnd", arcname="SeeEnd")
         archive.add(source_zip, arcname=source_zip.name)
+        archive.add(guide, arcname=guide.name)
         for filename in ("LICENSE", "THIRD_PARTY_NOTICES.md", "LIBRARY_REPLACEMENT.md"):
             archive.add(root / filename, arcname=filename)
     with open(dist / (name + ".tar"), "rb") as src:

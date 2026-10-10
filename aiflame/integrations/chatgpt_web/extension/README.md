@@ -1,4 +1,4 @@
-# SeeEnd · AI 网页对话扩展（实验版 0.2.6）
+# SeeEnd · AI 网页对话扩展（实验版 0.2.9）
 
 一个 Chrome / Edge 扩展接入九个平台的普通文字对话，无需模型 API Key。每个平台有独立的来源开关、鉴权令牌、事件历史和桥接自测。扩展路径、原生桥接名称和固定扩展 ID 保留原 ChatGPT 接入的值，已有接入可以原位升级。
 
@@ -14,22 +14,20 @@
 | Claude | <https://claude.ai/> | `claude-web` |
 | Gemini | <https://gemini.google.com/> | `gemini-web` |
 
-## 安装或升级
+## 安装或升级（无需下载或解压）
 
-1. 启动 SeeEnd 0.8.1 或更新版本，在「应用接入」确认需要使用的平台来源已启用。
-2. 在「应用接入」点击「2. 连接 Chrome」。源码环境进入 `code/` 目录后执行等价命令：
+在桌面 App 打开「应用接入 → 安装浏览器扩展」，按四步引导完成安装。无需另外下载或解压扩展文件，也不需要灯具或模型 API Key。引导和分发包内的离线文档均使用真实界面截图。
 
-   ```sh
-   python -m aiflame.integrations.chatgpt_web.install --browser chrome
-   ```
+1. 在安装引导点击「准备安装文件」，等待显示文件夹路径。
+2. 复制 Chrome 地址，在 Chrome 地址栏粘贴并打开扩展管理。开启「开发者模式」，点击「加载未打包的扩展程序」（部分版本称为「加载已解压的扩展程序」）。
+3. 复制文件夹路径，在 Chrome 文件夹选择窗口进入 BrowserExtension 并选择。Chrome 出现 SeeEnd 卡片只代表加载完成。
+4. 在引导中先选择要验证的网站，点击「允许连接」；若该网站提醒关闭，点击「开启此网站提醒」。通过「在 Chrome 打开」开始本次验证，登录并刷新网页，从 Chrome 的扩展菜单打开 SeeEnd，点击「检查当前页面」。检查通过后发送一条新的普通文字提问，收到开始和完成后，SeeEnd 才显示「网页接入已验证」。固定图标可选；旧回答、历史成功记录和模拟任务不能验证此次安装。
 
-3. 从「应用接入」下载共用浏览器扩展并解压，或使用源码目录 `aiflame/integrations/chatgpt_web/extension`。在 `chrome://extensions/` 开启开发者模式，加载已解压的扩展。
-4. 已有扩展时，用新版文件覆盖原来已加载的扩展目录，然后点击「重新加载」；若浏览器提示新增网站访问权限，确认需要接入的网站。固定扩展 ID 仍为 `hifannlfdbbhmmgecknoakpbhfihihbg`。
-5. 刷新对应平台网页。打开扩展图标，点击「检查当前页面」，检查当前平台、桥接连接、该平台来源开关、页面控件和适配器版本。结束控件只有在回复出现后才能检查。
+准备的扩展使用商店 ID `miokmdeomlchjpihkcnommpnheagoimc`；桥接继续兼容旧开发 ID `hifannlfdbbhmmgecknoakpbhfihihbg`。商店入口可用后可直接点击「添加至 Chrome」，无需开发者模式；当前商店可安装状态尚未确认，不能依赖它完成安装。
 
-旧版源代码桥接复制到了系统用户数据目录，单独更新项目里的扩展文件不会更新这份脚本及令牌，必须执行一次修复安装。若显示 `bridge_update_required`，执行步骤 2。App 升级后重启 Hub，新来源和令牌会自动补齐；既有亮度、静默与来源开关会保留。
+升级时再次准备文件夹，在 Chrome 扩展管理页点击重新加载，再在安装引导中允许连接并刷新网页。目录保持不变；不要删除或移动它。
 
-Edge 的注册命令为 `python -m aiflame.integrations.chatgpt_web.install --browser edge`，扩展管理页为 `edge://extensions/`；代码兼容，实机仍待验证。Windows 桥接需要打包 App 中的 `SeeEnd Bridge.exe`。
+源码环境也可直接加载本目录，并运行 `python -m aiflame.integrations.chatgpt_web.install --browser chrome` 注册桥接。Edge 使用 `--browser edge` 和 `edge://extensions/`，实机仍待验证。Windows 桥接需要打包 App 中的 `SeeEnd Bridge.exe`。移动 App 或出现 `bridge_update_required` 后重新连接桥接。
 
 ## 状态规则与隐私
 
@@ -101,7 +99,7 @@ DOM 可能随平台更新。未识别结束控件时保持不确定并最终超�
 
 ## 逐站验收
 
-1. 普通文字消息：工作呼吸 → 回复结束火苗约 10 秒 → 恢复其他工作或熄灭。
+1. 普通文字消息：工作状态 → 回复结束完成提醒约 10 秒 → 恢复其他工作或熄灭。
 2. 长任务点击停止：登记取消，不出现该任务完成提示。
 3. 生成中切换会话、刷新、关闭页面：取消或租期失效，不提示成功。
 4. 两个平台／两个标签页同时生成：各自登记，关闭或取消一个不影响另一个。
@@ -109,11 +107,11 @@ DOM 可能随平台更新。未识别结束控件时保持不确定并最终超�
 6. 关闭 Hub 后生成，再恢复 Hub：不补播，刷新网页后开始新任务。
 7. 在控制台关闭一个平台来源：该平台事件不触发，其他平台仍可使用。
 
-控制台桥接测试是明确标记的模拟任务，只验证桥接和 Hub。`queued` 表示 Hub 已收到；`applied` / 设备已确认表示开发板已接受调度。实际发光需观察硬件。
+控制台桥接测试是明确标记的模拟任务，只验证桥接和 Hub。`queued` 表示 Hub 已收到；`applied` / 设备已确认表示灯具协议已确认调度。实际发光需观察硬件。
 
 ## 测试与卸载
 
-在源码仓库的 `code/` 目录运行：
+在本仓库目录运行：
 
 ```sh
 python -B -m unittest discover -s tests -v

@@ -1,41 +1,33 @@
-"""Native incremental setup guidance and check feedback without ports or config writes."""
+"""Shared Skill entry and source switches, without coding-tool configuration writes."""
 
-import json
 import os
 from importlib.util import find_spec
 from pathlib import Path
 import tempfile
 import unittest
 from unittest.mock import patch
-from urllib.parse import parse_qs, urlsplit
 
 os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
-HAS_QT = find_spec("PySide6") is not None
+HAS_QT = find_spec('PySide6') is not None
 if HAS_QT:
     from PySide6.QtCore import QObject, Signal
-    from PySide6.QtWidgets import QApplication
+    from PySide6.QtWidgets import QApplication, QPushButton, QLineEdit, QComboBox, QLabel
+    from aiflame.desktop.components import Disclosure
+    from aiflame.desktop.localization import set_language
     from aiflame.desktop.widgets import Dashboard
-    from aiflame.integrations.cli_tools.guidance import integration_guide
+    from aiflame.core.engine import Engine
+    from aiflame.integrations.registry import SOURCES
+    from aiflame.integrations.cli_tools.skill import NAMES, SKILL_URL, installation_prompt
 
-
-if HAS_QT:
     class OfflineAPI(QObject):
         error = Signal(str)
 
         def __init__(self, parent, port):
             super().__init__(parent)
             self.calls = []
-            self.reports = {}
 
-        def request(self, path, callback=None, **kwargs):
-            self.calls.append((path, kwargs))
-            query = {key: value[0] for key, value in parse_qs(urlsplit(path).query).items()}
-            if path.startswith('/api/integration-guide?'):
-                callback(integration_guide(query['source'], query.get('config_dir'), query.get('profile')))
-            elif path.startswith('/api/integration-check?'):
-                report = self.reports.get(query['source'])
-                if report:
-                    callback(report)
+        def request(self, path, callback=None, body=None, **kwargs):
+            self.calls.append((path, {**kwargs, 'body': body}))
 
         def close(self):
             pass
@@ -53,70 +45,96 @@ class IntegrationUITests(unittest.TestCase):
         env = patch.dict(os.environ, {'AIFLAME_DATA_DIR': self.temp.name})
         env.start()
         self.addCleanup(env.stop)
+        set_language('zh-CN')
+        self.addCleanup(lambda: set_language('zh-CN'))
+        self.engine = Engine(Path(self.temp.name) / 'events.sqlite', sources=SOURCES)
+        self.addCleanup(self.engine.db.close)
         with patch('aiflame.desktop.widgets.LocalAPI', OfflineAPI):
             self.widget = Dashboard()
         self.addCleanup(self.widget.close)
         self.addCleanup(self.widget.shutdown)
+        self.widget.ready = True
+        self.widget.render({**self.engine.snapshot(), 'maintenance': False})
+        self.widget.show()
 
-    def test_all_six_have_read_only_guides_and_actual_selected_paths(self):
-        self.assertEqual(set(self.widget.integration_guides), {'codex', 'claude-code', 'qoder', 'gemini-cli', 'opencode', 'deepseek-harness'})
-        directory = str(Path(self.temp.name) / 'custom codex')
-        self.widget.cli_config_dirs['codex'].setText(directory)
-        self.widget.load_integration_guide('codex')
-        content = self.widget.integration_guides['codex'].text()
-        self.assertIn(str(Path(directory).resolve() / 'hooks.json'), content)
-        self.assertIn('不替换整个配置', content)
-        self.assertIn('信任', content)
-        snippet = self.widget.integration_snippets['codex'].toPlainText()
-        self.assertIn('Stop', json.loads(snippet)['hooks'])
-        self.assertTrue(self.widget.integration_copy_buttons['codex'].isEnabled())
-        self.assertFalse(Path(directory).exists())
+    def test_all_six_have_only_status_and_switch_without_automatic_diagnostics(self):
+        self.widget.api.calls.clear()
+        self.widget.navigate(2)
+        self.widget.source_category.setCurrentIndex(self.widget.source_category.findData('cli'))
+        section = self.widget.source_sections['cli'][0]
+        self.app.processEvents()
+        buttons = [button for button in section.findChildren(QPushButton) if button.text() and button.isVisible()]
+        self.assertEqual([button.text() for button in buttons], ['复制安装指令', '查看 Skill 仓库'])
+        self.assertFalse(section.findChildren(Disclosure))
+        self.assertFalse(section.findChildren(QLineEdit))
+        self.assertFalse(section.findChildren(QComboBox))
+        for source in NAMES:
+            self.assertIn(source, self.widget.source_status)
+            self.assertIn(source, self.widget.source_checks)
+        self.assertFalse(any(path.startswith(('/api/integration-', '/api/cli-integrations'))
+                             for path, _ in self.widget.api.calls))
 
-    def test_checks_display_concrete_error_or_verified_state_and_dont_replace_directory(self):
-        self.widget.cli_config_dirs['claude-code'].setText('/tmp/selected cli')
-        self.widget.api.reports['claude-code'] = {
-            'source_id': 'claude-code', 'configuration_ready': False, 'status': 'configuration_error',
-            'summary': '接入配置有问题：settings.json 缺少 Stop', 'next_action': '自动连接 / 修复',
-            'checks': [{'status': 'error', 'message': 'Stop：缺少 SeeEnd Hook', 'action': '增量添加'}],
-            'signals': {}, 'issues': ['缺少 Stop'],
-        }
-        self.widget.check_cli('claude-code')
-        self.assertIn('缺少 Stop', self.widget.cli_messages['claude-code'].text())
-        self.assertIn('增量添加', self.widget.cli_details['claude-code'].text())
-        self.assertEqual(self.widget.cli_config_dirs['claude-code'].text(), '/tmp/selected cli')
-        self.widget.api.reports['claude-code'].update(configuration_ready=True, status='connected',
-                                                    summary='接入正常：已收到同一真实任务的开始与完成。', checks=[], issues=[])
-        self.widget.check_cli('claude-code')
-        self.assertIn('接入正常', self.widget.cli_messages['claude-code'].text())
+    def test_shared_copy_is_short_and_does_not_install_or_change_sources(self):
+        enabled = {source: self.widget.source_checks[source].isChecked() for source in NAMES}
+        self.widget.api.calls.clear()
+        self.widget.skill_copy_button.click()
+        self.assertEqual(self.app.clipboard().text(), installation_prompt())
+        self.assertEqual(len(self.app.clipboard().text().splitlines()), 2)
+        self.assertFalse(self.widget.skill_notice.isHidden())
+        self.assertFalse(self.widget.api.calls)
+        self.assertEqual(enabled, {source: self.widget.source_checks[source].isChecked() for source in NAMES})
 
-    def test_codex_checks_always_have_visible_feedback_when_ready_but_not_verified(self):
-        self.widget.api.reports['codex'] = {'configuration_ready': True, 'status': 'ready_unverified',
-                                            'summary': '配置已就绪，但尚未验证真实任务接入。', 'checks': [], 'signals': {}}
-        self.widget.check_codex()
-        self.assertIn('尚未验证', self.widget.codex_message.text())
-        self.assertFalse(self.widget.codex_message.isHidden())
-        self.assertIn('尚未验证', self.widget.codex_connection_details.text())
+    def test_switch_saves_only_reminder_setting_and_preserves_skill_entry(self):
+        self.widget.api.calls.clear()
+        self.widget.source_checks['claude-code'].click()
+        posts = [(path, kwargs['body']) for path, kwargs in self.widget.api.calls if kwargs.get('body')]
+        self.assertEqual(posts, [('/api/settings', {'source_enabled': {
+            **self.engine.settings['source_enabled'], 'claude-code': True}})])
+        self.assertTrue(self.widget.skill_copy_button.isEnabled())
 
-    def test_compact_feedback_and_single_profile_need_no_extra_selection(self):
-        self.widget.api.reports['deepseek-harness'] = {
-            'source_id': 'deepseek-harness', 'configuration_ready': False, 'status': 'configuration_error',
-            'summary': '详细的插件诊断', 'feedback': '请选择 Profile 后连接。', 'connect_label': '连接',
-            'checks': [], 'signals': {}, 'profiles': ['default'],
-        }
-        self.widget.check_cli('deepseek-harness')
-        self.assertEqual(self.widget.cli_profiles['deepseek-harness'].currentData(), 'default')
-        self.assertEqual(self.widget.cli_messages['deepseek-harness'].text(), '请选择 Profile 后连接。')
-        self.assertIn('详细的插件诊断', self.widget.cli_details['deepseek-harness'].text())
-        self.assertTrue(all(not kwargs.get('body') for _, kwargs in self.widget.api.calls))
+    def test_english_copy_and_repository_failure_offer_visible_feedback(self):
+        set_language('en')
+        self.widget.skill_copy_button.click()
+        self.assertNotRegex(self.app.clipboard().text(), r'[\u4e00-\u9fff]')
+        self.assertIn(SKILL_URL, self.app.clipboard().text())
+        with patch('PySide6.QtGui.QDesktopServices.openUrl', return_value=False) as opened:
+            self.widget.open_coding_skill()
+        self.assertEqual(opened.call_args.args[0].toString(), SKILL_URL)
+        self.assertIn('browser', self.widget.skill_notice.text())
+        self.assertFalse(self.widget.skill_notice.isHidden())
+
+    def test_expanded_help_follows_category_without_other_types_or_repeated_statuses(self):
+        self.widget.navigate(2)
+        disclosure = self.widget.integration_help_disclosure
+        disclosure.button.click()
+        for category, phrase in [('cli', 'SeeEnd Skill'), ('web', 'Chrome'),
+                                 ('desktop', 'macOS'), ('local', '本地 API')]:
+            with self.subTest(category=category):
+                self.widget.source_category.setCurrentIndex(self.widget.source_category.findData(category))
+                self.app.processEvents()
+                self.assertTrue(disclosure.button.isChecked())
+                self.assertEqual([key for key, panel in self.widget.integration_help_panels.items()
+                                  if panel.isVisible()], [category])
+                panel = self.widget.integration_help_panels[category]
+                text = '\n'.join(item.text() for item in panel.findChildren(QLabel) if item.isVisible())
+                self.assertIn(phrase, text)
+                self.assertNotIn('来源状态', text)
+                self.assertNotIn('Yeelight', text)
+                self.assertLess(len(text), 100)
+        set_language('en')
+        self.app.processEvents()
+        for panel in self.widget.integration_help_panels.values():
+            for label in panel.findChildren(QLabel):
+                self.assertNotRegex(label.text(), r'[\u4e00-\u9fff]')
 
     def test_web_icons_titles_and_overview_open_matching_urls_without_changing_sources(self):
-        from PySide6.QtWidgets import QPushButton
         from aiflame.integrations.chatgpt_web.host import WEB_URLS
         with patch('PySide6.QtGui.QDesktopServices.openUrl', return_value=True) as open_url:
             for source, url in WEB_URLS.items():
                 with self.subTest(source=source):
                     enabled = self.widget.source_checks[source].isChecked()
-                    buttons = self.widget.source_rows[source].findChildren(QPushButton)
+                    buttons = [button for button in self.widget.source_rows[source].findChildren(QPushButton)
+                               if button.property('variant') in ('brand', 'webSourceTitle')]
                     self.assertEqual(len(buttons), 2)
                     for button in [*buttons, self.widget.home_source_icons[source]]:
                         button.click()

@@ -1,7 +1,7 @@
 /* Site-specific control adapters. Never inspect message text, editor values or account data. */
 (function (root) {
   'use strict';
-  const VERSION = '0.2.8';
+  const VERSION = '0.2.9';
   function labels(values) {
     return values.flatMap(value => ['aria-label', 'title', 'data-tooltip'].map(
       attr => `button[${attr}="${value}"],[role="button"][${attr}="${value}"],a[${attr}="${value}"],div[${attr}="${value}"]`

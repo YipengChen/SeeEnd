@@ -208,7 +208,8 @@ class NativeDesktopTests(unittest.TestCase):
             self.widget.resize(width, height)
             for _ in range(4):
                 self.app.processEvents()
-            self.assertEqual(self.widget.device_cards_layout.rowCount(), 1)
+            self.assertIsNotNone(self.widget.device_cards_layout.itemAtPosition(0, 1))
+            self.assertIsNone(self.widget.device_cards_layout.itemAtPosition(1, 0))
             self.assertEqual(self.widget.tabs.widget(1).horizontalScrollBar().maximum(), 0)
             self.assertEqual(self.widget.tabs.widget(1).verticalScrollBar().maximum(), 0)
 
@@ -311,7 +312,7 @@ class NativeDesktopTests(unittest.TestCase):
         self.widget.tabs.setCurrentIndex(2)
         rows = list(self.widget.source_rows.values())
         self.assertTrue(all(not row.isHidden() for row in rows))
-        self.assertTrue(all(row.parentWidget() is rows[0].parentWidget() for row in rows))
+        self.assertEqual(set(self.widget.source_sections), {'web', 'cli', 'desktop', 'local'})
         self.assertFalse(hasattr(self.widget, "verification_source"))
         for source, row in self.widget.source_rows.items():
             mark = row.layout().itemAt(0).widget()
@@ -831,7 +832,7 @@ class NativeDesktopTests(unittest.TestCase):
         self.select_light_settings_fixture(2)
         self.widget.yeelight_brightness_controls["working"].setValue(7)
         self.widget.device_instances.setCurrentIndex(self.widget.device_instances.findData("two"))
-        self.wait(lambda: self.hub.transport.records["one"]["light_settings"]["state_brightness"]["working"] == 7 and not self.widget.device_selection_loading and not self.widget.writing and not self.widget.api.pending)
+        self.wait(lambda: self.hub.transport.records["one"]["light_settings"].get("state_brightness", {}).get("working") == 7 and not self.widget.device_selection_loading and not self.widget.writing and not self.widget.api.pending)
         self.assertEqual(self.widget.selected_device_id, "two")
         self.assertEqual(self.hub.transport.records["two"]["light_settings"]["brightness"], 20)
         for control in self.widget.yeelight_brightness_controls.values():
@@ -1099,10 +1100,10 @@ class NativeDesktopTests(unittest.TestCase):
         self.widget.yeelight_host.setText("Private network")
         self.widget.history_search.setText("Private password")
         self.widget.yeelight_host.setText("192.0.2.8")
-        self.widget.cli_config_dirs["codex"].setText("/tmp/custom-cli")
+        self.widget.skill_notice.setText("old installation feedback")
+        self.widget.skill_notice.show()
         self.widget.history_search.setText("old query")
         self.widget.manual_task = "old-task"
-        self.widget.integration_plans["codex"] = {"snippet": "old configuration"}
         self.widget.device_test_deadlines["saved-device"] = time.monotonic() + 10
         self.widget.brightness_timer.start()
         self.widget.pending_device_brightness = {"device_id": "saved-device", "settings": {"brightness": 8}}
@@ -1131,11 +1132,11 @@ class NativeDesktopTests(unittest.TestCase):
         self.assertEqual(self.widget.selected_device_model, "yeelight-yltd003")
         self.assertIsNone(self.widget.manual_task)
         self.assertEqual(self.widget.device_test_deadlines, {})
-        self.assertEqual(self.widget.integration_plans, {})
+        self.assertTrue(self.widget.skill_notice.isHidden())
         self.assertEqual(self.widget.device_version.text(), "连接后读取固件版本")
         self.assertEqual(self.widget.device_model_title.text(), "Yeelight 屏幕挂灯 Pro")
         for edit in (self.widget.yeelight_host, self.widget.history_search, self.widget.yeelight_host,
-                     self.widget.cli_config_dirs["codex"], self.widget.history_search):
+                     self.widget.skill_notice):
             self.assertEqual(edit.text(), "")
         self.assertEqual(self.widget.tabs.currentIndex(), 0)
         self.assertEqual(self.widget.history.rowCount(), 0)
@@ -1406,6 +1407,68 @@ class NativeDesktopTests(unittest.TestCase):
             self.widget.check_clients()
             self.assertTrue(self.widget.client_message.isHidden())
 
+    def test_browser_extension_prepares_folder_and_opens_illustrated_guide(self):
+        with patch.object(self.widget, "act") as action, \
+             patch("PySide6.QtGui.QDesktopServices.openUrl") as open_url:
+            self.widget.prepare_browser_extension()
+            self.assertEqual(action.call_args.args[:2], ("/api/browser-extension/prepare", {}))
+            action.call_args.args[2]({"path": "/tmp/BrowserExtension", "message": "扩展文件夹已准备，无需下载或解压。"})
+            self.assertTrue(open_url.call_args.args[0].isLocalFile())
+            self.assertIn("/tmp/BrowserExtension", self.widget.browser_message.text())
+            open_url.reset_mock()
+            self.widget.open_browser_extension_guide()
+            self.assertTrue(self.widget.extension_guide.isVisible())
+            self.assertEqual(self.widget.extension_guide.parent(), self.widget)
+            open_url.assert_not_called()
+            self.widget.extension_guide.close()
+
+    def test_first_use_extension_guide_gates_preparation_configuration_and_recovers(self):
+        self.widget.open_browser_extension_guide()
+        guide = self.widget.extension_guide
+        self.wait(lambda: not self.widget.api.pending)
+        self.assertFalse(guide.prepared)
+        self.assertEqual(guide.primary.text(), "准备安装文件")
+        self.assertTrue(guide.primary.isEnabled())
+        guide.go(1)
+        self.assertEqual(guide.step, 0)
+        with patch.object(self.widget, "act") as action:
+            guide.prepare()
+            self.assertFalse(guide.primary.isEnabled())
+            action.call_args.args[3]()
+            self.assertTrue(guide.primary.isEnabled())
+            self.assertIn("未能准备", guide.status.text())
+            guide.prepare()
+            action.call_args.args[2]({"path": str(Path(self.temp.name)/"SeeEnd/BrowserExtension"), "prepared": True})
+        self.assertEqual(guide.primary.text(), "继续")
+        guide.primary.click()
+        guide.primary.click()
+        self.assertEqual(self.app.clipboard().text(), "chrome://extensions/")
+        self.assertIn("粘贴", guide.status.text())
+        guide.go(2)
+        self.assertEqual(guide.step, 1)
+        guide.checkpoint.setChecked(True)
+        guide.primary.click()
+        self.assertEqual(guide.step, 2)
+        guide.primary.click()
+        self.assertEqual(self.app.clipboard().text(), guide.path)
+        guide.checkpoint.setChecked(True)
+        guide.primary.click()
+        self.assertEqual(guide.step, 3)
+        with patch.object(self.widget, "act") as action:
+            guide.connect()
+            self.assertFalse(guide.primary.isEnabled())
+            self.assertEqual(action.call_args.args[:2], ("/api/integrations/install", {"source": "chatgpt-web"}))
+            action.call_args.args[2]({"message": "通信配置已准备。"})
+        self.wait(lambda: not self.widget.api.pending)
+        self.assertTrue(guide.configured)
+        self.assertFalse(guide.verified)
+        self.assertNotIn("已验证", guide.status.text())
+        guide.close()
+        self.assertFalse(guide.timer.isActive())
+        self.widget.open_browser_extension_guide()
+        self.assertEqual(self.widget.extension_guide.step, 3)
+        guide.close()
+
     def test_browser_connection_preserves_required_next_steps(self):
         with patch.object(self.widget, "act") as action:
             self.widget.install_integration("chatgpt-web")
@@ -1429,12 +1492,13 @@ class NativeDesktopTests(unittest.TestCase):
     def test_source_help_is_local_and_collapsed_until_requested(self):
         self.widget.navigate(2)
         disclosure = self.widget.integration_help_disclosure
+        panel = self.widget.integration_help_panels["cli"]
         self.assertTrue(self.widget.tabs.widget(2).isAncestorOf(disclosure))
         self.assertFalse(disclosure.button.isChecked())
-        self.assertFalse(self.widget.codex_details.isVisible())
+        self.assertFalse(panel.isVisible())
         disclosure.button.click()
-        self.assertTrue(self.widget.codex_details.isVisible())
-        self.assertIn("真实任务", self.widget.source_details["codex"].text())
+        self.assertTrue(panel.isVisible())
+        self.assertEqual([key for key, item in self.widget.integration_help_panels.items() if item.isVisible()], ["cli"])
         self.widget.navigate(5)
         self.assertTrue(all(not item.button.isChecked() for item in self.widget.help_disclosures))
         self.assertFalse(self.widget.privacy_disclosure.button.isChecked())

@@ -3,11 +3,19 @@
 STYLE = """
 QWidget { color: #292824; font-family: 'Inter', 'SF Pro Text', 'PingFang SC', 'Microsoft YaHei', sans-serif; font-size: 13px; }
 QWidget#dashboard, QScrollArea, QWidget#page { background: #f6f5f1; }
+QDialog#extensionGuide, QWidget#extensionGuideBody { background: #f6f5f1; }
+QDialog#extensionGuide QLabel[role="guideTitle"] { font-size: 23px; font-weight: 600; }
+QDialog#extensionGuide QLabel[role="guideProgress"] { color: #625f57; font-size: 13px; }
+QDialog#extensionGuide QLabel[role="muted"] { color: #625f57; }
+QDialog#extensionGuide QLabel[role="guideStatus"] { padding: 10px 12px; background: #eeede7; border-radius: 8px; }
+QDialog#extensionGuide QLabel[guideTone="success"] { color: #285c43; background: #e7f0e9; }
+QDialog#extensionGuide QLabel[guideTone="warning"] { color: #814019; background: #fbeddc; }
 QWidget#sidebar { background: #eeede8; border-right: 1px solid #e0dfd9; }
 QWidget#topbar { background: #f6f5f1; border-bottom: 1px solid #e4e2dc; }
 QWidget#statusbar { background: #f6f5f1; border-top: 1px solid #e4e2dc; }
 QLabel { background: transparent; border: none; }
 QLabel[role="muted"] { color: #75736b; font-size: 12px; }
+QLabel[role="stepProgress"] { color: #75736b; font-size: 16px; }
 QLabel[role="eyebrow"] { color: #8c7561; font-size: 10px; font-weight: 600; letter-spacing: 2px; }
 QLabel[role="heading"] { font-size: 28px; font-weight: 600; color: #24241f; }
 QLabel[role="pageTitle"] { font-size: 19px; font-weight: 600; color: #292824; }
@@ -56,8 +64,8 @@ QLabel#deviceThumbnail { background: #f5f0e7; border-radius: 10px; }
 QLabel#deviceThumbnail[kind="rgb"] { background: #f0f3f1; }
 QLabel[role="deviceBrand"] { color: #9b8a76; font-size: 9px; font-weight: 600; letter-spacing: 1px; }
 QLabel[role="deviceName"] { color: #33332d; font-size: 16px; font-weight: 600; }
-QLabel[role="deviceMeta"] { color: #958d80; font-size: 11px; }
-QLabel[role="deviceCount"] { color: #8a877e; font-size: 11px; }
+QLabel[role="deviceMeta"] { color: #706d65; font-size: 11px; }
+QLabel[role="deviceCount"] { color: #706d65; font-size: 11px; }
 QLabel[role="deviceCount"][online="true"] { color: #38735b; font-weight: 600; }
 QLabel[role="deviceArrow"] { color: #b38b70; font-size: 20px; }
 QLabel[role="deviceName"]:disabled, QLabel[role="deviceCount"]:disabled { color: #aaa69b; }
@@ -66,7 +74,7 @@ QPushButton:hover { background: #f4f2ed; border-color: #bebbb1; }
 QPushButton:pressed { background: #e9e6df; }
 QPushButton:focus { border: 1px solid #c85b2b; }
 QPushButton:disabled { color: #a5a299; background: #f1f0ec; border-color: #e8e6df; }
-QPushButton[variant="primary"] { background: #c85b2b; border-color: #c85b2b; color: #ffffff; font-weight: 600; }
+QPushButton[variant="primary"] { background: #b34a1e; border-color: #b34a1e; color: #ffffff; font-weight: 600; }
 QPushButton[variant="primary"]:hover { background: #b34a1e; border-color: #b34a1e; }
 QPushButton[variant="primary"]:disabled { background: #e7cabb; border-color: #e7cabb; color: #faf5f1; }
 QPushButton[variant="quiet"] { background: transparent; border-color: transparent; color: #736e63; padding: 7px 9px; }

@@ -118,7 +118,7 @@ class TrayIndicator(QObject):
             return
         if not self.dashboard.ready:
             self.dashboard.api.request(
-                "/", self.connected, raw=True, failed=self.disconnected
+                "/api/session", self.connected, failed=self.disconnected
             )
             return
         generation = self.dashboard.generation

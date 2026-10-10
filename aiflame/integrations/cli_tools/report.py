@@ -16,7 +16,7 @@ def inspect_hooks(path, events, wanted, owns, source):
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except FileNotFoundError:
-        check("file", False, "未找到配置文件：" + str(path), "核对配置目录后点击「连接」")
+        check("file", False, "未找到配置文件：" + str(path), "在编程工具中使用 SeeEnd Skill 安装接入")
         return result
     except json.JSONDecodeError as error:
         check("file", False, f"配置 JSON 无法解析：{path}（第 {error.lineno} 行、第 {error.colno} 列）", "修正 JSON 后重试；未自动改写原文件")
@@ -31,12 +31,12 @@ def inspect_hooks(path, events, wanted, owns, source):
     hooks = data.get("hooks", {})
     disabled = []
     if source == "claude-code" and data.get("disableAllHooks") is True:
-        check("enabled", False, "Claude Code 的 disableAllHooks=true，Hooks 已被关闭", "由你确认是否启用；自动连接不会更改此设置")
+        check("enabled", False, "Claude Code 的 disableAllHooks=true，Hooks 已被关闭", "在 Claude Code 中确认是否启用 Hooks；添加 SeeEnd 接入不会更改此设置")
     if source == "gemini-cli":
         controls = data.get("hooksConfig", {})
         if isinstance(controls, dict):
             if controls.get("enabled") is False:
-                check("enabled", False, "Gemini CLI 的 hooksConfig.enabled=false", "由你确认是否启用；不自动开启其他 Hooks")
+                check("enabled", False, "Gemini CLI 的 hooksConfig.enabled=false", "在 Gemini CLI 中确认是否启用 Hooks；添加 SeeEnd 接入不会更改此设置")
             disabled = controls.get("disabled", [])
         legacy = hooks.get("disabled", [])
         disabled = [*(disabled if isinstance(disabled, list) else []), *(legacy if isinstance(legacy, list) else [])]
@@ -54,21 +54,23 @@ def inspect_hooks(path, events, wanted, owns, source):
         elif current:
             check(event, False, event + "：SeeEnd Hook 被禁用", "在工具中核对禁用设置，仅启用需要的 SeeEnd Hook")
         elif any(owns(h, wanted) for h in handlers):
-            check(event, False, event + "：指向旧版 SeeEnd 或旧安装位置", "点击「连接」更新本应用路径")
+            check(event, False, event + "：指向旧版 SeeEnd 或旧安装位置", "使用 SeeEnd Skill 修复接入，更新本应用路径后重新加载")
         else:
-            check(event, False, event + "：缺少 SeeEnd Hook", "点击「连接」增量添加")
+            check(event, False, event + "：缺少 SeeEnd Hook", "使用 SeeEnd Skill 增量安装或修复接入")
     return result
 
 
 def summarize(result, enabled=None, verification=None):
     result["configuration_ready"] = not result.get("issues")
+    result["connect_label"] = "使用 SeeEnd Skill"
     checks = result.setdefault("checks", [])
     evidence = verification or {}
     if not result["configuration_ready"]:
         issue = result["issues"][0]
-        result.update(status="configuration_error", summary="接入配置有问题：" + issue, next_action="按下方失败项处理后重新检查。" + ("此来源还未开启，修复后开启来源。" if enabled is False else ""))
+        first = next((item for item in checks if item.get("status") == "error"), {})
+        result.update(status="configuration_error", summary="接入配置有问题：" + issue, next_action=first.get("action") or "按下方失败项的处理办法修复后重新检查。")
     elif enabled is False:
-        result.update(status="disabled", summary="来源未开启，暂不会接收任务提醒。", next_action="开启此工具的来源开关，再发起新任务。")
+        result.update(status="disabled", summary="配置已准备，提醒开关尚未开启。", next_action="开启此工具的提醒开关，再使用 SeeEnd Skill 验证接入。")
     elif evidence.get("status") == "verified":
         result.update(status="connected", summary="接入正常：已收到同一真实任务的开始与完成。", next_action="可继续使用；切换工具版本或运行模式后再验证。")
     elif evidence.get("status") == "working":
@@ -77,41 +79,37 @@ def summarize(result, enabled=None, verification=None):
         label = {"error": "任务失败", "cancelled": "任务已取消", "timeout": "任务超时", "needs_input": "等待输入", "incomplete": "开始或完成信号不完整", "unknown": "任务状态未确定"}[evidence["status"]]
         result.update(status="task_incomplete", summary="已收到真实任务信号，最近一次" + label + "；尚未确认完整接入。", next_action="按工具中的任务状态处理，再完成一条新任务验证；任务失败不一定是接入故障。")
     else:
-        result.update(status="ready_unverified", summary="配置已就绪，但尚未验证真实任务接入。", next_action="重新打开工具会话，完成必要的 Hook 信任确认，发送新任务并等回复结束后再检查。")
+        result.update(status="ready_unverified", summary="配置已就绪，但尚未验证真实任务接入。", next_action="按 SeeEnd Skill 的提示完成加载与授权，再用 Skill 验证一条新任务。")
     checks.append({"id": "source", "status": "error" if enabled is False else "ok" if enabled is True else "pending", "message": "来源开关：" + ("已开启" if enabled is True else "未开启" if enabled is False else "请在 APP 中核对"), "action": ""})
-    checks.append({"id": "reception", "status": "ok" if result["status"] == "connected" else "pending", "message": result["summary"], "action": result["next_action"]})
     result["verification"] = evidence
     feedback = {
         "connected": "接入正常，可以使用。",
-        "disabled": "提醒已关闭，开启此工具的来源开关即可。",
+        "disabled": "提醒已关闭。开启此工具的来源开关，再使用 SeeEnd Skill 验证接入。",
         "receiving": "已收到任务开始，等回复结束后再检查。",
-        "ready_unverified": "配置好了。重开工具会话，发一条新任务后再检查。",
+        "ready_unverified": "配置已就绪。完成工具加载与信任后，使用 SeeEnd Skill 验证接入。",
         "task_incomplete": "已收到任务信号。处理工具中的任务状态后再试一次。",
     }
     if result["status"] == "configuration_error":
         first = next((item for item in checks if item["status"] == "error"), {})
         if first.get("id") == "file" and first.get("message", "").startswith("未找到"):
-            result["feedback"] = "尚未连接。点击「连接」自动配置。"
-            result["connect_label"] = "连接"
+            result["feedback"] = "尚未接入。使用 SeeEnd Skill 安装并验证接入。"
+            result["next_action"] = "在编程工具中使用 SeeEnd Skill 安装接入。"
         else:
             reason = result["issues"][0].split("；", 1)[0]
             for key in ("config_file", "config_dir"):
                 path = result.get(key)
                 if path:
                     reason = reason.replace(path, Path(path).name)
-            result["feedback"] = "需要处理：" + reason + "。展开「高级设置」查看修复办法。"
-            result["connect_label"] = "修复连接"
+            result["feedback"] = "需要处理：" + reason
         if result.get("source_id") == "deepseek-harness":
             if not result.get("profiles"):
                 result["feedback"] = "未找到 Profile，请先在 DeepSeek Harness 中准备一个。"
-                result["connect_label"] = "连接"
             elif result["issues"][0].startswith(("所选 Profile 尚未接入", "尚无 Profile 安装")):
-                result["feedback"] = "选择实际使用的 Profile 后，点击「连接」。"
-                result["connect_label"] = "连接"
+                result["feedback"] = "使用 SeeEnd Skill 为实际使用的 Profile 安装并验证接入。"
     else:
         result["feedback"] = feedback[result["status"]]
-        result["connect_label"] = "重新连接" if result["status"] == "connected" else "连接"
         if result["status"] == "task_incomplete":
             result["feedback"] = "最近一次" + label + "。在工具中处理后，再发一条新任务检查。"
+    checks.append({"id": "reception", "status": "ok" if result["status"] == "connected" else "pending", "message": result["summary"], "action": result["next_action"]})
     result["evidence_scope"] = "真实接收记录按工具汇总；本次文件检查不能读取工具实际加载的配置目录或 Hook 信任状态。切换目录／Profile 后请在对应会话中验证新任务。"
     return result

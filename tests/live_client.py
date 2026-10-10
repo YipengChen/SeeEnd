@@ -58,7 +58,7 @@ class DashboardClient:
             urllib.request.ProxyHandler({}),
             urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()),
         )
-        with self.opener.open(base + "/", timeout=3):
+        with self.opener.open(base + "/api/session", timeout=3):
             pass
 
     def request(self, path, body=None, headers=None, authenticated=True):

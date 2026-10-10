@@ -34,7 +34,7 @@ SOURCES = (
         SourcePolicy(
             source,
             name + " 网页",
-            "共用浏览器扩展 · 需安装本机桥接及刷新网页",
+            "共用 Chrome 扩展 · 在安装引导中设置，刷新网页后用新对话验证",
             authenticated=True,
             requires_start=True,
         )
