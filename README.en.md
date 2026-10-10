@@ -10,6 +10,8 @@ SeeEnd is a local AI task notification app. It receives status events from comma
 
 Current version: **0.8.6 desktop preview** · Python **3.11+** · **Proprietary license**
 
+[Download SeeEnd 0.8.6 · macOS Apple Silicon](https://github.com/YipengChen/SeeEnd-downloads/releases/download/v0.8.6/SeeEnd-0.8.6-Darwin-arm64.zip) · [SeeEnd Skill 1.0.1](https://github.com/YipengChen/SeeEnd-skill/releases/tag/v1.0.1)
+
 ## Features
 
 - **Unified task status**: track task lifecycles by source, distinguishing real tasks, simulated diagnostics, cancellations, and timeouts.

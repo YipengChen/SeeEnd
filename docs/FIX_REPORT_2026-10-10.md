@@ -68,7 +68,7 @@ SeeEnd-downloads 从本机已有检出恢复为工作区 downloads/。本地修�
 
 ## 产物与复核
 
-安装包：[SeeEnd 0.8.6 · macOS Apple 芯片](../dist/0.8.6/SeeEnd-0.8.6-Darwin-arm64.zip)。开发扩展：[0.2.10 ZIP](../dist/0.8.6/SeeEnd-Web-extension-0.2.10.zip)。完整清单、可选材料及 SHA-256 位于工作区 downloads/releases/v0.8.6/。构建源码指纹为 `89c2120ba82e423c56970ee454b05125ab85a3a91079effcd0c9184a9f6937cd`，receipt 如实记录未提交工作树。
+安装包：[SeeEnd 0.8.6 · macOS Apple 芯片](https://github.com/YipengChen/SeeEnd-downloads/releases/download/v0.8.6/SeeEnd-0.8.6-Darwin-arm64.zip)。开发扩展：[0.2.10 ZIP](https://github.com/YipengChen/SeeEnd-downloads/releases/download/v0.8.6/SeeEnd-Web-extension-0.2.10.zip)。完整清单、可选材料及 SHA-256 位于工作区 downloads/releases/v0.8.6/。构建源码指纹为 `89c2120ba82e423c56970ee454b05125ab85a3a91079effcd0c9184a9f6937cd`，receipt 如实记录未提交工作树。
 
 在工作区根目录复核：
 
@@ -76,4 +76,10 @@ SeeEnd-downloads 从本机已有检出恢复为工作区 downloads/。本地修�
 code/.venv/bin/python -B tools/check_workspace.py --code code --skill skill --downloads downloads
 ```
 
-构建／冻结／归档使用同一 `--dist-dir dist/0.8.6`。仓库职责、当前政策与历史资料边界见 [REPOSITORIES.md](REPOSITORIES.md)。外部发布和真实宿主验收仍单独执行，不从本地 prepared 状态推断。
+构建／冻结／归档使用同一 `--dist-dir dist/0.8.6`。仓库职责、当前政策与历史资料边界见 [REPOSITORIES.md](REPOSITORIES.md)。公开下载已核验；真实宿主、网站与硬件验收仍单独执行，GitHub 发布不代表商店提交。
+
+## 发布记录
+
+2026-10-10 用户授权提交与上传后，三个仓库均提交并推送。App 0.8.6 的四项资产和 Skill 1.0.1 安装 ZIP 已公开发布，完成匿名完整下载与 SHA-256 校验。App 与 Skill 远端 CI 均通过。源码提交为 `4b0b00733466ea313dada922b134dc747b3d4686`，Skill 提交为 `ca3345ba53ef885bf3c47857c5a1fc0d0552673f`；后续发布文档提交不改变运行源码指纹。
+
+工作区根索引、模型共享脚本、清理与验证归档的上传范围见 [私有维护备份](WORKSPACE_BACKUP.md)。App 和材料 ZIP、构建 receipt 与源码指纹保持构建时原始值，没有以提交后的状态追改。下载入口与法律说明已提升到 0.8.6，0.8.5 资料和资产保留。

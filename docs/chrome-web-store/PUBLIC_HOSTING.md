@@ -1,6 +1,10 @@
 # SeeEnd 独立资料托管
 
-当前发布准备以本地 downloads/ 仓库和打包生成的 release manifest 为准。下方公开发布结果为日期化历史记录，不表示 0.8.6 已上传。
+2026-10-10：App 0.8.6、开发扩展 0.2.10 与商店待提交 ZIP 已在 [公开下载仓库](https://github.com/YipengChen/SeeEnd-downloads/releases/tag/v0.8.6) 发布，四项资产完成匿名完整下载和 SHA-256 校验。Skill 1.0.1 在独立仓库发布并核验下载；源码仓库仍为私有。实际发布清单位于 downloads/releases/v0.8.6/release.json。
+
+根 THIRD_PARTY_NOTICES 与 LIBRARY_REPLACEMENT 是参与源码指纹的构建快照，保留当时“待发布”描述；发布状态以此记录和 release.json 为准。GitHub 发布不代表 Chrome 商店提交或通过审核。
+
+## 2026-10-09 历史记录
 
 原始源码仓库保持私有，独立公开资料仓库为 https://github.com/YipengChen/SeeEnd-downloads 。
 

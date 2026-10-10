@@ -10,6 +10,8 @@ SeeEnd 是运行在本机的 AI 任务提醒工具。它接收命令行工具、
 
 当前版本：**0.8.6 桌面预览版** · Python **3.11+** · **专有许可**
 
+[下载 SeeEnd 0.8.6 · macOS Apple 芯片](https://github.com/YipengChen/SeeEnd-downloads/releases/download/v0.8.6/SeeEnd-0.8.6-Darwin-arm64.zip) · [SeeEnd Skill 1.0.1](https://github.com/YipengChen/SeeEnd-skill/releases/tag/v1.0.1)
+
 ## 能做什么
 
 - **统一任务状态**：按来源记录任务生命周期，区分真实任务、模拟诊断及取消／超时。
