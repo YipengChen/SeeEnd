@@ -10,7 +10,7 @@ async function popup(options={}) {
   context.FlameProviders = providers;
   context.chrome = {
     i18n:{getUILanguage:()=>options.language || "zh-CN"},
-    tabs:{query:async()=>[{id:1,url:options.hideUrl ? undefined : (options.url || 'https://chatgpt.com/')}],sendMessage:async()=>{if(options.pageError)throw Error('not injected'); return {source_id:'chatgpt-web',site:'ChatGPT',recognized:true,version:'0.2.9',...options.page};}},
+    tabs:{query:async()=>[{id:1,url:options.hideUrl ? undefined : (options.url || 'https://chatgpt.com/')}],sendMessage:async()=>{if(options.pageError)throw Error('not injected'); return {source_id:'chatgpt-web',site:'ChatGPT',recognized:true,version:providers.VERSION,...options.page};}},
     runtime:{sendMessage:async()=>options.bridge || {ok:true,source_enabled:true,device_online:false,muted:false}},
     storage:{local:{get:async()=>({})}}
   };

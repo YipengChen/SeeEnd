@@ -12,11 +12,9 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 from aiflame.desktop.localization import (
-    QCheckBox,
     QComboBox,
     QFrame,
     QLineEdit,
-    QPlainTextEdit,
     QProgressBar,
     QPushButton,
     QScrollArea,
@@ -824,7 +822,7 @@ class DashboardViews:
         notifications.addLayout(settings_action)
         self.notification_test_feedback = label("", True)
         notifications.addWidget(self.notification_test_feedback)
-        light = card(layout, "提醒时机", "灯光亮度与动态效果请在「我的设备」中按设备设置。")
+        light = card(layout, "提醒时机", "提醒颜色与各状态亮度请在「我的设备」中按设备设置。")
         row = QHBoxLayout()
         copy = QVBoxLayout()
         self.duration_title = label("提醒持续时间", role="title")

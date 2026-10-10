@@ -1,5 +1,7 @@
 # SeeEnd 商店扩展 ID 对接
 
+> 历史提交资料：扩展 0.2.8 / 当时桌面版本；保留提交事实与原操作。当前 0.2.10 待提交资料见 prepared/0.2.10/，本地修订不表示重新提交。
+
 商店 ID：`miokmdeomlchjpihkcnommpnheagoimc`。公钥由后台“文件包 → 查看公钥”取得，保存在 store-public-key.txt。已验证公钥哈希与 Item ID 一致，并同步源码 manifest.json 的 key。
 
 桌面桥接允许商店 ID 及原开发 ID `hifannlfdbbhmmgecknoakpbhfihihbg`，用于迁移兼容，不含通配符。原有注册必须使用相同宿主名称、stdio 类型、SeeEnd 启动路径和已知来源，才允许更新；宿主本身也校验调用来源。来源或路径不符的同名配置会拒绝修改。

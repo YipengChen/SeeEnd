@@ -1,4 +1,4 @@
-# SeeEnd · AI 网页对话扩展（实验版 0.2.9）
+# SeeEnd · AI 网页对话扩展（实验版 0.2.10）
 
 一个 Chrome / Edge 扩展接入九个平台的普通文字对话，无需模型 API Key。每个平台有独立的来源开关、鉴权令牌、事件历史和桥接自测。扩展路径、原生桥接名称和固定扩展 ID 保留原 ChatGPT 接入的值，已有接入可以原位升级。
 
@@ -13,6 +13,10 @@
 | 智谱清言 | <https://chatglm.cn/> | `zhipu-web` |
 | Claude | <https://claude.ai/> | `claude-web` |
 | Gemini | <https://gemini.google.com/> | `gemini-web` |
+
+## 0.2.10 更新
+
+修复提交后的等待阶段切换会话时误接管另一任务，以及 CSS 隐藏控件被计为结束或工作信号的问题。保持已开始任务的后台跟踪；不根据时间推断完成。结构回归不代替升级后逐站真实任务验收。
 
 ## 安装或升级（无需下载或解压）
 
@@ -105,9 +109,9 @@ DOM 可能随平台更新。未识别结束控件时保持不确定并最终超�
 4. 两个平台／两个标签页同时生成：各自登记，关闭或取消一个不影响另一个。
 5. 仅加载历史回复：不触发完成。
 6. 关闭 Hub 后生成，再恢复 Hub：不补播，刷新网页后开始新任务。
-7. 在控制台关闭一个平台来源：该平台事件不触发，其他平台仍可使用。
+7. 在桌面 App 的「应用接入」关闭一个平台来源：该平台事件不触发，其他平台仍可使用。
 
-控制台桥接测试是明确标记的模拟任务，只验证桥接和 Hub。`queued` 表示 Hub 已收到；`applied` / 设备已确认表示灯具协议已确认调度。实际发光需观察硬件。
+「帮助与诊断」中的桥接测试是明确标记的模拟任务，只验证桥接和 Hub。`queued` 表示 Hub 已收到；`applied` / 设备已确认表示灯具协议已确认调度。实际发光需观察硬件。
 
 ## 测试与卸载
 
@@ -125,7 +129,7 @@ npm test
 python -m aiflame.integrations.chatgpt_web.install --uninstall
 ```
 
-仅移除本项目原生桥接注册，保留其他浏览器配置、Codex 接入及任务历史。也可只在控制台停用需要关闭的平台。
+仅移除本项目原生桥接注册，保留其他浏览器配置、Codex 接入及任务历史。也可只在桌面 App 的「应用接入」停用需要关闭的平台。
 
 桥接机制参考 [Chrome Native Messaging](https://developer.chrome.com/docs/extensions/develop/concepts/native-messaging) 和 [Content scripts](https://developer.chrome.com/docs/extensions/develop/concepts/content-scripts)。DOM 规则是本项目实验适配，不属于各厂商官方完成事件接口。
 
@@ -134,5 +138,5 @@ python -m aiflame.integrations.chatgpt_web.install --uninstall
 - Claude：`https://claude.ai/`，来源 `claude-web`。
 - Gemini：`https://gemini.google.com/`，来源 `gemini-web`。
 - 复用可信提交、停止控件、当前回复操作栏的状态机；不读取提示词或回复内容。
-- 两站仅完成结构化 DOM 回归，尚未进行登录后的真实页面验收。页面改版或特殊模式可能不被识别；不会用等待时间推断成功。
+- 这是 0.2.6 的历史记录：当时两站仅完成结构化 DOM 回归。Claude 0.2.8 已有普通文字真实任务记录，详见仓库 docs/chrome-web-store/review/VALIDATION.md；Gemini 尚无新增真实生成验收。页面改版或特殊模式可能不被识别；不会用等待时间推断成功。
 - 更新扩展后，请重新加载扩展并刷新网站。

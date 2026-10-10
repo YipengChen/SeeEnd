@@ -1,6 +1,6 @@
 # SeeEnd Browser Extension Privacy Policy
 
-Policy date: October 9, 2026. Applies to SeeEnd AI web chat status extension version 0.2.8.
+Policy date: October 10, 2026. Applies to SeeEnd AI web chat status extension version 0.2.10.
 
 ## Purpose
 
@@ -20,7 +20,7 @@ Session storage holds active task records, removed on completion or cancellation
 
 Popup diagnostics show control types, CSS classes, test attributes, layout and rendering counts in the current session. They do not show chat or editor text and are not uploaded to developer-operated servers.
 
-The desktop app stores received status events and activity records locally until cleared or reset by the user. Removing the extension does not delete desktop records, device settings or reminder preferences.
+The desktop app stores received status events and activity records locally with event history limited to seven days or 10,000 entries. Active tasks remain until completion or lease expiry; users can also clear or reset the app. Removing the extension does not delete desktop records, device settings or reminder preferences.
 
 ## Use and sharing
 

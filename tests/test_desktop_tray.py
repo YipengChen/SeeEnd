@@ -8,6 +8,9 @@ import tempfile
 import time
 import unittest
 from unittest.mock import Mock, patch
+from aiflame.core.events import make_event
+from aiflame.hub.server import Hub
+from live_client import DashboardClient
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 HAS_QT = find_spec("PySide6") is not None
@@ -17,11 +20,6 @@ if HAS_QT:
     from PySide6.QtWidgets import QApplication, QSystemTrayIcon
     from aiflame.desktop.tray import TrayIndicator, status_icon
     from aiflame.desktop.widgets import Dashboard
-
-
-from aiflame.core.events import make_event
-from aiflame.hub.server import Hub
-from live_client import DashboardClient
 
 
 @unittest.skipUnless(HAS_QT, "Install the desktop extra to test tray updates")

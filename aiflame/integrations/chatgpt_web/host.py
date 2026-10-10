@@ -2,6 +2,7 @@
 """Restricted native-messaging bridge. No chat content or token leaves this host."""
 
 import base64
+import argparse
 import hashlib
 import json
 import os
@@ -97,7 +98,7 @@ def sanitize(message):
     return {key: message[key] for key in fields | {"reason"} if key in message}
 
 
-def forward(message):
+def forward(message, port=8765):
     ping = isinstance(message, dict) and message.get("kind") == "ping"
     if ping and (
         set(message) - {"kind", "source_id"}
@@ -122,9 +123,9 @@ def forward(message):
         ).load_config()["tokens"][source]
     request = urllib.request.Request(
         (
-            "http://127.0.0.1:8765/v1/status"
+            f"http://127.0.0.1:{port}/v1/status"
             if ping
-            else "http://127.0.0.1:8765/v1/events"
+            else f"http://127.0.0.1:{port}/v1/events"
         ),
         data=None if ping else json.dumps(event).encode(),
         headers={
@@ -173,14 +174,25 @@ def main():
 
         msvcrt.setmode(sys.stdin.fileno(), os.O_BINARY)
         msvcrt.setmode(sys.stdout.fileno(), os.O_BINARY)
-    if len(sys.argv) < 2 or sys.argv[1] not in extension_origins():
+    class SilentParser(argparse.ArgumentParser):
+        def error(self, message):
+            raise ValueError(message)
+    parser = SilentParser(add_help=False)
+    parser.add_argument("origin")
+    parser.add_argument("--port", type=int, default=8765)
+    parser.add_argument("--parent-window")  # Chromium supplies this on Windows.
+    try:
+        args = parser.parse_args()
+    except ValueError:
+        return 1
+    if args.origin not in extension_origins() or not 1 <= args.port <= 65535:
         return 1
     while True:
         try:
             message = read_message(sys.stdin.buffer)
             if message is None:
                 return 0
-            result = forward(message)
+            result = forward(message, args.port)
         except urllib.error.HTTPError as error:
             result = {"ok": False, "error": "hub_rejected", "status": error.code}
         except (OSError, KeyError):

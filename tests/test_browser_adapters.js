@@ -53,6 +53,36 @@ function setup(site) {
     finish() { doc.querySelector('#busy').replaceChildren(); },
     check() { machine.update(adapter.snapshot()); }};
 }
+
+test('production visibility rejects CSS-hidden controls while preserving visible descendants', () => {
+  const site = SITES.find(item => item.id === 'chatgpt-web');
+  const dom = new JSDOM('<main><textarea id="prompt-textarea"></textarea><div id="busy"></div><div id="messages"></div></main>',
+    {url:site.origins[0] + '/c/test'});
+  const doc = dom.window.document;
+  // jsdom has no layout. Supply nonempty boxes as real visibility:hidden
+  // elements have, and deliberately use the production visibility predicate.
+  dom.window.Element.prototype.getClientRects = function () { return this.isConnected ? [{width:100,height:40}] : []; };
+  const adapter = createAdapter(site, doc, dom.window.location, () => true);
+  let now = 100000, next = 0;
+  const events = [], machine = new FlameTurn(e => events.push(e), () => String(++next), () => now, routePolicy(site));
+  const busy = doc.querySelector('#busy');
+  busy.innerHTML = '<button data-testid="stop-button" style="visibility:hidden"></button>';
+  assert.equal(adapter.snapshot().busy, false);
+  busy.firstElementChild.style.visibility = 'visible';
+  machine.arm(adapter.snapshot()); machine.update(adapter.snapshot());
+  doc.querySelector('#messages').innerHTML = '<article><div data-message-author-role="assistant"></div><div id="actions" style="visibility:hidden"><button data-testid="copy-turn-action-button"></button><button data-testid="good-response-turn-action-button"></button></div></article>';
+  busy.replaceChildren(); machine.update(adapter.snapshot()); now += 1000; machine.update(adapter.snapshot());
+  assert.equal(adapter.snapshot().final, null);
+  assert.deepEqual(events.map(e => e.state), ['working']);
+  // visibility can be restored on descendants even when an ancestor is hidden.
+  for (const control of doc.querySelectorAll('#actions button')) control.style.visibility = 'visible';
+  machine.update(adapter.snapshot()); now += 801; machine.update(adapter.snapshot());
+  assert.deepEqual(events.map(e => e.state), ['working','done']);
+  doc.querySelector('[data-testid="good-response-turn-action-button"]').style.visibility = 'collapse';
+  assert.equal(adapter.snapshot().final, null);
+  dom.window.close();
+});
+
 for (const site of SITES) {
   test(site.name + ': a tracked incomplete reply renews through loading-marker gaps during long output', () => {
     const f=setup(site);

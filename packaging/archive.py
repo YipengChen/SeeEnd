@@ -1,75 +1,73 @@
-"""Archive the native bundle without flattening framework symlinks."""
+"""Archive a matching build without flattening macOS framework symlinks."""
 
-import platform
 import argparse
 from pathlib import Path
 import shutil
 import subprocess
 import sys
-import tomllib
+import tarfile
+import tempfile
 import zipfile
+
+from release import RECEIPT, third_party_files, validate_build
+
 
 root = Path(__file__).resolve().parents[1]
 parser = argparse.ArgumentParser(description="Archive SeeEnd for the current OS")
 parser.add_argument("--dist-dir", type=Path, default=root / "dist")
 args = parser.parse_args()
 dist = args.dist_dir.resolve()
-version = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
-name = f"SeeEnd-{version}-{platform.system()}-{platform.machine()}"
-# Include an offline, self-contained illustrated installation guide.
-sys.path.insert(0, str(root))
-from aiflame.integrations.chatgpt_web.guide import offline_html
-guide = dist / "SeeEnd-browser-extension-install.html"
-guide.write_text(offline_html(), encoding="utf-8")
-if sys.platform == "darwin":
-    subprocess.run(
-        [
-            "ditto",
-            "-c",
-            "-k",
-            "--sequesterRsrc",
-            "--keepParent",
-            str(dist / "SeeEnd.app"),
-            str(dist / (name + ".zip")),
-        ],
-        check=True,
-    )
-elif sys.platform == "win32":
-    shutil.make_archive(str(dist / name), "zip", root_dir=dist, base_dir="SeeEnd")
-else:
-    shutil.make_archive(str(dist / name), "gztar", root_dir=dist, base_dir="SeeEnd")
-# Ship actual third-party sources alongside the app, without project source.
-source_zip = dist / f"SeeEnd-third-party-sources-{version}.zip"
+identity = validate_build(root, dist)
+version = identity["app_version"]
+name = f"SeeEnd-{version}-{identity['platform']}-{identity['architecture']}"
 materials = root / "third_party_sources"
-if not (materials / "MANIFEST.json").is_file():
-    raise RuntimeError("Third-party source materials are not prepared")
-with zipfile.ZipFile(source_zip, "w", zipfile.ZIP_DEFLATED) as archive:
-    for item in sorted(materials.rglob("*")):
-        if item.is_file():
-            archive.write(item, "third-party-sources/" + str(item.relative_to(materials)))
-    archive.write(root / "THIRD_PARTY_NOTICES.md", "third-party-sources/README.md")
-    archive.write(root / "LIBRARY_REPLACEMENT.md", "third-party-sources/LIBRARY_REPLACEMENT.md")
-    for item in sorted((root / "packaging/generated_licenses").rglob("*")):
-        if item.is_file():
-            archive.write(item, "third-party-sources/licenses/" + str(item.relative_to(root / "packaging/generated_licenses")))
-if sys.platform in ("darwin", "win32"):
-    with zipfile.ZipFile(dist / (name + ".zip"), "a", zipfile.ZIP_DEFLATED) as archive:
-        archive.write(source_zip, source_zip.name)
-        archive.write(guide, guide.name)
-        for filename in ("LICENSE", "THIRD_PARTY_NOTICES.md", "LIBRARY_REPLACEMENT.md"):
-            archive.write(root / filename, filename)
-else:
-    import tarfile
-    with tarfile.open(dist / (name + ".tar"), "w") as archive:
-        archive.add(dist / "SeeEnd", arcname="SeeEnd")
-        archive.add(source_zip, arcname=source_zip.name)
-        archive.add(guide, arcname=guide.name)
-        for filename in ("LICENSE", "THIRD_PARTY_NOTICES.md", "LIBRARY_REPLACEMENT.md"):
-            archive.add(root / filename, arcname=filename)
-    with open(dist / (name + ".tar"), "rb") as src:
-        import gzip
-        with gzip.open(dist / (name + ".tar.gz"), "wb") as out:
-            shutil.copyfileobj(src, out)
-    (dist / (name + ".tar")).unlink()
+sources = third_party_files(materials)
+notices = root / "packaging/generated_licenses"
+license_files = sorted(path for path in notices.rglob("*") if path.is_file())
+if any(path.is_symlink() for path in license_files):
+    raise RuntimeError("License materials must not contain external links")
+
+sys.path.insert(0, str(root))
+from aiflame.integrations.chatgpt_web.guide import offline_html  # noqa: E402 — root added for direct script execution
+
+# Construct both archives before replacing named release files. A failed run
+# cannot leave a new, incomplete archive looking like a distributable release.
+with tempfile.TemporaryDirectory(prefix="seeend-archive-", dir=dist) as work_dir:
+    work = Path(work_dir)
+    guide = work / "SeeEnd-browser-extension-install.html"
+    guide.write_text(offline_html(), encoding="utf-8")
+    documents = [guide, dist / RECEIPT,
+                 *(root / filename for filename in ("LICENSE", "THIRD_PARTY_NOTICES.md", "LIBRARY_REPLACEMENT.md"))]
+    if sys.platform == "darwin":
+        app_archive = work / (name + ".zip")
+        subprocess.run(["ditto", "-c", "-k", "--sequesterRsrc", "--keepParent",
+                        str(dist / "SeeEnd.app"), str(app_archive)], check=True)
+    elif sys.platform == "win32":
+        app_archive = Path(shutil.make_archive(str(work / name), "zip", root_dir=dist, base_dir="SeeEnd"))
+    else:
+        app_archive = work / (name + ".tar.gz")
+        with tarfile.open(app_archive, "w:gz") as archive:
+            archive.add(dist / "SeeEnd", arcname="SeeEnd")
+            for document in documents:
+                archive.add(document, arcname=document.name)
+    if sys.platform in ("darwin", "win32"):
+        with zipfile.ZipFile(app_archive, "a", zipfile.ZIP_DEFLATED) as archive:
+            for document in documents:
+                archive.write(document, document.name)
+
+    source_archive = work / f"SeeEnd-third-party-sources-{version}.zip"
+    with zipfile.ZipFile(source_archive, "w", zipfile.ZIP_DEFLATED) as archive:
+        for item in sources:
+            archive.write(item, "third-party-sources/" + item.relative_to(materials).as_posix())
+        archive.write(root / "THIRD_PARTY_NOTICES.md", "third-party-sources/README.md")
+        archive.write(root / "LIBRARY_REPLACEMENT.md", "third-party-sources/LIBRARY_REPLACEMENT.md")
+        archive.write(dist / RECEIPT, "third-party-sources/" + RECEIPT)
+        for item in license_files:
+            archive.write(item, "third-party-sources/licenses/" + item.relative_to(notices).as_posix())
+    app_archive.replace(dist / app_archive.name)
+    source_archive.replace(dist / source_archive.name)
+    shutil.copy2(guide, dist / guide.name)
+
 print("Archive:", name)
-print("Third-party sources:", source_zip.name)
+print("Build revision:", identity["git_revision"], "source SHA256:", identity["source_sha256"])
+print("Optional third-party sources (not required to run SeeEnd):", source_archive.name)

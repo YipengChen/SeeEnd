@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "seeend"
-version = "0.8.5"
+version = "0.8.6"
 description = "SeeEnd: local AI task notifications with optional Yeelight lamps"
 readme = "README.md"
 license = "LicenseRef-SeeEnd-Proprietary"
@@ -14,7 +14,7 @@ dependencies = []
 
 [project.optional-dependencies]
 desktop = ["PySide6==6.11.0", "pyobjc-framework-Cocoa==12.1; sys_platform == 'darwin'", "pyobjc-framework-UserNotifications==12.1; sys_platform == 'darwin'"]
-build = ["pyinstaller==6.22.3"]
+build = ["pyinstaller==6.22.3", "Cython==3.3.0", "PyYAML==6.0.3"]
 
 [project.gui-scripts]
 seeend = "aiflame.__main__:main"

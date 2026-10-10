@@ -14,7 +14,8 @@ class BrowserOnboardingTests(unittest.TestCase):
         self.assertIn("网页接入已验证", verification_text(self.snapshot(), {"chatgpt-web":100}))
 
     def test_quiet_disabled_and_failed_task_remain_actionable(self):
-        data=self.snapshot(); data["settings"]={"paused":True}
+        data = self.snapshot()
+        data["settings"] = {"paused": True}
         self.assertIn("暂停", verification_text(data, {"chatgpt-web":100}))
         self.assertIn("没有正常完成", verification_text(self.snapshot("cancelled"), {}))
         data["sources"][0]["enabled"]=False
@@ -23,8 +24,10 @@ class BrowserOnboardingTests(unittest.TestCase):
     def test_all_steps_have_success_criteria_real_assets_and_no_directory_migration(self):
         self.assertEqual(len(STEPS),len(CHECKS))
         for _,_,filename in STEPS:
-            if filename:self.assertTrue((IMAGES/filename).is_file())
-        for filename,_ in EXTRA_IMAGES.values():self.assertTrue((IMAGES/filename).is_file())
+            if filename:
+                self.assertTrue((IMAGES/filename).is_file())
+        for filename, _ in EXTRA_IMAGES.values():
+            self.assertTrue((IMAGES/filename).is_file())
         text=offline_html()
         self.assertNotIn("迁移",text)
         self.assertNotIn("<script",text)

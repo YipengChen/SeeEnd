@@ -52,3 +52,20 @@ SOURCES = (
         for source, name in DESKTOP_SOURCES.items()
     ),
 )
+
+
+def integration_contract():
+    """Pure public metadata for App/Skill compatibility checks, without runtime I/O."""
+    from dataclasses import asdict
+    from aiflame import __version__
+    from aiflame.core.events import REQUIRED_FIELDS, OPTIONAL_FIELDS, STATES, REASONS
+
+    native_sources = ["codex", *CLI_SOURCES]
+    return {
+        "contract_version": 1, "app_name": "SeeEnd", "app_version": __version__,
+        "schema_version": "1.0", "required_fields": list(REQUIRED_FIELDS),
+        "optional_fields": list(OPTIONAL_FIELDS), "states": list(STATES), "reasons": list(REASONS),
+        "sources": [{**asdict(source), "native_integration": source.id in native_sources} for source in SOURCES],
+        "capabilities": {"native_sources": native_sources, "verification_evidence": True,
+                         "deepseek_config_dir": False, "device_targeting": True},
+    }

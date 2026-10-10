@@ -1417,21 +1417,6 @@ class Dashboard(DashboardInteraction, DashboardViews, QWidget):
         for edit in self.times.values():
             edit.setEnabled(connected and self.checks["quiet_enabled"].isChecked())
 
-    def prepare_browser_extension(self, callback=None):
-        self.browser_message.setText("正在准备扩展文件夹…")
-        self.browser_message.show()
-
-        def received(data):
-            from PySide6.QtCore import QUrl
-            from PySide6.QtGui import QDesktopServices
-            self.browser_message.setText(data["message"] + "\n" + data["path"] +
-                                         "\n请按安装图文教程，在 Chrome 中选择此文件夹。")
-            if callable(callback):
-                callback(data)
-            QDesktopServices.openUrl(QUrl.fromLocalFile(data["path"]))
-
-        self.act("/api/browser-extension/prepare", {}, received,
-                 lambda: self.browser_message.setText(source_text(self.message)))
 
     def open_browser_extension_guide(self):
         from aiflame.desktop.extension_guide import ExtensionGuide
@@ -1464,17 +1449,6 @@ class Dashboard(DashboardInteraction, DashboardViews, QWidget):
         from aiflame.integrations.chatgpt_web.host import WEB_URLS
         QDesktopServices.openUrl(QUrl(WEB_URLS[source]))
 
-    def install_integration(self, source):
-        self.browser_message.setText("正在增量配置连接，请稍候…")
-        self.browser_message.show()
-
-        def received(data):
-            self.browser_details.setText(data.get("message", "连接配置已更新，请发起新任务。"))
-            self.browser_details.show()
-            self.browser_message.setText("请加载或重新加载扩展，并刷新 AI 网页。")
-
-        self.act("/api/integrations/install", {"source": source}, received,
-                 lambda: self.browser_message.setText(source_text(self.message)))
 
     def check_clients(self):
         def received(data):
@@ -1527,21 +1501,6 @@ class Dashboard(DashboardInteraction, DashboardViews, QWidget):
 
         self.api.request("/api/desktop-clients", received)
 
-    def download(self, endpoint, filename):
-        path, _ = QFileDialog.getSaveFileName(
-            self, t("保存下载包"), filename, t("ZIP 文件 (*.zip)")
-        )
-        if not path:
-            return
-
-        def received(data):
-            try:
-                Path(path).write_bytes(data)
-                self.tell("文件已保存。")
-            except OSError:
-                self.on_error("保存失败，请检查所选目录的权限。")
-
-        self.api.request(endpoint, received, raw=True)
 
 
     def shutdown(self):

@@ -1,7 +1,12 @@
-import sys, tempfile, unittest
+import sys
+import tempfile
+import unittest
 from pathlib import Path
 import os
 import subprocess
+import io
+import json
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -12,6 +17,15 @@ from aiflame.integrations.codex.events import from_hook
 
 
 class TestHooks(unittest.TestCase):
+    def test_hook_entrypoint_passes_explicit_port_to_delivery(self):
+        from aiflame.integrations.codex.hook import main
+        payload = {'hook_event_name': 'UserPromptSubmit', 'session_id': 'session', 'turn_id': 'turn'}
+        with patch('sys.argv', ['helper', '--port', '19321']), patch('sys.stdin', io.StringIO(json.dumps(payload))), patch('aiflame.integrations.codex.hook.deliver') as deliver:
+            main()
+        event, port = deliver.call_args.args
+        self.assertEqual(event['state'], 'working')
+        self.assertEqual(port, 19321)
+
     def test_import_and_ignored_payload_do_not_create_runtime_data(self):
         directory = Path(self.temp.name) / "unused-runtime"
         environment = {**os.environ, "AIFLAME_DATA_DIR": str(directory)}

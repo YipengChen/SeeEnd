@@ -36,6 +36,8 @@ def diagnostics(db, *, source=None, config_dirs=None, profiles=None,
                   "profiles": [], "hooks_configured": [], "signals": {}, "checks": []}
         try:
             if current == "deepseek-harness":
+                if (config_dirs or {}).get(current) is not None:
+                    result["issues"].append("DeepSeek Harness 不支持 config_dir；请通过 DSH_HOME 选择实际配置根目录")
                 config = saved.get(current, {})
                 result["profiles"] = available_profiles()
                 result["recorded_profiles"] = config.get("profiles", [])
@@ -79,7 +81,7 @@ def diagnostics(db, *, source=None, config_dirs=None, profiles=None,
                     found = bool(shutil.which(executable))
                     result["checks"].append({"id": executable, "status": "ok" if found else "warning", "message": executable + ("：SeeEnd 可调用" if found else "：SeeEnd 找不到，自动添加不可用"), "action": "在能运行此命令的环境启动 SeeEnd，再使用 SeeEnd Skill 重试" if not found else ""})
             elif current == "opencode":
-                from .opencode import wrapper
+                from .opencode import wrapper, plugin_ready
                 directory = directory_for(current, (config_dirs or {}).get(current))
                 result["config_dir"] = str(directory)
                 expected = {
@@ -101,6 +103,8 @@ def diagnostics(db, *, source=None, config_dirs=None, profiles=None,
                         result["issues"].append("OpenCode 桥接指向旧版 SeeEnd：" + str(target) + "；使用 SeeEnd Skill 修复接入，仅更新本应用拥有的文件")
                 except (OSError, ValueError, AttributeError):
                     result["issues"].append("OpenCode 桥接配置缺失或无效：" + str(target) + "；使用 SeeEnd Skill 核对配置位置及读取权限，按具体诊断修复")
+                if not result["issues"] and not plugin_ready(directory):
+                    result["issues"].append("无法确认 OpenCode 插件归属；请核对归属记录与现有文件，不能直接覆盖")
                 result["limitations"] = ["重启 OpenCode 后加载插件；不修改 opencode.json / opencode.jsonc。"]
                 if not result["issues"]:
                     result["hooks_configured"] = list(provider.events)

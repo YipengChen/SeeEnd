@@ -21,6 +21,26 @@ def begin_verification(engine, source):
     engine.db.commit()
 
 
+def verification_evidence(engine, source):
+    """Return stored lifecycle metadata, including explicit simulation markers."""
+    if not isinstance(source, str) or source not in engine.sources or source in ("manual", "demo"):
+        raise EventError("请选择真实应用或本地 API 来源", error_code="source_invalid")
+    summary = verification_summary(engine)[source]
+    limit = 1000
+    total = engine.db.execute("SELECT COUNT(*) FROM events WHERE source=? AND created>=?", (source, summary["since"] or 0)).fetchone()[0]
+    rows = engine.db.execute(
+        "SELECT id AS event_id, task AS task_id, seq, state, reason, created, status, "
+        "EXISTS(SELECT 1 FROM self_tests WHERE event=events.id) AS simulated "
+        "FROM events WHERE source=? AND created>=? ORDER BY created DESC, rowid DESC LIMIT ?",
+        (source, summary["since"] or 0, limit),
+    )
+    events = [{**dict(row), "simulated": bool(row["simulated"])} for row in rows]
+    events.reverse()
+    return {"source": source, "since": summary["since"], "summary": summary, "events": events,
+            "total": total, "limit": limit, "truncated": total > limit,
+            "retention": {"days": 7, "max_events": 10000}}
+
+
 def verification_summary(engine):
     windows = {
         row["key"].removeprefix("verification:"): json.loads(row["value"])

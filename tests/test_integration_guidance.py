@@ -8,11 +8,12 @@ from email.message import Message
 from types import SimpleNamespace
 import tempfile
 import unittest
+import uuid
 from unittest.mock import Mock, patch
 from urllib.parse import urlencode
 
 from aiflame.core.events import make_event
-from aiflame.core.verification import verification_summary
+from aiflame.core.verification import verification_summary, begin_verification
 from aiflame.hub.server import Handler, Hub
 from aiflame.integrations.cli_tools.guidance import DOCS, VERIFICATION_PROMPT, integration_guide
 from aiflame.integrations.cli_tools.install import install
@@ -73,6 +74,117 @@ class IntegrationGuidanceTests(unittest.TestCase):
             self.assertEqual(guide['skill_url'], 'https://github.com/YipengChen/SeeEnd-skill')
         self.assertEqual(before, sorted(str(p.relative_to(self.root)) for p in self.root.rglob('*')))
         self.assertFalse((self.root / 'runtime').exists())
+
+    def test_public_contract_and_evidence_are_authenticated_read_only_metadata(self):
+        from aiflame.integrations.registry import integration_contract
+        for path in ('/api/integration-contract', '/api/verification-evidence?source=codex'):
+            self.assertEqual(self.request(path, identity=None)[0], 401)
+            self.assertEqual(self.request(path, identity='source')[0], 403)
+        before = sorted(str(path.relative_to(self.root)) for path in self.root.rglob('*'))
+        code, contract = self.request('/api/integration-contract')
+        self.assertEqual(code, 200)
+        self.assertEqual(contract, integration_contract())
+        self.assertEqual(set(contract['capabilities']['native_sources']), set(DOCS))
+        self.assertEqual(contract['optional_fields'], ['reason', 'device_id'])
+        self.assertTrue(contract['capabilities']['device_targeting'])
+        self.assertEqual(before, sorted(str(path.relative_to(self.root)) for path in self.root.rglob('*')))
+        for path in ('/api/verification-evidence', '/api/verification-evidence?source=codex&source=qoder',
+                     '/api/verification-evidence?source=codex&extra=x', '/api/verification-evidence?source=manual'):
+            self.assertEqual(self.request(path)[0], 400)
+        self.engine.accept(make_event('codex', 'before-window', 'working'), 'codex')
+        begin_verification(self.engine, 'codex')
+        for task, simulated in (('simulation', True), ('current-real-task', False)):
+            for seq, state in ((1, 'working'), (2, 'done')):
+                event = make_event('codex', task, state, seq)
+                if simulated:
+                    self.engine.db.execute('INSERT INTO self_tests VALUES (?,?)', (event['event_id'], self.engine.wall()))
+                    self.engine.db.commit()
+                self.engine.accept(event, 'codex')
+        code, evidence = self.request('/api/verification-evidence?source=codex')
+        self.assertEqual(code, 200)
+        self.assertEqual(evidence['summary']['status'], 'verified')
+        self.assertEqual({event['task_id'] for event in evidence['events']}, {'simulation', 'current-real-task'})
+        self.assertEqual(sum(event['simulated'] for event in evidence['events']), 2)
+        self.assertEqual(set(evidence['events'][0]), {'event_id', 'task_id', 'seq', 'state', 'reason', 'created', 'status', 'simulated'})
+        self.assertNotIn('fixture-token', json.dumps(evidence))
+
+    def test_repair_keeps_disabled_source_and_partial_uninstall_keeps_other_config(self):
+        for source in ('codex', 'claude-code', 'opencode'):
+            with self.subTest(source=source):
+                first, second = self.root / (source + '-one'), self.root / (source + '-two')
+                for directory in (first, second):
+                    self.assertEqual(self.request('/api/integrations/install', {'source': source, 'config_dir': str(directory)})[0], 200)
+                self.engine.update_settings({'source_enabled': {**self.engine.settings['source_enabled'], source: False}})
+                self.assertEqual(self.request('/api/integrations/install', {'source': source, 'config_dir': str(first)})[0], 200)
+                self.assertFalse(self.engine.settings['source_enabled'][source])
+                self.engine.update_settings({'source_enabled': {**self.engine.settings['source_enabled'], source: True}})
+                self.assertEqual(self.request('/api/integrations/uninstall', {'source': source, 'config_dir': str(first)})[0], 200)
+                self.assertTrue(self.engine.settings['source_enabled'][source])
+                self.assertEqual(self.request('/api/integrations/uninstall', {'source': source, 'config_dir': str(second)})[0], 200)
+                self.assertFalse(self.engine.settings['source_enabled'][source])
+
+    def test_opencode_owner_record_is_part_of_configuration_readiness(self):
+        directory = self.root / 'opencode-owner'
+        install('opencode', config_dir=directory)
+        manifest = directory / 'aiflame/.seeend-owned.json'
+        original = manifest.read_bytes()
+        manifest.write_text(json.dumps({'owner': 'another-owner', 'files': {}}))
+        result = diagnostics(self.engine.db, source='opencode')['integrations'][0]
+        self.assertFalse(result['configuration_ready'])
+        self.assertTrue(any('归属' in issue for issue in result['issues']))
+        manifest.write_bytes(original)
+        self.assertTrue(diagnostics(self.engine.db, source='opencode')['integrations'][0]['configuration_ready'])
+
+    def test_deepseek_directory_rejection_has_stable_error_code(self):
+        code, result = self.request('/api/integrations/install', {'source': 'deepseek-harness', 'config_dir': str(self.root / 'custom'), 'profile': 'default'})
+        self.assertEqual(code, 409)
+        self.assertEqual(result['error_code'], 'config_invalid')
+        self.assertFalse((self.root / 'custom').exists())
+        for route in ('integration-guide', 'integration-check'):
+            code, result = self.request('/api/' + route + '?' + urlencode({'source': 'deepseek-harness', 'config_dir': str(self.root / 'custom')}))
+            self.assertEqual(code, 400)
+            self.assertEqual(result['error_code'], 'config_invalid')
+
+    def test_adapter_self_tests_route_to_configured_port_without_a_live_server(self):
+        from aiflame.integrations.codex.events import from_hook
+        from aiflame.integrations.chatgpt_web.host import read_message, write_message
+        self.hub.port = 19321
+
+        def helper(mode, *args, input=None, **kwargs):
+            # This isolated receiver refuses traffic that would go to default 8765.
+            port_index = args.index('--port')
+            self.assertEqual(int(args[port_index + 1]), self.hub.port)
+            if mode == '--codex-hook':
+                event = from_hook(json.loads(input), self.root / 'runtime')
+            else:
+                self.assertEqual(mode, '--browser-host')
+                event = read_message(io.BytesIO(input))
+            self.engine.accept(event, event['source_id'])
+            output = io.BytesIO()
+            write_message(output, {'ok': True})
+            return SimpleNamespace(returncode=0, stdout=output.getvalue())
+
+        with patch('aiflame.integrations.testing.run', side_effect=helper), patch.object(self.hub.stopping, 'wait', return_value=False):
+            for source in ('codex', 'chatgpt-web'):
+                self.hub.tests.job = {'state': 'running', 'events': []}
+                self.hub.tests._run(source)
+                self.assertEqual(self.hub.tests.job['state'], 'succeeded')
+                self.assertEqual(len(self.hub.tests.job['events']), 2)
+                self.assertEqual(verification_summary(self.engine)[source]['complete_tasks'], 0)
+
+    def test_evidence_reports_when_latest_records_are_truncated(self):
+        now = self.engine.wall()
+        records = [(str(uuid.uuid4()), 'codex', 'task-' + str(index), 1, 'idle', None, now + index / 10000, 'screen')
+                   for index in range(1001)]
+        self.engine.db.executemany('INSERT INTO events VALUES (?,?,?,?,?,?,?,?)', records)
+        self.engine.db.commit()
+        code, evidence = self.request('/api/verification-evidence?source=codex')
+        self.assertEqual(code, 200)
+        self.assertEqual(evidence['total'], 1001)
+        self.assertEqual(len(evidence['events']), evidence['limit'])
+        self.assertTrue(evidence['truncated'])
+        self.assertEqual(evidence['events'][0]['task_id'], 'task-1')
+        self.assertEqual(evidence['events'][-1]['task_id'], 'task-1000')
 
     def test_reload_instructions_match_the_tool_instead_of_generic_restart(self):
         plans = {source: integration_guide(source)['onboarding'] for source in DOCS}

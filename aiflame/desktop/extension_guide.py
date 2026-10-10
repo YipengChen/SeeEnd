@@ -1,8 +1,8 @@
 """Four observable stages, one current action, and a fresh real-task check."""
 import sys
 import time
-from PySide6.QtCore import Qt, QTimer, QUrl
-from PySide6.QtGui import QPixmap, QDesktopServices
+from PySide6.QtCore import Qt, QTimer
+from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import QVBoxLayout, QHBoxLayout, QApplication, QSizePolicy
 from aiflame.desktop.localization import (
     QDialog, QLabel, QPushButton, QLineEdit, QScrollArea, QWidget, QComboBox,

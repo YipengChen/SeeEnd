@@ -2,13 +2,11 @@
 import os
 os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
 import copy
-from pathlib import Path
-import re
 import subprocess
 import unittest
 from unittest.mock import patch, Mock
 from PySide6.QtCore import QCoreApplication, QEvent, QPoint
-from PySide6.QtWidgets import QApplication, QWidget, QLabel, QPushButton
+from PySide6.QtWidgets import QApplication, QWidget, QLabel
 from aiflame.desktop.extension_guide import ExtensionGuide
 from aiflame.desktop.localization import set_language
 from aiflame.desktop.theme import STYLE

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "SeeEnd · AI 网页完成提醒",
-  "version": "0.2.9",
+  "version": "0.2.10",
   "description": "将 ChatGPT、Gemini、Claude 等 AI 网页的生成与完成状态接入本机 SeeEnd。需配合桌面应用使用，不读取提问或回答正文。",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAtXhTA/sg+VvSq0DhsqVjYUuZt/f36YQiXdB0lXaSNEDNFMT3EeajQulUS7OdMdS2bWZ/gw0ECupcWOxpDZIzagxbx6cXAo+UdgieF6c06qc2pOGeUKJhVF3Z5/mHHSugsBvMqms5nImrEpRKSg2d/440GlPPUb8aOA1m56p1tax1fB3Qz384LJIuQyReFkTAWX3IioCyYvmjK9aPCAGFdLF5l1yJf70EnIjZfIAtUW+YaiMOHlfEaZOTDNPUZVDjO7mr0miV60tEy5v/1XKCnz5clEr8Jh3G+0dTJ8fLXV9/LcQ6uurhFp8WljnHJGfs3bWJsy1O5Yb9Z3Q1VlaRswIDAQAB",
   "permissions": [

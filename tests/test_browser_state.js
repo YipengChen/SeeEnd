@@ -127,3 +127,30 @@ test('submission captured on a provisional URL still follows its permanent conve
   f.state.update(f.view({route:'/c/permanent',busy:true,final:null}));
   assert.deepEqual(f.events.map(e=>e.state),['working']); assert.ok(f.state.active);
 });
+
+test('pending submission cannot adopt another conversation before generation starts', () => {
+  for (const busyAtNavigation of [true, false]) {
+    const f = fixture();
+    f.state.arm(f.view({turnKey:'original-history',turnKeys:['original-history']}));
+    f.state.update(f.view({route:'/c/other',busy:busyAtNavigation,turnKey:'other-reply',final:null}));
+    f.state.update(f.view({route:'/c/other',busy:true,turnKey:'other-reply',final:null}));
+    f.state.update(f.view({route:'/c/other',turnKey:'other-reply',final:'other-final'}));
+    f.advance(1000);
+    f.state.update(f.view({route:'/c/other',turnKey:'other-reply',final:'other-final'}));
+    assert.deepEqual(f.events, []);
+    assert.equal(f.state.pending, null);
+    assert.equal(f.state.lastTransition.cause, 'navigation');
+  }
+});
+
+test('pending new-chat submission follows provisional and permanent URL commits', () => {
+  const f = fixture();
+  f.state.arm(f.view({route:'/',turnKey:null,final:null}));
+  f.state.update(f.view({route:'/c/local-chatgpt:test',turnKey:null,final:null}));
+  f.state.update(f.view({route:'/c/permanent',turnKey:null,final:null}));
+  f.state.update(f.view({route:'/c/permanent',busy:true,turnKey:'reply',final:null}));
+  f.state.update(f.view({route:'/c/permanent',turnKey:'reply',final:'new-final'}));
+  f.advance(801);
+  f.state.update(f.view({route:'/c/permanent',turnKey:'reply',final:'new-final'}));
+  assert.deepEqual(f.events.map(e=>e.state), ['working','done']);
+});

@@ -30,7 +30,7 @@ CONDA_NOTICES = {'python', 'pyobjc-core', 'pyobjc-framework-cocoa',
                  'ncurses', 'libavif', 'lerc'}
 PYTHON_PACKAGES = {'PySide6', 'shiboken6',
                    'pyobjc-core', 'pyobjc-framework-Cocoa', 'pyobjc-framework-UserNotifications',
-                   'PyInstaller', 'packaging'}
+                   'PyInstaller', 'packaging', 'Cython'}
 
 
 def fetch(url, path, expected, download):
@@ -126,7 +126,7 @@ def main(download=False):
                     target.parent.mkdir(parents=True, exist_ok=True)
                     shutil.copy2(src, target)
         (dest / 'METADATA.txt').write_text(dist.read_text('METADATA') or dist.read_text('PKG-INFO') or '')
-        if name == 'pyobjc-framework-UserNotifications':
+        if name in {'pyobjc-framework-UserNotifications', 'Cython'}:
             index = SOURCES / (name + '-pypi.json')
             if download:
                 subprocess.run(['curl', '--fail', '--location', '--silent', '--show-error',
@@ -139,7 +139,7 @@ def main(download=False):
             with tarfile.open(archive) as tar:
                 for member in tar.getmembers():
                     filename = Path(member.name).name
-                    if member.isfile() and filename.lower().startswith(('license', 'copying')):
+                    if member.isfile() and filename.lower().startswith(('license', 'copying', 'notice')):
                         (dest / filename).write_bytes(tar.extractfile(member).read())
             records.append({'name': name + '-source', 'version': dist.version,
                             'url': source['url'], 'archive': source['filename'],
@@ -150,6 +150,7 @@ def main(download=False):
     (SOURCES / 'MANIFEST.json').write_text(json.dumps(records, ensure_ascii=False, indent=2) + '\n')
     (NOTICES / 'MANIFEST.json').write_text(json.dumps(records, ensure_ascii=False, indent=2) + '\n')
     shutil.copy2(ROOT / 'THIRD_PARTY_NOTICES.md', NOTICES / 'README.md')
+    shutil.copy2(ROOT / 'LIBRARY_REPLACEMENT.md', NOTICES / 'LIBRARY_REPLACEMENT.md')
     print('Third-party materials ready; original SeeEnd source excluded.', flush=True)
 
 

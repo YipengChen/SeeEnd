@@ -1,11 +1,6 @@
 """One transient preview drives both screen status and device commands."""
 
-import json
-import socket
-import threading
-import time
 import unittest
-from unittest.mock import Mock
 
 from aiflame.core.engine import Engine
 from aiflame.core.events import EventError, make_event

@@ -52,6 +52,28 @@ def hook_handler():
     }
 
 
+def merge_owned_hooks(groups, owns, replacement, uninstall=False):
+    """Refresh owned commands while preserving host-side disable and group policy."""
+    disabled = any(handler.get("enabled") is False for group in groups for handler in group["hooks"] if owns(handler))
+    retained, replaced = [], False
+    for group in groups:
+        handlers = []
+        for handler in group["hooks"]:
+            if not owns(handler):
+                handlers.append(handler)
+            elif not uninstall and not replaced:
+                updated = {**handler, **replacement}
+                if disabled:
+                    updated["enabled"] = False
+                handlers.append(updated)
+                replaced = True
+        if handlers or not group["hooks"]:
+            retained.append({**group, "hooks": handlers})
+    if not uninstall and not replaced:
+        retained.append({"hooks": [replacement]})
+    return retained
+
+
 def install(home=None, uninstall=False):
     home = (
         Path(home).expanduser().resolve()
@@ -62,6 +84,10 @@ def install(home=None, uninstall=False):
     if path.is_symlink():
         raise ValueError("hooks.json 是符号链接，请选择实际配置目录，未修改")
     if uninstall and not path.exists():
+        from aiflame.integrations.cli_tools.install import settings, record_registration
+        saved_path, saved = settings()
+        if "codex" in saved:
+            record_registration(saved_path, saved, "codex", home, uninstall=True)
         return path
     data = (
         json.loads(path.read_text(encoding="utf-8")) if path.exists() else {"hooks": {}}
@@ -69,6 +95,10 @@ def install(home=None, uninstall=False):
     if not isinstance(data, dict) or not isinstance(data.get("hooks", {}), dict):
         raise ValueError("无法识别现有 hooks 格式，未修改")
     if uninstall and "hooks" not in data:
+        from aiflame.integrations.cli_tools.install import settings, record_registration
+        saved_path, saved = settings()
+        if "codex" in saved:
+            record_registration(saved_path, saved, "codex", home, uninstall=True)
         return path
     hooks = data.setdefault("hooks", {})
     wanted = quote_command(command("--codex-hook"))
@@ -81,24 +111,15 @@ def install(home=None, uninstall=False):
             for group in groups
         ):
             raise ValueError("无法识别现有 hooks 格式，未修改")
-        retained = []
-        for group in groups:
-            handlers = [h for h in group.get("hooks", []) if not owns_hook(h, wanted)]
-            if handlers or not group["hooks"]:
-                retained.append({**group, "hooks": handlers})
-        if not uninstall:
-            retained.append(
-                {
-                    "hooks": [
-                        hook_handler()
-                    ]
-                }
-            )
+        retained = merge_owned_hooks(groups, lambda handler: owns_hook(handler, wanted), hook_handler(), uninstall)
         if retained:
             hooks[event] = retained
         else:
             hooks.pop(event, None)
     write_incremental(path, data)
+    from aiflame.integrations.cli_tools.install import settings, record_registration
+    saved_path, saved = settings()
+    record_registration(saved_path, saved, "codex", home, uninstall)
     return path
 
 

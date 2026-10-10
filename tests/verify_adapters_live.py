@@ -11,7 +11,6 @@ import time
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from live_client import DashboardClient, hardware_targets, hardware_applied, requested_devices
-from aiflame.devices.models import DEFAULT_MODEL
 from aiflame.integrations.chatgpt_web.host import WEB_SOURCES
 
 

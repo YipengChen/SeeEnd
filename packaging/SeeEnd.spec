@@ -3,11 +3,14 @@ from pathlib import Path
 import sys
 import os
 import tomllib
-from PyInstaller.utils.hooks import collect_data_files
 
 root = Path(SPECPATH).parent
+sys.path.insert(0, str(root / "packaging"))
+from native import NATIVE_MODULES, native_artifacts
+
+native = native_artifacts(os.environ["SEEEND_NATIVE_DIR"])
 version = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
-hidden = []
+hidden = list(NATIVE_MODULES)
 data = [
     (str(root / "LICENSE"), "."),
     (str(root / "THIRD_PARTY_NOTICES.md"), "."),
@@ -24,10 +27,12 @@ data = [
 ]
 data.append((str(root / "aiflame/integrations/cli_tools/opencode_bundle"), "aiflame/integrations/cli_tools/opencode_bundle"))
 data.append((os.environ["SEEEND_THIRD_PARTY_LICENSES"], "third_party_licenses"))
+data.append((os.environ["SEEEND_BUILD_RECEIPT"], "."))
 a = Analysis(
     [str(root / "app.py")],
     pathex=[str(root)],
-    binaries=[],
+    binaries=[(str(path), str(Path(*module.split(".")[:-1])))
+              for module, path in native.items()],
     datas=data,
     hiddenimports=hidden,
     hookspath=[],
@@ -53,6 +58,12 @@ a = Analysis(
         "PySide6.QtWebEngineQuick",
     ],
 )
+# Analyze original Python imports first so dependencies inside native libraries
+# are retained, then discard protected bytecode before constructing the PYZ.
+missing = set(NATIVE_MODULES) - {entry[0] for entry in a.pure}
+if missing:
+    raise RuntimeError("Core dependency analysis is incomplete: " + str(sorted(missing)))
+a.pure[:] = [entry for entry in a.pure if entry[0] not in native]
 # Directory data collection must not ship local Python caches or OS metadata.
 a.datas = [entry for entry in a.datas if "__pycache__" not in Path(entry[0]).parts
            and not entry[0].endswith((".pyc", ".pyo", ".DS_Store"))]

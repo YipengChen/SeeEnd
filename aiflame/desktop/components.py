@@ -4,7 +4,7 @@ import math
 from pathlib import Path
 from functools import lru_cache
 
-from PySide6.QtCore import QByteArray, QElapsedTimer, QPointF, QRectF, QSize, Qt, QTimer, Signal, QEvent
+from PySide6.QtCore import QByteArray, QElapsedTimer, QPointF, QRectF, QSize, Qt, QTimer
 from PySide6.QtGui import (
     QColor,
     QIcon,
@@ -17,7 +17,7 @@ from PySide6.QtGui import (
 )
 from PySide6.QtSvg import QSvgRenderer
 from PySide6.QtWidgets import QHBoxLayout, QSizePolicy, QVBoxLayout
-from aiflame.desktop.localization import QCheckBox, QComboBox, QFrame, QLabel, QPushButton, QWidget
+from aiflame.desktop.localization import QCheckBox, QFrame, QLabel, QPushButton, QWidget
 
 ICONS = {
     "home": '<rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/>',

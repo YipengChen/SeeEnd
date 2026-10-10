@@ -7,6 +7,7 @@ from pathlib import Path
 import sqlite3
 import time
 import uuid
+from contextlib import closing
 
 from aiflame.core.paths import ensure_runtime, runtime_dir
 from aiflame.integrations.cli_tools.providers import PROVIDERS
@@ -39,7 +40,7 @@ def from_hook(source, payload, runtime=None):
         db.execute("CREATE TABLE IF NOT EXISTS sessions(source TEXT, session TEXT, turn TEXT, PRIMARY KEY(source,session))")
         db.execute("CREATE TABLE IF NOT EXISTS turns(source TEXT, session TEXT, turn TEXT, seq INTEGER, terminal INTEGER, updated REAL, PRIMARY KEY(source,session,turn))")
         db.execute("BEGIN IMMEDIATE")
-        db.execute("DELETE FROM turns WHERE updated < ?", (time.time() - 86400,))
+        db.execute("DELETE FROM turns WHERE terminal=1 AND updated < ?", (time.time() - 86400,))
         db.execute("DELETE FROM sessions WHERE NOT EXISTS (SELECT 1 FROM turns WHERE turns.source=sessions.source AND turns.session=sessions.session AND turns.turn=sessions.turn)")
         if turn is None:
             row = db.execute("SELECT turn FROM sessions WHERE source=? AND session=?", (source, session)).fetchone()
@@ -100,7 +101,7 @@ def from_hooks(source, payload, runtime=None):
         root = Path(runtime) if runtime is not None else runtime_dir()
         path = root / "cli-lifecycle.sqlite"
         if path.exists() and isinstance(payload.get("session_id"), str):
-            with sqlite3.connect(path, timeout=0.5) as db:
+            with closing(sqlite3.connect(path, timeout=0.5)) as db:
                 row = db.execute("SELECT sessions.turn FROM sessions JOIN turns USING(source,session,turn) WHERE source=? AND session=? AND terminal=0", (source, payload["session_id"])).fetchone()
             if row:
                 cancel = from_hook(source, {"hook_event_name": "Interrupt", "session_id": payload["session_id"], "turn_id": row[0]}, runtime)

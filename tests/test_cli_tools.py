@@ -1,6 +1,9 @@
 import json
 import os
 import io
+import sqlite3
+import time
+from contextlib import closing
 from pathlib import Path
 import tempfile
 import unittest
@@ -41,6 +44,18 @@ class CliToolsTests(unittest.TestCase):
         self.assertIsNone(self.event("SessionEnd"))
         second = self.event("UserPromptSubmit")
         self.assertNotEqual(first["task_id"], second["task_id"])
+
+    def test_long_unfinished_turn_keeps_terminal_mapping_after_one_day(self):
+        start = self.event("UserPromptSubmit", turn_id="long-task")
+        with closing(sqlite3.connect(self.root / "runtime/cli-lifecycle.sqlite")) as db, db:
+            db.execute("UPDATE turns SET updated=?", (time.time() - 86401,))
+        done = self.event("Stop", turn_id="long-task")
+        self.assertEqual(done["task_id"], start["task_id"])
+        self.assertEqual(done["state"], "done")
+        with closing(sqlite3.connect(self.root / "runtime/cli-lifecycle.sqlite")) as db, db:
+            db.execute("UPDATE turns SET updated=?", (time.time() - 86401,))
+        self.assertIsNone(self.event("Stop", turn_id="long-task"))
+
 
     def test_explicit_turn_start_is_idempotent(self):
         a = self.event("TurnStart", "deepseek-harness", turn_id="2")

@@ -1,17 +1,13 @@
 """Slow and late device I/O must not hold up a saved mode change."""
 
 import json
-from contextlib import ExitStack
 from pathlib import Path
 import socket
 import tempfile
 import threading
-import time
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
-from aiflame.core.engine import Engine
-from aiflame.core.events import make_event
 from aiflame.hub.server import Hub
 
 

@@ -4,7 +4,7 @@ import uuid
 
 from aiflame.core.events import EventError
 from aiflame.devices.registry import migrate_devices, public_record
-from aiflame.devices.light_settings import DEFAULTS as LIGHT_DEFAULTS, light_settings, migrate_light_settings
+from aiflame.devices.light_settings import light_settings, migrate_light_settings
 from aiflame.transports.manager import TransportManager
 from aiflame.outputs.flame import demo_display
 
@@ -72,8 +72,15 @@ class DeviceOutput:
         if current and result["key"] == current["id"]:
             recipients = current.get("device_sessions")
             if recipients is not None and recipients.get(self.record.get("device_id")) != self.token:
-                return {"key": "idle", "state": "idle", "duration_ms": 0}
+                return self.task_display()
+        if result["state"] == "working" and not result.get("preview"):
+            return self.task_display()
         return result
+
+    def task_display(self):
+        working = any(item.get("device_id") in (None, self.record.get("device_id"))
+                      for item in self.fleet.engine.active.values())
+        return {"key": "working" if working else "idle", "state": "working" if working else "idle", "duration_ms": 0}
 
     def applied(self, desired, ack):
         if self.desired()["key"] != desired["key"]:
@@ -82,9 +89,9 @@ class DeviceOutput:
         if desired.get("device_test") or desired.get("device_muted"):
             return
         flame = self.fleet.engine
-        flame.applied(desired, ack)
+        flame.applied(desired, ack, self.record["device_id"])
         event_ids = [flame.current["id"]] if flame.current and flame.current["id"] == desired["key"] else (
-            [item["id"] for item in flame.active.values()] if desired["state"] == "working" else
+            [item["id"] for item in flame.active.values() if item.get("device_id") in (None, self.record["device_id"])] if desired["state"] == "working" else
             [row["event"] for row in flame.db.execute("SELECT deliveries.event FROM deliveries JOIN events ON events.id=deliveries.event WHERE output=? AND deliveries.status='queued' AND events.state IN ('idle','cancelled','timeout','unknown')", ("flame:" + self.record["device_id"],)).fetchall()] if desired["state"] == "idle" else [])
         for event_id in event_ids:
             output = "flame:" + self.record["device_id"]
@@ -105,7 +112,7 @@ class FleetTransportManager:
         self.guard = threading.RLock()
         # Keep the existing single-connection lifecycle and its cancellation rules.
         for key, record in self.records.items():
-            migrate_light_settings(record, engine.settings)
+            migrate_light_settings(record)
             self.connection(key, record)
         self.fallback = TransportManager(engine, lock, config)
         self.guard = self.primary().guard
@@ -122,7 +129,7 @@ class FleetTransportManager:
             return self.connections[key]
 
     def adopt(self, key, record, connection):
-        migrate_light_settings(record, LIGHT_DEFAULTS)
+        migrate_light_settings(record)
         device_id = record["device_id"]
         existing = self.connections.get(device_id)
         if existing and existing is not connection:
@@ -188,8 +195,12 @@ class FleetTransportManager:
 
     def confirmed(self, key):
         with self.lock:
-            online = [output for key, output in self.outputs.items()
-                      if key in self.records and output.device.get("online") and output.settings["brightness"] > 0]
+            current = self.engine.current
+            recipients = current.get("device_sessions") if current and current["id"] == key else None
+            online = [output for device_id, output in self.outputs.items()
+                      if device_id in self.records and output.device.get("online") and output.settings["brightness"] > 0
+                      and (recipients is None or recipients.get(device_id) == output.token)
+                      and (key != "working" or output.task_display()["state"] == "working")]
             return bool(online) and all(output.last_display_key == key for output in online)
 
     def start(self):

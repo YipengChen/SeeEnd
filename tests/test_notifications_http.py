@@ -1,7 +1,6 @@
 import os
 import tempfile
 import unittest
-from pathlib import Path
 from unittest.mock import patch
 from aiflame.hub.server import Hub
 from aiflame.core.paths import load_config

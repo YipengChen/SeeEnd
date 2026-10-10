@@ -90,10 +90,12 @@ class FlameOutput:
         for row in rows:
             self.core.router.record(event_id, row["output"], status, row["detail"])
 
-    def record_targets(self, event_id, result):
+    def record_targets(self, event_id, result, target=None):
         from aiflame.devices.models import hardware_model, DEFAULT_MODEL
         from aiflame.devices.light_settings import light_settings
         for key, record in getattr(self.transport, "records", {}).items():
+            if target is not None and key != target:
+                continue
             output = self.transport.outputs.get(key)
             status = result
             if result == "queued":
@@ -131,7 +133,7 @@ class FlameOutput:
                 self.settle_targets(row["id"], "superseded")
         if not self.settings["source_enabled"].get(key[0], False):
             self.mark(eid, "unmatched")
-            self.record_targets(eid, "unmatched")
+            self.record_targets(eid, "unmatched", event.get("device_id"))
             return "unmatched"
         result = "suppressed" if self.muted() else "queued"
         self.cancel_preview()
@@ -160,6 +162,9 @@ class FlameOutput:
             }
             if self.transport and hasattr(self.transport, "sessions"):
                 item["device_sessions"] = (self.transport.enabled_sessions() if hasattr(self.transport, "enabled_sessions") else self.transport.sessions())
+                if event.get("device_id") is not None:
+                    item["device_sessions"] = {key: token for key, token in item["device_sessions"].items()
+                                               if key == event["device_id"]}
             self.queue.append(item)
             if len(self.queue) > 20:
                 victim = min(self.queue, key=lambda x: (x["priority"], x["arrived"]))
@@ -169,7 +174,7 @@ class FlameOutput:
                 if victim["id"] == eid:
                     result = "dropped"
         self.mark(eid, result)
-        self.record_targets(eid, result)
+        self.record_targets(eid, result, event.get("device_id"))
         return result
 
     def settings_changed(self):
@@ -347,7 +352,7 @@ class FlameOutput:
                 item["activity_countdown"] = True
                 item["deadline"] = self.clock() + item["duration"]
 
-    def applied(self, desired, ack):
+    def applied(self, desired, ack, device_id=None):
         if desired.get("preview"):
             current = self.preview_display()
             if current and current["key"] == desired["key"]:
@@ -364,10 +369,12 @@ class FlameOutput:
             self.mark(self.current["id"], "applied")
         elif desired["state"] == "working":
             for item in self.active.values():
-                self.mark(item["id"], "applied")
+                if device_id is None or item.get("device_id") in (None, device_id):
+                    self.mark(item["id"], "applied")
         elif desired["state"] == "idle":
             for row in self.db.execute("SELECT id FROM events WHERE state IN ('idle','cancelled','timeout','unknown') AND status='queued'").fetchall():
-                self.mark(row["id"], "applied")
+                if device_id is None or self.db.execute("SELECT 1 FROM deliveries WHERE event=? AND output=? AND status='queued'", (row["id"], "flame:" + device_id)).fetchone():
+                    self.mark(row["id"], "applied")
 
     def session_changed(self):
         self.cancel_preview()

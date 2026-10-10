@@ -18,21 +18,21 @@ def light_settings(record):
     return settings
 
 
-def migrate_light_settings(record, legacy):
+def migrate_light_settings(record):
     if "light_settings" not in record:
         record["light_settings"] = dict(DEFAULTS)
 
 
 def validate_patch(patch, model_id=None):
     if not isinstance(patch, dict) or not patch or set(patch) - (DEFAULTS.keys() | {"colors", "state_brightness"}):
-        raise EventError("请选择灯光亮度、动态效果或提醒颜色")
+        raise EventError("请选择灯光亮度或提醒颜色")
     if model_id not in YEELIGHT_MODELS:
         raise EventError("不支持的硬件型号")
     maximum = 100
     if "brightness" in patch and (type(patch["brightness"]) is not int or not 0 <= patch["brightness"] <= maximum):
         raise EventError(f"灯光亮度范围为 0–{maximum}%")
     if "reduced" in patch and type(patch["reduced"]) is not bool:
-        raise EventError("动态效果设置格式错误")
+        raise EventError("灯光兼容设置格式错误")
     if "state_brightness" in patch:
         values = patch["state_brightness"]
         if (model_id not in YEELIGHT_MODELS or not isinstance(values, dict) or not values

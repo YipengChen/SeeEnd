@@ -35,3 +35,6 @@ desktop.log
 # Third-party source archives fetched for binary redistribution
 /third_party_sources/
 /packaging/generated_licenses/
+
+# Local UI evidence is archived outside the source distribution.
+/.impeccable/

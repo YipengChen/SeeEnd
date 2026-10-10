@@ -1,0 +1,37 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>SeeEnd 浏览器扩展隐私政策</title><style>body{font:16px/1.8 system-ui,sans-serif;color:#273229;background:#f7f6f1;margin:0}main{max-width:800px;padding:40px 24px;margin:auto}h1{font-size:30px}h2{font-size:21px;margin-top:32px}a{color:#a24a1c}section+section{margin-top:64px;border-top:1px solid #ccc;padding-top:32px}</style><main><nav><a href="#zh">中文</a> · <a href="#en">English</a></nav><section id="zh"><h1>SeeEnd 浏览器扩展隐私政策</h1>
+<p>版本日期：2026 年 10 月 9 日。适用扩展：SeeEnd · AI 网页完成提醒 0.2.8。</p>
+<h2>功能和本机应用</h2>
+<p>本扩展观察支持的 AI 网页控件，识别用户新发起文字对话任务的生成、完成或中断状态，并向同一台电脑上的 SeeEnd 桌面应用传递状态事件。桌面应用根据用户设置执行提醒。安装扩展不会自动安装桌面应用。</p>
+<h2>处理的数据</h2>
+<p>在支持的网页内，扩展检查当前网页地址、会话路由、回复节点标识、控件结构与属性，以及发送、Enter 提交、停止、导航和页面可见性等事件。这些检查用于区分平台、跟踪本轮任务和避免把历史回复或中断误判为完成。地址和网页回复标识只在页面内存中使用，不进入发送给桌面应用的状态事件。扩展不访问浏览器历史数据库。</p>
+<p>扩展不读取或保存提问、回答正文、输入框文字、会话标题、账号信息、密码或其他认证凭据，不采集通用键盘输入日志，不读取 AI 网站的网络响应。</p>
+<p>状态事件包含协议版本、随机事件与任务标识、平台来源、事件序号、生成／完成／空闲／错误状态、时间、有效期和可选结束原因。事件通过 Chrome Native Messaging 发送给本机 com.aiflame.chatgpt 桥接，再由桥接发送到本机回环地址 127.0.0.1 的 SeeEnd 服务。平台来源不包含实际对话地址或网页回复标识。</p>
+<h2>本地诊断和存储</h2>
+<p>浏览器会话存储保存正在跟踪的任务记录，任务结束或取消后删除相应记录，会话存储也随浏览器会话结束而清除。扩展本地存储保存各平台最近一次送达结果及最近一次总结果，包括时间、来源、状态、处理结果、连接错误和可选取消原因；每个平台的新结果覆盖旧结果，没有自动按天清理机制。</p>
+<p>弹窗中的控件诊断在当前浏览器会话中显示控件类型、样式类名、测试属性、布局和渲染计数。它不显示对话正文或输入框文字，扩展不将这份诊断发送到开发者服务器。</p>
+<p>SeeEnd 桌面应用在本机保存接收到的状态事件和活动记录，可能保留至用户主动清除或重置应用。桌面活动记录与扩展存储是分别管理的；移除扩展不会自动删除桌面应用中的记录。桌面应用的设备配置和提醒偏好属于其本地配置范围。</p>
+<h2>传输和用途</h2>
+<p>本扩展不将上述数据上传到开发者运营的服务器，也不包含广告或分析 SDK。不出售数据，不用于广告画像、信用评估或借贷。状态数据仅用于所声明的任务提醒、连接检查与本地诊断功能。SeeEnd 对相关用户数据的使用遵守 Chrome Web Store User Data Policy，包括 Limited Use 要求。</p>
+<p>AI 网站自身如何处理用户输入由其各自政策规定。商店的安装、更新和审核由 Google 提供，不属于本扩展向开发者服务器上传数据。</p>
+<h2>用户控制</h2>
+<p>用户可以在 Chrome 中停用或移除扩展，停止扩展后续处理。移除扩展会清除其存储。用户也可以在 SeeEnd 桌面应用中关闭相应平台来源或暂停提醒；这些开关控制提醒，不等同于停用浏览器中的网页观察。删除桌面记录可以使用应用的“重置 APP”功能，该操作也会清除设备配对、提醒偏好和接入配置，请先阅读确认提示。</p>
+<h2>政策更新和联系</h2>
+<p>当扩展的数据处理方式变化时，会更新本政策。隐私问题请联系 ypchenmail@gmail.com。发布者：Yipeng Chen。</p> </section><section id="en" lang="en"><h1>SeeEnd Browser Extension Privacy Policy</h1>
+<p>Policy date: October 9, 2026. Applies to SeeEnd AI web chat status extension version 0.2.8.</p>
+<h2>Purpose</h2>
+<p>The extension observes supported AI website controls for user-initiated text chats, and sends generation, completion or interruption status to the SeeEnd desktop app on the same computer. The desktop app performs the user&#x27;s configured reminders. Installing the extension does not install the desktop app.</p>
+<h2>Local processing</h2>
+<p>On supported pages, the extension processes the current page URL, conversation route, reply-node identifiers, control structure and attributes, and submit, Enter, stop, navigation and visibility events. These are used to identify the site and current task and avoid reporting historical replies or interruptions as completion. Actual page URLs and website reply identifiers remain in page memory and are not included in status events. The extension does not access the browser-history database.</p>
+<p>The extension does not read or store prompts, response text, editor contents, conversation titles, account details, passwords or authentication credentials. It does not record general typed characters or inspect AI website network responses.</p>
+<p>Status events include a schema version, random event and task identifiers, site source, sequence, state, timestamp, time-to-live and optional end reason. Chrome Native Messaging delivers these events to the local com.aiflame.chatgpt bridge, which forwards them to the SeeEnd service on loopback address 127.0.0.1. No actual conversation URL or website reply identifier is included.</p>
+<h2>Storage and diagnostics</h2>
+<p>Session storage holds active task records, removed on completion or cancellation and cleared when the browser session ends. Local storage holds the latest delivery result for each site and the latest overall result, including time, source, state, delivery result, connection errors and an optional cancellation reason. New results overwrite old results; there is no automatic age-based deletion.</p>
+<p>Popup diagnostics show control types, CSS classes, test attributes, layout and rendering counts in the current session. They do not show chat or editor text and are not uploaded to developer-operated servers.</p>
+<p>The desktop app stores received status events and activity records locally until cleared or reset by the user. Removing the extension does not delete desktop records, device settings or reminder preferences.</p>
+<h2>Use and sharing</h2>
+<p>The extension does not upload these data to developer-operated servers or include advertising or analytics SDKs. Data are not sold, used for advertising profiles, creditworthiness or lending. Data are used only for the stated reminders, connection checks and local diagnostics. SeeEnd&#x27;s use of relevant user data complies with the Chrome Web Store User Data Policy, including Limited Use requirements.</p>
+<p>AI websites have their own data policies. Google provides store installation, updates and review independently of this extension.</p>
+<h2>User controls</h2>
+<p>Disable or remove the extension in Chrome to stop its processing. Removing it clears extension storage. Desktop source switches and pause controls affect reminders, not necessarily browser-page observation. Desktop records can be removed with Reset App, which also clears device pairings, reminder preferences and integration settings; review the confirmation carefully.</p>
+<h2>Contact and changes</h2>
+<p>This policy will be updated if data practices change. Publisher: Yipeng Chen. Privacy contact: ypchenmail@gmail.com.</p></section></main></html>

@@ -4,11 +4,17 @@ import datetime as dt
 from dataclasses import dataclass
 import uuid
 
+REQUIRED_FIELDS = ("schema_version", "event_id", "source_id", "task_id", "seq", "state", "occurred_at", "ttl_ms")
+OPTIONAL_FIELDS = ("reason", "device_id")
+STATES = ("idle", "working", "needs_input", "done", "error", "cancelled", "timeout", "unknown")
+REASONS = ("completed", "failed", "cancelled", "timeout")
+
 
 class EventError(Exception):
-    def __init__(self, message, status=400):
+    def __init__(self, message, status=400, error_code="request_invalid"):
         super().__init__(message)
         self.status = status
+        self.error_code = error_code
 
 
 @dataclass(frozen=True)

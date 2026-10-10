@@ -114,6 +114,12 @@ def install_plugin(directory, *, uninstall=False):
 
 def plugin_ready(directory):
     directory = Path(directory)
-    return ((directory / 'plugins/aiflame.js').read_text() == wrapper()
-            and (directory / 'aiflame/index.mjs').read_bytes() == (Path(__file__).with_name('opencode_bundle') / 'index.mjs').read_bytes()
-            and json.loads((directory / 'aiflame/bridge.json').read_text()).get('helperArgv') == command('--cli-hook', 'opencode'))
+    try:
+        files = _files()
+        if any((directory / relative).is_symlink() for relative in ('plugins', 'aiflame', *files)):
+            return False
+        _, owned = _ownership(directory, files)
+        return all((directory / relative).read_bytes() == content and owned.get(relative) == _digest(content)
+                   for relative, content in files.items())
+    except (OSError, ValueError, TypeError):
+        return False

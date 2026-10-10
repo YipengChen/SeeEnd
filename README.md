@@ -8,7 +8,7 @@
 
 SeeEnd 是运行在本机的 AI 任务提醒工具。它接收命令行工具、网页对话和本地 API 的状态事件，通过屏幕烛火、桌面通知或实体灯提示任务进行、等待输入、完成与异常。**没有硬件也能使用**，首次启动默认进入虚拟模式。
 
-当前版本：**0.8.5 桌面预览版** · Python **3.11+** · **专有许可**
+当前版本：**0.8.6 桌面预览版** · Python **3.11+** · **专有许可**
 
 ## 能做什么
 
@@ -103,18 +103,34 @@ npm test
 
 ```sh
 python -m pip install -e ".[desktop,build]"
-python packaging/build.py
+python packaging/build.py --download-sources
+python packaging/verify_frozen.py
 python packaging/archive.py
 ```
 
 默认输出到 `dist/`，macOS 应用为 `dist/SeeEnd.app`。可指定独立输出目录：
 
 ```sh
-python packaging/build.py --dist-dir dist/staging
+python packaging/build.py --download-sources --dist-dir dist/staging
+python packaging/verify_frozen.py --dist-dir dist/staging
 python packaging/archive.py --dist-dir dist/staging
 ```
 
+分发时以 `SeeEnd-版本-平台-架构.zip`（Linux 为 `.tar.gz`）作为唯一 App 下载入口：其中包含应用、运行依赖、许可说明和离线安装教程，用户只需下载此包。`SeeEnd-third-party-sources-版本.zip` 单独提供第三方源码与构建材料，供查阅或修改第三方库时按需下载，不嵌入 App 压缩包。公开页面应将其标为“可选，使用 App 无需下载”，并保留材料链接。
+
+干净源码环境首次构建使用 `--download-sources` 下载并校验第三方源码；也可先运行 `python packaging/prepare_licenses.py --download`。材料准备完成后，省略该选项即可离线重建；缺失或校验失败会在原生编译前停止。构建依赖包括 PyYAML，用于读取发行方配方。
+
+应用与分发包包含 `SeeEnd-build.json`，记录 App/扩展版本、Git revision、工作树是否有未提交变更、源码指纹、平台、架构、Python 版本和第三方材料指纹。构建后改动源码或版本必须重新构建；验证和归档拒绝将旧 App 改名为新版本。第三方源码归档只选择清单中已校验的上游归档与配方，不收录缓存目录中的任意文件。
+
+运行 `python packaging/extension_release.py` 可从当前源码生成按版本命名的开发加载目录、开发 ZIP、商店待提交 ZIP 和校验清单。商店 ZIP 的 manifest 位于根目录且移除 `key`；开发包保留商店公钥。脚本不会覆盖历史 `docs/chrome-web-store/extension-upload.zip` 或浏览器可能正在加载的 `dist/SeeEnd-Web-extension/`。生成待提交包不代表已更新商店。
+
+构建需要本机 C 编译器：macOS 使用 Xcode Command Line Tools，Windows 使用 Visual Studio C++ Build Tools，Linux 使用 GCC 和当前 Python 的开发头文件。`build.py` 会用 Cython 将 `core`、`outputs`、`hub`、`devices` 和 `transports` 中的 22 个核心模块编译为当前平台的原生库，先验证所有原生模块可加载，再打包；任一步失败都会停止，不回退到 Python 字节码。源码开发仍使用 `.py` 文件，生成的 C 代码和调试文件仅保存在临时构建目录。
+
+修改核心逻辑后，可运行 `python packaging/verify_native.py`，在移除核心 Python 文件的隔离目录中执行完整回归测试；也可用 `python packaging/build.py --verify-native --download-sources` 测试后直接打包，桌面构建 CI 使用此方式。安装包检查会确认核心模块不在 PYZ 中，且不携带其 `.py`、`.pyc` 或生成的 C 代码。原生编译提高逆向成本，不保证无法逆向；界面、接入适配器和随包 JavaScript 不在本次核心编译范围内。
+
 GitHub Actions 对推送和 PR 运行测试；桌面构建工作流支持手动触发和 `v*` 标签触发。跨平台构建成功不代表完成实机验收。
+
+本地受限环境若以 EPERM/EACCES 禁止回环端口或本地 IPC，原生回归会逐项列出受影响的跳过用例，冻结验证仍执行真实辅助进程的静默输入、消息帧和包内容检查，并明确报告 HTTP 生命周期未验证。其他 socket 错误会失败；CI 不允许因这些权限限制跳过集成验证。测试使用隔离配置，不操作真实设备。
 
 应用品牌图标以 `aiflame/assets/icon.svg` 为源文件。安装桌面依赖与 Pillow 后，运行 `python packaging/render_icon.py` 同步生成 PNG、Windows ICO 和 macOS ICNS，再重新构建应用。菜单栏火苗用于显示灯光状态，与品牌图标独立。
 

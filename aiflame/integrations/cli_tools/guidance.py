@@ -93,6 +93,8 @@ def directory_for(source, override=None):
 def integration_guide(source, config_dir=None, profile=None):
     if source not in DOCS:
         raise ValueError("请选择支持的编程工具")
+    if source == "deepseek-harness" and config_dir is not None:
+        raise ValueError("DeepSeek Harness 不支持 config_dir；请通过 DSH_HOME 选择配置根目录")
     name = "Codex" if source == "codex" else PROVIDERS[source].name
     first_use = onboarding(source, name, profile)
     result = {"source_id": source, "name": name, "preservation": PRESERVATION,

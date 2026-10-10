@@ -67,7 +67,8 @@ class OutputTests(unittest.TestCase):
         for state in ('timeout', 'cancelled', 'unknown'):
             self.send(state, task=state)
         self.assertEqual({r['state'] for r in self.engine.snapshot()['tasks']}, {'timeout', 'cancelled', 'unknown'})
-        with self.assertRaises(EventError): self.send('working', 2, task='timeout')
+        with self.assertRaises(EventError):
+            self.send('working', 2, task='timeout')
         self.assertEqual(self.send('working', 2, task='unknown')['phase'], 'resumed')
 
     def test_lease_expiry_is_core_lifecycle_event_without_light_poll(self):
@@ -110,7 +111,8 @@ class OutputTests(unittest.TestCase):
             self.assertEqual(row[0], 'screen')
 
     def test_queue_victim_receipt_is_not_overwritten(self):
-        for i in range(20): self.send('error', task=str(i))
+        for i in range(20):
+            self.send('error', task=str(i))
         result = self.send('done', task='overflow')
         self.assertEqual(result['deliveries']['flame'], 'dropped')
         self.assertEqual(result['deliveries']['desktop'], 'pending')

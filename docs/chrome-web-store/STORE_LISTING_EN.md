@@ -1,5 +1,7 @@
 # SeeEnd English store listing
 
+> 历史提交资料：扩展 0.2.8 / 当时桌面版本；保留提交事实与原操作。当前 0.2.10 待提交资料见 prepared/0.2.10/，本地修订不表示重新提交。
+
 ## Name
 
 SeeEnd · AI Web Chat Status

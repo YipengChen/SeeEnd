@@ -33,6 +33,15 @@
     update(s) {
       const now = this.now();
       if (this.pending && now - this.pending.at > 15000) this.pending = null;
+      if (this.pending && s.route !== this.pending.route) {
+        // Only new-conversation URL commits can carry an unstarted submission.
+        // History navigation must not adopt an unrelated generation.
+        if (this.canTransition(this.pending.route, s.route)) this.pending.route = s.route;
+        else {
+          this.pending = null;
+          this.lastTransition = {state:'idle', cause:'navigation'};
+        }
+      }
       if (!this.active && this.pending && s.busy && s.online) {
         this.active = {id: this.uuid(), seq: 0, route: s.route, final: this.pending.final,
           baselineTurn:this.pending.turnKey, observedIncomplete:false,

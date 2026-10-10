@@ -72,7 +72,7 @@ def summarize(result, enabled=None, verification=None):
     elif enabled is False:
         result.update(status="disabled", summary="配置已准备，提醒开关尚未开启。", next_action="开启此工具的提醒开关，再使用 SeeEnd Skill 验证接入。")
     elif evidence.get("status") == "verified":
-        result.update(status="connected", summary="接入正常：已收到同一真实任务的开始与完成。", next_action="可继续使用；切换工具版本或运行模式后再验证。")
+        result.update(status="connected", summary="此来源已有同一真实任务的开始与完成记录；本次配置目录或 Profile 尚需单独验证。", next_action="在实际使用的配置目录或 Profile 会话发起新任务，用 SeeEnd Skill 核对当前验证窗口的事件。")
     elif evidence.get("status") == "working":
         result.update(status="receiving", summary="已收到真实任务开始，正在等待本次完成。", next_action="等工具回复结束后再次检查。")
     elif evidence.get("status") in {"error", "cancelled", "timeout", "needs_input", "incomplete", "unknown"}:
@@ -83,7 +83,7 @@ def summarize(result, enabled=None, verification=None):
     checks.append({"id": "source", "status": "error" if enabled is False else "ok" if enabled is True else "pending", "message": "来源开关：" + ("已开启" if enabled is True else "未开启" if enabled is False else "请在 APP 中核对"), "action": ""})
     result["verification"] = evidence
     feedback = {
-        "connected": "接入正常，可以使用。",
+        "connected": "此来源已有真实接收记录；当前目录或 Profile 的会话仍需单独验证。",
         "disabled": "提醒已关闭。开启此工具的来源开关，再使用 SeeEnd Skill 验证接入。",
         "receiving": "已收到任务开始，等回复结束后再检查。",
         "ready_unverified": "配置已就绪。完成工具加载与信任后，使用 SeeEnd Skill 验证接入。",

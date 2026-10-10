@@ -83,10 +83,10 @@ def from_hook(payload, runtime=None):
         db.close()
 
 
-def deliver(event):
+def deliver(event, port=8765):
     if event is None:
         return
     from aiflame.integrations.local_api.client import send
 
     config = json.loads((ensure_runtime() / "credentials.json").read_text())
-    return send(event, config["tokens"]["codex"], timeout=0.6)
+    return send(event, config["tokens"]["codex"], port=port, timeout=0.6)

@@ -8,7 +8,7 @@ Turn AI task status into a candle flame.
 
 SeeEnd is a local AI task notification app. It receives status events from command-line tools, web conversations, and local APIs, then uses an on-screen candle, desktop notifications, or physical lamps to signal work in progress, requests for input, completion, and errors. **No hardware is required**: the first launch defaults to virtual mode.
 
-Current version: **0.8.5 desktop preview** · Python **3.11+** · **Proprietary license**
+Current version: **0.8.6 desktop preview** · Python **3.11+** · **Proprietary license**
 
 ## Features
 
@@ -104,18 +104,34 @@ Build on the target operating system:
 
 ```sh
 python -m pip install -e ".[desktop,build]"
-python packaging/build.py
+python packaging/build.py --download-sources
+python packaging/verify_frozen.py
 python packaging/archive.py
 ```
 
 Output defaults to `dist/`; the macOS app is `dist/SeeEnd.app`. To use a separate output directory:
 
 ```sh
-python packaging/build.py --dist-dir dist/staging
+python packaging/build.py --download-sources --dist-dir dist/staging
+python packaging/verify_frozen.py --dist-dir dist/staging
 python packaging/archive.py --dist-dir dist/staging
 ```
 
+The only App download is `SeeEnd-version-platform-architecture.zip` (`.tar.gz` on Linux). It includes the app, runtime dependencies, license notices, and an offline installation guide. `SeeEnd-third-party-sources-version.zip` supplies third-party source and build materials separately; it is not embedded in the App archive. Public download pages should label it “Optional; not required to use the App” and retain its link.
+
+For a clean checkout, use `--download-sources` to fetch and verify third-party source materials, or run `python packaging/prepare_licenses.py --download` first. Once prepared, omit the option to rebuild offline. Missing or invalid materials stop the build before native compilation. Build dependencies include PyYAML for reading distributor recipes.
+
+The app and release archives contain `SeeEnd-build.json`, recording App and extension versions, Git revision, uncommitted-change status, source fingerprint, platform, architecture, Python version, and third-party material fingerprints. Source or version changes require a rebuild; verification and archiving reject renaming an old app as a new release. The third-party archive selects only verified upstream archives and recipes from its manifest, excluding unrelated cache files.
+
+Run `python packaging/extension_release.py` to stage a versioned unpacked extension, development ZIP, store submission ZIP, and checksum record. The store ZIP puts its manifest at the root and removes `key`; development packages retain the store public key. Historical `docs/chrome-web-store/extension-upload.zip` and the potentially loaded `dist/SeeEnd-Web-extension/` directory remain intact. Staging does not update the store.
+
+Building requires a local C compiler: Xcode Command Line Tools on macOS, Visual Studio C++ Build Tools on Windows, or GCC and the current Python development headers on Linux. `build.py` compiles 22 core modules from `core`, `outputs`, `hub`, `devices`, and `transports` with Cython, verifies that every native module loads, then freezes the application. Failures stop the build without a Python bytecode fallback. Source development continues to use `.py` files; generated C and debug files stay in temporary build directories.
+
+After changing core logic, run `python packaging/verify_native.py` to execute the full regression suite in an isolated directory without core Python sources, or use `python packaging/build.py --verify-native --download-sources` to test and package in one run, as desktop build CI does. Frozen verification checks that protected modules are absent from PYZ and that their `.py`, `.pyc`, and generated C files are excluded. Native compilation raises reverse-engineering cost without guaranteeing protection; UI, integration adapters, and bundled JavaScript remain outside the compiled core.
+
 GitHub Actions runs tests for pushes and PRs. The desktop build workflow supports manual runs and `v*` tag triggers. A successful cross-platform build does not imply acceptance on real machines.
+
+When a local sandbox denies loopback or IPC binding with EPERM/EACCES, native regression lists the affected skipped cases. Frozen verification still executes real helper processes to check ignored/private-invalid inputs, native-message frames and bundle contents, and explicitly reports that HTTP lifecycle delivery remains unverified. Other socket errors fail; CI requires these integration checks. Tests use isolated configuration and do not operate real devices.
 
 The brand icon source is `aiflame/assets/icon.svg`. After installing desktop dependencies and Pillow, run `python packaging/render_icon.py` to regenerate PNG, Windows ICO, and macOS ICNS assets, then rebuild the app. The menu bar flame indicates light status and is separate from the brand icon.
 

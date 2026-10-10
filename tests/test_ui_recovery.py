@@ -20,7 +20,8 @@ if HAS_QT:
     from aiflame.desktop.notifications import NotificationConsumer
 else:
     QObject = object
-    Signal = lambda *args: None
+    def Signal(*args):
+        return None
 
 
 class ControlledAPI(QObject):

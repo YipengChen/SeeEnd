@@ -80,6 +80,20 @@ class CliHttpTests(unittest.TestCase):
                 self.assertTrue(all(event["simulated"] for event in status["events"]
                                     if event["source"] == source))
 
+    def test_codex_and_web_self_tests_use_the_ephemeral_hub_port(self):
+        self.assertNotEqual(self.hub.port, 8765)
+        for source in ('codex', 'chatgpt-web'):
+            self.client.call('/api/trigger-test', {'source': source})
+            deadline = time.monotonic() + 8
+            while time.monotonic() < deadline:
+                job = self.client.call('/api/trigger-test')['job']
+                if job['state'] != 'running':
+                    break
+                time.sleep(.02)
+            self.assertEqual(job['state'], 'succeeded', job)
+            self.assertEqual(len(job['events']), 2)
+            self.assertEqual(self.client.call('/api/status')['verification'][source]['complete_tasks'], 0)
+
     @unittest.skipUnless(os.environ.get("AIFLAME_TEST_FROZEN_HELPER"), "Supply a built App helper to test packaging")
     def test_frozen_helpers_deliver_real_lifecycle(self):
         executable = os.environ["AIFLAME_TEST_FROZEN_HELPER"]

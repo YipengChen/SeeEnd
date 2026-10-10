@@ -14,7 +14,7 @@ from aiflame.core.paths import ensure_runtime, load_config
 from aiflame.core.engine import Engine
 from aiflame.core.activity import ActivityMonitor
 from aiflame.core.verification import begin_verification
-from aiflame.core.verification import verification_summary
+from aiflame.core.verification import verification_summary, verification_evidence
 from aiflame.core.events import EventError
 from aiflame.transports.fleet import FleetTransportManager as TransportManager
 from aiflame.devices.fleet import FleetDeviceService as DeviceService
@@ -24,7 +24,7 @@ from aiflame.integrations.manual.actions import DemoTasks, test as manual_test
 from aiflame.integrations.chatgpt_web.downloads import extension_archive, extension_folder_info, prepare_extension_folder
 from aiflame.integrations.chatgpt_web.host import WEB_SOURCES
 from aiflame.integrations.testing import TriggerTests
-from aiflame.integrations.registry import SOURCES
+from aiflame.integrations.registry import SOURCES, integration_contract
 from aiflame.integrations.desktop_clients.service import DesktopClients
 from aiflame.integrations.cli_tools.providers import CLI_SOURCES
 
@@ -107,7 +107,7 @@ class Hub:
     def stop(self):
         with self.operation_lock:
             if self.devices.busy():
-                raise RuntimeError("固件操作正在进行，请等待完成后退出")
+                raise RuntimeError("设备操作正在进行，请等待完成后退出")
             self.stopping.set()
             with self.lock:
                 self.engine.cancel_preview()
@@ -233,6 +233,20 @@ class Handler(BaseHTTPRequestHandler):
                 return
             identity = self.identity()
             c = self.c
+            if urlsplit(self.path).path in ("/api/integration-contract", "/api/verification-evidence"):
+                if identity != "dashboard":
+                    raise EventError("需要桌面 App 会话", 403)
+                query = parse_qs(urlsplit(self.path).query, keep_blank_values=True)
+                if urlsplit(self.path).path == "/api/integration-contract":
+                    if query:
+                        raise EventError("契约查询不接受额外参数")
+                    self.reply(200, integration_contract())
+                else:
+                    if set(query) != {"source"} or len(query["source"]) != 1:
+                        raise EventError("请选择一个真实来源，不接受额外或重复参数")
+                    with c.lock:
+                        self.reply(200, verification_evidence(c.engine, query["source"][0]))
+                return
             if urlsplit(self.path).path in ("/api/integration-guide", "/api/integration-check"):
                 if identity != "dashboard":
                     raise EventError("需要桌面 App 会话", 403)
@@ -242,6 +256,8 @@ class Handler(BaseHTTPRequestHandler):
                 source = query.get("source", [""])[0]
                 directory = query.get("config_dir", [None])[0] or None
                 profile = query.get("profile", [None])[0] or None
+                if source == "deepseek-harness" and directory is not None:
+                    raise EventError("DeepSeek Harness 不支持 config_dir；请通过 DSH_HOME 选择实际配置根目录", 400, "config_invalid")
                 from aiflame.integrations.cli_tools.guidance import integration_guide
                 try:
                     guide = integration_guide(source, directory, profile)
@@ -361,7 +377,7 @@ class Handler(BaseHTTPRequestHandler):
                 else:
                     raise EventError("页面不存在", 404)
         except EventError as error:
-            self.reply(error.status, {"error": str(error)})
+            self.reply(error.status, {"error": str(error), "error_code": error.error_code})
         except (BrokenPipeError, ConnectionResetError, TimeoutError):
             pass
 
@@ -455,18 +471,28 @@ class Handler(BaseHTTPRequestHandler):
                 try:
                     with c.operation_lock:
                         if isinstance(source, str) and source in CLI_SOURCES:
-                            from aiflame.integrations.cli_tools.install import install, settings
+                            from aiflame.integrations.cli_tools.install import install, settings, configured, registered_directories
+                            from aiflame.integrations.cli_tools.guidance import directory_for
 
+                            _, before = settings()
+                            if source == "deepseek-harness":
+                                repairing = body.get("profile") in before.get(source, {}).get("profiles", [])
+                            else:
+                                directory = directory_for(source, body.get("config_dir") or None)
+                                repairing = str(directory.resolve()) in registered_directories(source, before) or configured(source, directory)
                             install(source, config_dir=body.get("config_dir") or None,
                                     profile=body.get("profile") or None, uninstall=removing)
                             with c.lock:
                                 enabled = dict(c.engine.settings["source_enabled"])
-                            enabled[source] = not removing
-                            if removing and source == "deepseek-harness":
+                            if removing:
                                 _, saved = settings()
-                                enabled[source] = bool(saved.get(source, {}).get("profiles"))
+                                remaining = (saved.get(source, {}).get("profiles", []) if source == "deepseek-harness"
+                                             else registered_directories(source, saved))
+                                enabled[source] = enabled[source] and bool(remaining)
+                            elif not repairing:
+                                enabled[source] = True
                             c.update_settings({"source_enabled": enabled})
-                            if not removing:
+                            if not removing and enabled[source]:
                                 with c.lock:
                                     begin_verification(c.engine, source)
                             message = ("已移除所选 SeeEnd 接入；其他配置已保留。" if removing else
@@ -474,20 +500,21 @@ class Handler(BaseHTTPRequestHandler):
                         elif source == "codex":
                             from aiflame.integrations.codex.install import install
                             from aiflame.integrations.cli_tools.guidance import directory_for
-                            from aiflame.integrations.cli_tools.install import settings
-                            from aiflame.integrations.codex.install import write_incremental
+                            from aiflame.integrations.cli_tools.install import settings, configured, registered_directories
 
                             directory = directory_for(source, body.get("config_dir") or None)
+                            _, before = settings()
+                            repairing = str(directory.resolve()) in registered_directories(source, before) or configured(source, directory)
                             install(home=directory, uninstall=removing)
-                            if body.get("config_dir"):
-                                saved_path, saved = settings()
-                                saved[source] = {"config_dir": str(directory)}
-                                write_incremental(saved_path, saved)
                             with c.lock:
                                 enabled = dict(c.engine.settings["source_enabled"])
-                            enabled[source] = not removing
+                            if removing:
+                                _, saved = settings()
+                                enabled[source] = enabled[source] and bool(registered_directories(source, saved))
+                            elif not repairing:
+                                enabled[source] = True
                             c.update_settings({"source_enabled": enabled})
-                            if not removing:
+                            if not removing and enabled[source]:
                                 with c.lock:
                                     begin_verification(c.engine, source)
                             message = ("已移除 SeeEnd Hooks，其他配置已保留。" if removing else
@@ -500,13 +527,13 @@ class Handler(BaseHTTPRequestHandler):
                         else:
                             raise EventError("接入方式不受支持")
                 except json.JSONDecodeError as error:
-                    raise EventError(f"未修改配置：JSON 第 {error.lineno} 行、第 {error.colno} 列无法解析。先修正格式后重试。", 409)
+                    raise EventError(f"未修改配置：JSON 第 {error.lineno} 行、第 {error.colno} 列无法解析。先修正格式后重试。", 409, "config_invalid")
                 except FileNotFoundError:
-                    raise EventError("自动接入未完成：配置文件或必要工具不存在。核对目录；DeepSeek 需让 SeeEnd 找到 dsh 和 pnpm。", 409)
-                except OSError as error:
-                    raise EventError("自动接入未完成：无法读写配置目录，请检查权限。" + (str(error.filename) if error.filename else ""), 409)
+                    raise EventError("自动接入未完成：配置文件或必要工具不存在。核对目录；DeepSeek 需让 SeeEnd 找到 dsh 和 pnpm。", 409, "missing_dependency")
+                except OSError:
+                    raise EventError("自动接入未完成：无法读写配置目录，请检查权限。", 409, "io_error")
                 except (ValueError, RuntimeError) as error:
-                    raise EventError("自动接入未完成：" + str(error), 409)
+                    raise EventError("自动接入未完成：" + str(error), 409, getattr(error, "error_code", "integration_conflict"))
                 self.reply(200, {"message": message})
                 return
             if self.path == "/api/device/light-settings":
@@ -579,7 +606,7 @@ class Handler(BaseHTTPRequestHandler):
                     raise EventError("接口不存在", 404)
                 self.reply(200, c.engine.snapshot())
         except EventError as error:
-            self.reply(error.status, {"error": str(error)})
+            self.reply(error.status, {"error": str(error), "error_code": error.error_code})
         except (BrokenPipeError, ConnectionResetError, TimeoutError):
             pass
 

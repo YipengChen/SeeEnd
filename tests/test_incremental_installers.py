@@ -28,6 +28,33 @@ class IncrementalInstallerTests(unittest.TestCase):
         self.assertEqual(settings()[1], {})
         self.assertFalse((self.root / 'runtime').exists())
 
+    def test_repairs_preserve_disabled_hook_and_group_policies(self):
+        for source in ('codex', 'claude-code', 'qoder', 'gemini-cli'):
+            with self.subTest(source=source):
+                directory = self.root / source
+                directory.mkdir()
+                handler = codex_handler() if source == 'codex' else hook_handler(source)
+                handler.update(enabled=False, custom='keep')
+                handler['command'] = ('python -m aiflame --codex-hook' if source == 'codex'
+                                      else 'python -m aiflame --cli-hook ' + source)
+                event = 'AfterAgent' if source == 'gemini-cli' else 'Stop'
+                path = directory / ('hooks.json' if source == 'codex' else 'settings.json')
+                path.write_text(json.dumps({'hooks': {event: [{'matcher': 'keep', 'custom_group': True, 'hooks': [handler]}]}}))
+                install_codex(directory) if source == 'codex' else install(source, config_dir=directory)
+                group = json.loads(path.read_text())['hooks'][event][0]
+                self.assertEqual(group['matcher'], 'keep')
+                self.assertTrue(group['custom_group'])
+                self.assertFalse(group['hooks'][0]['enabled'])
+                self.assertEqual(group['hooks'][0]['custom'], 'keep')
+                self.assertEqual(group['hooks'][0]['command'], (codex_handler() if source == 'codex' else hook_handler(source))['command'])
+
+    def test_deepseek_custom_directory_rejected_without_any_writes(self):
+        before = self.snapshot()
+        with self.assertRaises(RuntimeError) as caught:
+            install('deepseek-harness', config_dir=self.root / 'other', profile='default')
+        self.assertEqual(caught.exception.error_code, 'config_invalid')
+        self.assertEqual(self.snapshot(), before)
+
     def test_codex_merge_backup_idempotence_and_foreign_label(self):
         directory = self.root / 'codex'
         directory.mkdir()

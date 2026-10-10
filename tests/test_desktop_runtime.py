@@ -9,18 +9,16 @@ import tempfile
 import time
 import unittest
 from unittest.mock import Mock, patch
+from aiflame.hub.server import Hub
+from aiflame.core.events import EventError, make_event
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 HAS_QT = find_spec("PySide6") is not None
 if HAS_QT:
     from PySide6.QtCore import QCoreApplication, QEvent, QPoint, QRect, QTimer, Qt
     from PySide6.QtGui import QImage, QTextDocument
-    from PySide6.QtWidgets import QApplication, QLabel, QPushButton, QToolTip
+    from PySide6.QtWidgets import QApplication, QPushButton, QToolTip
     from aiflame.desktop.widgets import Dashboard
-
-
-from aiflame.hub.server import Hub
-from aiflame.core.events import EventError, make_event
 
 
 @unittest.skipUnless(HAS_QT, "Install the desktop extra to test native widgets")
@@ -1423,20 +1421,6 @@ class NativeDesktopTests(unittest.TestCase):
             self.widget.check_clients()
             self.assertTrue(self.widget.client_message.isHidden())
 
-    def test_browser_extension_prepares_folder_and_opens_illustrated_guide(self):
-        with patch.object(self.widget, "act") as action, \
-             patch("PySide6.QtGui.QDesktopServices.openUrl") as open_url:
-            self.widget.prepare_browser_extension()
-            self.assertEqual(action.call_args.args[:2], ("/api/browser-extension/prepare", {}))
-            action.call_args.args[2]({"path": "/tmp/BrowserExtension", "message": "扩展文件夹已准备，无需下载或解压。"})
-            self.assertTrue(open_url.call_args.args[0].isLocalFile())
-            self.assertIn("/tmp/BrowserExtension", self.widget.browser_message.text())
-            open_url.reset_mock()
-            self.widget.open_browser_extension_guide()
-            self.assertTrue(self.widget.extension_guide.isVisible())
-            self.assertEqual(self.widget.extension_guide.parent(), self.widget)
-            open_url.assert_not_called()
-            self.widget.extension_guide.close()
 
     def test_first_use_extension_guide_gates_preparation_configuration_and_recovers(self):
         self.widget.open_browser_extension_guide()
@@ -1485,13 +1469,6 @@ class NativeDesktopTests(unittest.TestCase):
         self.assertEqual(self.widget.extension_guide.step, 3)
         guide.close()
 
-    def test_browser_connection_preserves_required_next_steps(self):
-        with patch.object(self.widget, "act") as action:
-            self.widget.install_integration("chatgpt-web")
-            action.call_args.args[2]({"message": "请重新加载浏览器扩展，并刷新 AI 网页。"})
-        self.assertFalse(self.widget.browser_message.isHidden())
-        self.assertIn("扩展", self.widget.browser_message.text())
-        self.assertIn("刷新", self.widget.browser_message.text())
 
     def test_permission_button_preserves_restart_instruction(self):
         message = "权限已申请，请开启辅助功能和输入监控后重新打开 SeeEnd。"

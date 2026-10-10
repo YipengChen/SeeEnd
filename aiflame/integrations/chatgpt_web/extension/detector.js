@@ -2,7 +2,14 @@
 (function (root) {
   'use strict';
   const join = (...values) => values.filter(Boolean).join(',');
-  function createAdapter(site, doc, location, online, isVisible = el => !!el && el.isConnected && el.getClientRects().length > 0, routeFor) {
+  function visibleControl(el) {
+    if (!el || !el.isConnected || !el.getClientRects().length) return false;
+    // visibility:hidden retains layout boxes. Use the computed value, which also
+    // handles inherited hiding and explicitly visible descendants correctly.
+    const visibility = el.ownerDocument.defaultView.getComputedStyle(el).visibility;
+    return visibility !== 'hidden' && visibility !== 'collapse';
+  }
+  function createAdapter(site, doc, location, online, isVisible = visibleControl, routeFor) {
     const ids = new WeakMap(), nodeKeys = new WeakMap(), aliases = new Map(), revisions = new Map(); let next = 0;
     const id = el => { if (!ids.has(el)) ids.set(el, String(++next)); return ids.get(el); };
     const find = (selector, scope = doc) => selector && [...scope.querySelectorAll(selector)].find(isVisible);

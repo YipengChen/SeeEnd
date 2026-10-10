@@ -1,5 +1,4 @@
 """Parallel transports, receipt isolation and maintenance of one lamp."""
-import io
 from copy import deepcopy
 import json
 from pathlib import Path
@@ -7,9 +6,8 @@ import tempfile
 import threading
 import time
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
-from aiflame.devices.light_settings import COLOR_DEFAULTS
 from aiflame.core.engine import Engine
 from aiflame.core.events import make_event, EventError
 from aiflame.devices.registry import migrate_devices
@@ -93,6 +91,49 @@ class FleetTests(unittest.TestCase):
     def light_settings(self, device_id, **settings):
         return self.service.update_light_settings({"device_id": device_id,
             "hardware_model": self.config["devices"][device_id]["hardware_model"], "settings": settings})
+
+    def test_event_target_routes_only_to_selected_device_and_preserves_other_work(self):
+        def targeted(state, task, seq, target):
+            event = make_event("manual", task, state, seq)
+            event["device_id"] = target
+            with self.lock:
+                self.engine.accept(event, "manual")
+            return event["event_id"]
+
+        second_start = targeted("working", "second", 1, "two")
+        self.wait(lambda: self.fleet.outputs["two"].desired()["state"] == "working")
+        self.wait(lambda: self.fleet.confirmed('working'))
+        self.assertEqual(self.fleet.outputs["one"].desired()["state"], "idle")
+        first_start = targeted("working", "first", 1, "one")
+        self.wait(lambda: all(self.fleet.outputs[key].desired()["state"] == "working" for key in ("one", "two")))
+        completion = targeted("done", "first", 2, "one")
+        self.wait(lambda: self.fleet.outputs["one"].last_display_key == completion)
+        self.assertEqual(self.fleet.outputs["two"].desired()["state"], "working")
+        rows = self.engine.router.snapshot()
+        for event_id, target in ((first_start, "one"), (second_start, "two"), (completion, "one")):
+            self.assertEqual({row["output"] for row in rows if row["event"] == event_id and row["output"].startswith("flame:")}, {"flame:" + target})
+        self.assertEqual(self.engine.snapshot()["active_count"], 1)
+        self.assertTrue(self.engine.snapshot()["display"]["device_confirmed"])
+        with self.lock:
+            self.engine.clear_prompts("superseded")
+        broadcast = self.emit("done", "broadcast")
+        self.wait(lambda: self.fleet.confirmed(broadcast))
+
+    def test_targeted_lease_timeout_keeps_its_device_receipt_scope(self):
+        for target in ('one', 'two'):
+            event = make_event('manual', target, 'working')
+            event['device_id'] = target
+            with self.lock:
+                self.engine.accept(event, 'manual')
+        with self.lock:
+            self.engine.active[('manual', 'one')]['until'] = self.engine.clock() - 1
+            self.engine.tick()
+            timeout = next(row for row in self.engine.snapshot()['events'] if row['reason'] == 'timeout')
+            self.assertEqual({row['output'] for row in self.engine.router.snapshot()
+                              if row['event'] == timeout['id'] and row['output'].startswith('flame:')}, {'flame:one'})
+            self.assertEqual(self.fleet.outputs['one'].desired()['state'], 'idle')
+            self.assertEqual(self.fleet.outputs['two'].desired()['state'], 'working')
+
 
     def test_appearance_is_per_instance_persistent_and_applied_without_reconnecting(self):
         workers = {key: manager.worker for key, manager in self.fleet.connections.items()}

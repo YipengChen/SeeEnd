@@ -9,10 +9,16 @@ import subprocess
 from aiflame.core.paths import runtime_dir, write_private
 from aiflame.core.process import command
 from aiflame.integrations.codex.registration import owns_command, quote_command
-from aiflame.integrations.codex.install import backup_file, write_incremental
+from aiflame.integrations.codex.install import backup_file, write_incremental, merge_owned_hooks
 from aiflame.integrations.cli_tools.providers import PROVIDERS, config_directory
 
 MARKER = "SeeEnd：同步 CLI 灯光状态"
+
+
+class IntegrationInstallError(RuntimeError):
+    def __init__(self, message, error_code):
+        super().__init__(message)
+        self.error_code = error_code
 
 
 def profile_directory():
@@ -36,7 +42,47 @@ def settings(runtime=None):
     for value in data.values():
         if ("profiles" in value and (not isinstance(value["profiles"], list) or any(not isinstance(profile, str) for profile in value["profiles"]))) or any(key in value and not isinstance(value[key], str) for key in ("bundle", "config_dir")):
             raise ValueError("无法识别 CLI 接入配置")
+        if "config_dirs" in value and (not isinstance(value["config_dirs"], list) or any(not isinstance(item, str) for item in value["config_dirs"])):
+            raise ValueError("无法识别 CLI 接入配置")
     return path, data
+
+
+def configured(source, directory):
+    """Recognize an existing registration without treating a saved path as proof."""
+    directory = Path(directory)
+    if source == "opencode":
+        from .opencode import plugin_ready
+        return plugin_ready(directory)
+    from aiflame.integrations.codex.registration import owns_hook as codex_owns
+    suffix = ("--codex-hook",) if source == "codex" else ("--cli-hook", source)
+    path = directory / ("hooks.json" if source == "codex" else PROVIDERS[source].filename)
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        hooks = data.get("hooks", {})
+        wanted = quote_command(command(*suffix))
+        return any((codex_owns(handler, wanted) if source == "codex" else owns_hook(handler, wanted, source))
+                   for groups in hooks.values() if isinstance(groups, list)
+                   for group in groups if isinstance(group, dict) and isinstance(group.get("hooks"), list)
+                   for handler in group["hooks"] if isinstance(handler, dict))
+    except (OSError, ValueError, AttributeError):
+        return False
+
+
+def registered_directories(source, saved):
+    record = saved.get(source, {})
+    if "config_dirs" in record:
+        return list(record["config_dirs"])
+    previous = record.get("config_dir")
+    return [previous] if previous and configured(source, previous) else []
+
+
+def record_registration(saved_path, saved, source, directory, uninstall=False):
+    directories = set(registered_directories(source, saved))
+    target = str(Path(directory).resolve())
+    directories.discard(target) if uninstall else directories.add(target)
+    saved[source] = {**saved.get(source, {}), "config_dir": sorted(directories)[-1] if uninstall and directories else target,
+                     "config_dirs": sorted(directories)}
+    write_incremental(saved_path, saved)
 
 
 def owns_hook(handler, wanted, source):
@@ -75,6 +121,8 @@ def install(source, config_dir=None, profile=None, uninstall=False):
     saved_path, saved = settings()
     provider = PROVIDERS[source]
     if source == "deepseek-harness":
+        if config_dir is not None:
+            raise IntegrationInstallError("DeepSeek Harness 不支持 config_dir；请通过 DSH_HOME 选择实际配置根目录，并选择 Profile", "config_invalid")
         if not isinstance(profile, str) or not profile.strip() or profile.startswith("-"):
             raise ValueError("请选择 DeepSeek Harness profile")
         if profile not in available_profiles():
@@ -97,6 +145,10 @@ def install(source, config_dir=None, profile=None, uninstall=False):
                     or not owned_dependency(dependency, bundle, manifest.parent)):
                 raise ValueError("DeepSeek profile 中同名插件归属不明，未修改")
         if uninstall and dependency is None:
+            recorded = saved.get(source, {})
+            if profile in recorded.get("profiles", []):
+                saved[source] = {**recorded, "profiles": [item for item in recorded["profiles"] if item != profile]}
+                write_incremental(saved_path, saved)
             return bundle
         backup_file(manifest)
         backup_file(lockfile)
@@ -109,16 +161,16 @@ def install(source, config_dir=None, profile=None, uninstall=False):
         try:
             result = subprocess.run(arguments, capture_output=True, text=True, timeout=30)
         except subprocess.TimeoutExpired as error:
-            raise RuntimeError("DeepSeek Harness 插件管理超时") from error
+            raise IntegrationInstallError("DeepSeek Harness 插件管理超时", "plugin_timeout") from error
         if result.returncode:
             detail = (result.stderr or "") + (result.stdout or "")
             if "ERR_PNPM_ADDING_TO_ROOT" in detail:
-                raise RuntimeError("pnpm 拒绝在 Profile 工作区根目录安装；请按终端提示使用 -w，并核对所选 Profile")
+                raise IntegrationInstallError("pnpm 拒绝在 Profile 工作区根目录安装；请按终端提示使用 -w，并核对所选 Profile", "plugin_workspace")
             if any(value in detail for value in ("EACCES", "EPERM", "Permission denied")):
-                raise RuntimeError("DeepSeek Profile 或依赖目录没有写权限，请检查所选 Profile 的权限")
+                raise IntegrationInstallError("DeepSeek Profile 或依赖目录没有写权限，请检查所选 Profile 的权限", "io_error")
             if any(value in detail for value in ("ENOTFOUND", "ETIMEDOUT", "ERR_PNPM_FETCH", "ECONNREFUSED")):
-                raise RuntimeError("DeepSeek 插件管理器无法获取依赖，请检查网络与 pnpm 安装源后重试")
-            raise RuntimeError("DeepSeek Harness profile 插件安装未完成")
+                raise IntegrationInstallError("DeepSeek 插件管理器无法获取依赖，请检查网络与 pnpm 安装源后重试", "plugin_network")
+            raise IntegrationInstallError("DeepSeek Harness profile 插件安装未完成", "integration_conflict")
         profiles = set(saved.get(source, {}).get("profiles", []))
         profiles.discard(profile) if uninstall else profiles.add(profile)
         saved[source] = {"profiles": sorted(profiles), "bundle": str(bundle)}
@@ -128,8 +180,7 @@ def install(source, config_dir=None, profile=None, uninstall=False):
     if source == "opencode":
         from aiflame.integrations.cli_tools.opencode import install_plugin
         path = install_plugin(directory, uninstall=uninstall)
-        saved[source] = {"config_dir": str(directory)}
-        write_incremental(saved_path, saved)
+        record_registration(saved_path, saved, source, directory, uninstall)
         return path
     path = directory / provider.filename
     if path.is_symlink():
@@ -138,6 +189,8 @@ def install(source, config_dir=None, profile=None, uninstall=False):
     if not isinstance(data, dict) or not isinstance(data.get("hooks", {}), dict):
         raise ValueError("无法识别现有 hooks 格式，未修改")
     if uninstall and (not path.exists() or "hooks" not in data):
+        if source in saved:
+            record_registration(saved_path, saved, source, directory, uninstall=True)
         return path
     hooks = data.setdefault("hooks", {})
     wanted = quote_command(command("--cli-hook", source))
@@ -147,20 +200,12 @@ def install(source, config_dir=None, profile=None, uninstall=False):
         if not isinstance(groups, list) or any(not isinstance(group, dict) or not isinstance(group.get("hooks"), list) or any(not isinstance(h, dict) for h in group["hooks"]) for group in groups):
             raise ValueError("无法识别现有 hooks 格式，未修改")
     for event in provider.events:
-        retained = []
-        for group in hooks.get(event, []):
-            handlers = [h for h in group["hooks"] if not owns_hook(h, wanted, source)]
-            if handlers or not group["hooks"]:
-                retained.append({**group, "hooks": handlers})
-        if not uninstall:
-            handler = hook_handler(source)
-            retained.append({"hooks": [handler]})
+        retained = merge_owned_hooks(hooks.get(event, []), lambda handler: owns_hook(handler, wanted, source), hook_handler(source), uninstall)
         if retained:
             hooks[event] = retained
         else:
             hooks.pop(event, None)
     if not (uninstall and not path.exists()):
         write_incremental(path, data)
-    saved[source] = {"config_dir": str(directory)}
-    write_incremental(saved_path, saved)
+    record_registration(saved_path, saved, source, directory, uninstall)
     return path

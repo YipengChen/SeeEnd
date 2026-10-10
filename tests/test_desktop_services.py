@@ -1,25 +1,25 @@
-import hashlib
-import io
 import json
 import os
 from pathlib import Path
 import tempfile
-import threading
-import time
 import unittest
 import urllib.error
 import urllib.request
-import zipfile
-from unittest.mock import patch, Mock
-from aiflame.core.events import EventError
+from unittest.mock import patch
 from aiflame.core.paths import user_data_dir, runtime_dir, write_private
-from aiflame.devices.service import DeviceService
 from aiflame.hub.server import Hub
 from aiflame.integrations.chatgpt_web.install import manifest_path
 from aiflame.integrations.codex.install import install
 
 
 class PathsAndInstallTests(unittest.TestCase):
+    def setUp(self):
+        runtime = tempfile.TemporaryDirectory()
+        self.addCleanup(runtime.cleanup)
+        environment = patch.dict(os.environ, {"AIFLAME_DATA_DIR": runtime.name})
+        environment.start()
+        self.addCleanup(environment.stop)
+
     def test_malformed_hook_groups_are_rejected_without_rewriting_configuration(self):
         with tempfile.TemporaryDirectory() as root:
             home = Path(root)
@@ -61,9 +61,12 @@ class PathsAndInstallTests(unittest.TestCase):
                     self.assertEqual(
                         sum(h["command"] != "other-app" for h in handlers), 1
                     )
-                self.assertEqual(
-                    migrated["Stop"][0], {"hooks": [unrelated], "matcher": "keep-me"}
-                )
+                group = migrated["Stop"][0]
+                self.assertEqual(group["matcher"], "keep-me")
+                self.assertIn(unrelated, group["hooks"])
+                self.assertEqual(len(group["hooks"]), 2)
+                owned = next(handler for handler in group["hooks"] if handler != unrelated)
+                self.assertIn(new[0], owned["command"])
                 install(home, uninstall=True)
             self.assertEqual(
                 json.loads(path.read_text())["hooks"],

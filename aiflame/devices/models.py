@@ -1,4 +1,4 @@
-"""Supported hardware models and the files installed on each board."""
+"""Supported original-firmware Yeelight models and channel metadata."""
 
 from aiflame.core.events import EventError
 

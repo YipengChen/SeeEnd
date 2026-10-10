@@ -5,7 +5,7 @@ import json
 import sqlite3
 import time
 import uuid
-from aiflame.core.events import EventError, make_event
+from aiflame.core.events import EventError, make_event, REQUIRED_FIELDS, OPTIONAL_FIELDS, STATES, REASONS
 from aiflame.outputs.flame import FlameOutput
 from aiflame.outputs.router import OutputRouter
 from aiflame.outputs.desktop import DesktopOutput
@@ -64,6 +64,8 @@ class Engine:
         self.cleanup(force=True)
         self.active = {}
         self.router = OutputRouter(self.db, self.wall)
+        self.db.execute("DELETE FROM deliveries WHERE event NOT IN (SELECT id FROM events)")
+        self.db.commit()
         self.flame = FlameOutput(self)
         self.router.register(self.flame)
         self.desktop = DesktopOutput(self)
@@ -142,20 +144,11 @@ class Engine:
 
     def accept(self, event, source):
         self.tick()
-        required = {
-            "schema_version",
-            "event_id",
-            "source_id",
-            "task_id",
-            "seq",
-            "state",
-            "occurred_at",
-            "ttl_ms",
-        }
+        required = set(REQUIRED_FIELDS)
         if (
             not isinstance(event, dict)
             or not required <= set(event)
-            or set(event) - required - {"reason", "device_id"}
+            or set(event) - required - set(OPTIONAL_FIELDS)
         ):
             raise EventError("事件字段不完整或包含不支持的字段")
         if event["source_id"] != source:
@@ -175,12 +168,12 @@ class Engine:
             raise EventError("task_id 格式错误")
         if type(event["seq"]) is not int or not 0 <= event["seq"] <= 2147483647:
             raise EventError("seq 必须为递增整数")
-        if event["state"] not in ("idle", "working", "needs_input", "done", "error", "cancelled", "timeout", "unknown"):
+        if event["state"] not in STATES:
             raise EventError("任务状态不受支持")
         if type(event["ttl_ms"]) is not int or not 1000 <= event["ttl_ms"] <= 300000:
             raise EventError("ttl_ms 范围为 1000–300000")
         reason = event.get("reason")
-        if reason not in (None, "completed", "failed", "cancelled", "timeout"):
+        if reason is not None and reason not in REASONS:
             raise EventError("reason 格式错误")
         if (reason == "cancelled" and event["state"] != "idle") or (
             reason == "timeout" and event["state"] == "done"
@@ -271,7 +264,8 @@ class Engine:
         self.source_last[source] = self.wall()
         if enabled and record_state == "working":
             lease = policy.working_lease_seconds if policy else 120
-            self.active[key] = {"until": now + lease if lease is not None else None, "id": eid}
+            self.active[key] = {"until": now + lease if lease is not None else None,
+                                "id": eid, "device_id": event.get("device_id")}
         else:
             self.active.pop(key, None)
         phase = event["state"]
@@ -333,6 +327,8 @@ class Engine:
                 self.db.execute("UPDATE tasks SET state='unknown' WHERE source=? AND task=?", key)
                 task = self.db.execute("SELECT seq FROM tasks WHERE source=? AND task=?", key).fetchone()
                 event = make_event(key[0], key[1], "unknown", task["seq"], "timeout")
+                if item.get("device_id") is not None:
+                    event["device_id"] = item["device_id"]
                 self.db.execute("INSERT INTO events VALUES (?,?,?,?,?,?,?,?)",
                                 (event["event_id"], key[0], key[1], task["seq"], "unknown", "timeout", self.wall(), "received"))
                 self.router.dispatch({**event, "phase": "lease_expired", "previous_event_id": item["id"], "expires": self.clock() + 60})
@@ -353,14 +349,6 @@ class Engine:
     def cancel_preview(self, *args, **kwargs):
         """Compatibility entry point for the existing HTTP/UI clients."""
         return self.flame.cancel_preview(*args, **kwargs)
-
-    def preview_connection(self, *args, **kwargs):
-        """Compatibility entry point for the existing HTTP/UI clients."""
-        return self.flame.preview_connection(*args, **kwargs)
-
-    def preview_display(self, *args, **kwargs):
-        """Compatibility entry point for the existing HTTP/UI clients."""
-        return self.flame.preview_display(*args, **kwargs)
 
     def desired(self, *args, **kwargs):
         """Compatibility entry point for the existing HTTP/UI clients."""

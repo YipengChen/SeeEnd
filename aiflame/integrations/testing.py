@@ -73,7 +73,7 @@ class TriggerTests:
                     event = from_hook(payload)
                     self._mark(event)
                     response = run(
-                        "--codex-hook", timeout=10, input=json.dumps(payload)
+                        "--codex-hook", "--port", str(c.port), timeout=10, input=json.dumps(payload)
                     )
                     if response.returncode:
                         raise RuntimeError("Hook 进程未正常退出")
@@ -105,6 +105,7 @@ class TriggerTests:
                             response = run(
                                 "--browser-host",
                                 "chrome-extension://" + extension_id() + "/",
+                                "--port", str(c.port),
                                 timeout=10,
                                 binary=True,
                                 input=struct.pack("=I", len(encoded)) + encoded,

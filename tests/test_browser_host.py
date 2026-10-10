@@ -5,6 +5,7 @@ import struct
 import sys
 import tempfile
 import unittest
+from types import SimpleNamespace
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -28,6 +29,17 @@ from aiflame.core.events import EventError, make_event
 
 
 class TestBrowserHost(unittest.TestCase):
+    def test_browser_entrypoint_accepts_chromium_window_argument_and_explicit_port(self):
+        from aiflame.integrations.chatgpt_web.host import main
+        incoming, outgoing = io.BytesIO(), io.BytesIO()
+        write_message(incoming, {'kind': 'ping'})
+        incoming.seek(0)
+        with patch('sys.argv', ['host', extension_origins()[0], '--parent-window=0', '--port', '19321']), patch('sys.stdin', SimpleNamespace(buffer=incoming)), patch('sys.stdout', SimpleNamespace(buffer=outgoing)), patch('aiflame.integrations.chatgpt_web.host.forward', return_value={'ok': True}) as forward_message, patch('aiflame.integrations.chatgpt_web.host.os.name', 'posix'):
+            self.assertEqual(main(), 0)
+        forward_message.assert_called_once_with({'kind': 'ping'}, 19321)
+        outgoing.seek(0)
+        self.assertEqual(read_message(outgoing), {'ok': True})
+
     def test_all_web_sources_have_independent_lifecycles(self):
         with tempfile.TemporaryDirectory() as t:
             engine = Engine(Path(t) / "db", sources=SOURCES)

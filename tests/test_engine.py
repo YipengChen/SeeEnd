@@ -1,6 +1,8 @@
 import datetime as dt
 from pathlib import Path
-import sys, tempfile, unittest
+import sys
+import tempfile
+import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -11,6 +13,15 @@ from aiflame.integrations.cli_tools.providers import CLI_SOURCES
 
 
 class TestEngine(unittest.TestCase):
+    def test_restart_removes_receipts_for_history_expired_at_startup(self):
+        self.accept("done", "old")
+        self.assertGreater(self.engine.db.execute("SELECT COUNT(*) FROM deliveries").fetchone()[0], 0)
+        self.engine.db.close()
+        self.wall += 604801
+        self.engine = Engine(Path(self.temp.name) / "db", lambda: self.now, lambda: self.wall, sources=SOURCES)
+        self.assertEqual(self.engine.db.execute("SELECT COUNT(*) FROM events").fetchone()[0], 0)
+        self.assertEqual(self.engine.db.execute("SELECT COUNT(*) FROM deliveries").fetchone()[0], 0)
+
     def test_retention_runs_without_new_events(self):
         self.accept("done", "old")
         self.wall += 604801
