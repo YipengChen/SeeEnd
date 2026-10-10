@@ -318,9 +318,13 @@ class NativeDesktopTests(unittest.TestCase):
             mark = row.layout().itemAt(0).widget()
             pixmap = mark.icon().pixmap(30, 30) if isinstance(mark, QPushButton) else mark.pixmap()
             self.assertFalse(pixmap.isNull(), source)
+        permission_text = (
+            "辅助功能" if sys.platform == "darwin"
+            else "当前系统暂不支持桌面客户端接入。"
+        )
         self.wait(
             lambda: (
-                "辅助功能" in self.widget.client_details.text()
+                permission_text in self.widget.client_details.text()
                 and not self.widget.api.pending
             )
         )
@@ -596,6 +600,9 @@ class NativeDesktopTests(unittest.TestCase):
         self.hub.engine.device["online"] = False
         self.widget.poll(force=True)
         self.wait(lambda: not self.widget.api.pending)
+        self.app.processEvents()
+        # Finish the badge's offline layout change before measuring the demo.
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.LayoutRequest)
         self.app.processEvents()
         geometry = (self.widget.tabs.geometry(), self.widget.scene_frame.geometry())
         self.widget.start_preview()
