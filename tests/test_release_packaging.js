@@ -100,7 +100,7 @@ with tempfile.TemporaryDirectory() as work:
     (materials / 'original-seeend.py').write_text('must not be distributed')
     (materials / 'MANIFEST.json').write_text(json.dumps([{'name':'vendor','version':'1.0','sources':[
         {'archive':source.name,'sha256':hashlib.sha256(source.read_bytes()).hexdigest()}]}]))
-    selected = [str(path.relative_to(materials)) for path in third_party_files(materials)]
+    selected = [path.relative_to(materials).as_posix() for path in third_party_files(materials)]
     assert selected == ['MANIFEST.json','vendor-1.0-recipe/meta.yaml','vendor-source.tar.xz']
     source.write_bytes(b'modified source')
     try:
