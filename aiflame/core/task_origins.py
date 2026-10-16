@@ -53,6 +53,17 @@ def validate_origin(value, source):
     return dict(value)
 
 
+def absolute_context_path(value):
+    if not isinstance(value, str):
+        return False
+    windows = PureWindowsPath(value)
+    complete_drive = bool(windows.drive and windows.root)
+    if windows.drive.startswith('\\\\'):
+        parts = windows.drive.split('\\')
+        complete_drive = complete_drive and len(parts) == 4 and all(parts[2:])
+    return PurePosixPath(value).is_absolute() or (complete_drive and windows.is_absolute())
+
+
 def validate_context(value, source):
     """A Codex identity to resolve on demand, never an asserted terminal location."""
     if (source != "codex" or not isinstance(value, dict)
@@ -68,7 +79,7 @@ def validate_context(value, source):
             raise ValueError()
     except ValueError as error:
         raise EventError("任务定位信息格式错误") from error
-    if (not (PurePosixPath(value["cwd"]).is_absolute() or PureWindowsPath(value["cwd"]).is_absolute())
+    if (not absolute_context_path(value["cwd"])
             or len(json.dumps(value).encode()) > 3000):
         raise EventError("任务定位信息格式错误")
     return dict(value)

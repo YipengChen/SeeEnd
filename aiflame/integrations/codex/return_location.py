@@ -8,7 +8,7 @@ from contextlib import closing
 from dataclasses import dataclass
 import hashlib
 import os
-from pathlib import Path, PurePosixPath, PureWindowsPath
+from pathlib import Path
 import re
 import sqlite3
 import subprocess
@@ -16,7 +16,7 @@ import sys
 import uuid
 
 from aiflame.core.events import EventError
-from aiflame.core.task_origins import validate_context, validate_origin
+from aiflame.core.task_origins import absolute_context_path, validate_context, validate_origin
 from aiflame.integrations.cli_tools.origin import processes
 
 FS, RS = chr(31), chr(30)
@@ -89,7 +89,7 @@ class ResolvedTerminal:
 
 def _directory(value):
     if (not isinstance(value, str)
-            or not (PurePosixPath(value).is_absolute() or PureWindowsPath(value).is_absolute())
+            or not absolute_context_path(value)
             or any(ord(c) < 32 for c in value)):
         raise EventError("会话目录信息不可用，暂时无法定位。", 409)
     return os.path.realpath(value)
