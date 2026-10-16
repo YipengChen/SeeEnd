@@ -1,6 +1,6 @@
 # SeeEnd 文档索引
 
-当前审校基线为 App **0.8.55**、浏览器扩展 **0.2.12**。版本来自源码及匹配的原始构建 receipt；本地资料修订不代表公开下载或商店已更新。
+当前审校基线为 App **0.8.56**、浏览器扩展 **0.2.13**。版本来自源码及匹配的原始构建 receipt；本地资料修订不代表公开下载或商店已更新。
 
 | 需要了解 | 维护入口 |
 | --- | --- |
@@ -9,7 +9,8 @@
 | 当前能力、设备与实现限制 | [产品基线](product/CURRENT_PRODUCT.md) |
 | 模块、协议、凭据和数据 | [架构说明](architecture.md) |
 | 自动检查及证据边界 | [验证入口](validation.md) |
-| 本轮问题、修改与交付 | [0.8.55 内容审校](CONTENT_AUDIT_0.8.55.md) |
+| 当前版本验证与交付 | [验证记录](validation.md) · [协作与发布](REPOSITORIES.md) |
+| 历史内容审校 | [0.8.55 内容审校](CONTENT_AUDIT_0.8.55.md) |
 | 三仓库职责和发布步骤 | [协作与发布](REPOSITORIES.md) |
 | 扩展材料、隐私与日期化商店记录 | [商店资料](chrome-web-store/README.md) |
 | 原生 Hook 与插件安装维护 | [独立 SeeEnd Skill](https://github.com/YipengChen/SeeEnd-skill) |

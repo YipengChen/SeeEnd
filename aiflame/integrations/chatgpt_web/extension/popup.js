@@ -97,7 +97,7 @@ async function check() {
     const saved = await chrome.storage.local.get('result_' + page.source_id);
     detail('扩展版本', page.version || FlameProviders.VERSION);
     detail('最近事件', saved['result_' + page.source_id] || '尚无事件');
-    for (const key of ['recognized','busy','active','pending','final_controls','composer_ready','reply_matches_active','new_final_controls','disabled','last_transition','reply_samples','busy_controls','reply_structure','reply_layout','reply_ancestors','render_state','composer_controls','page_controls']) {
+    for (const key of ['recognized','busy','active','pending','final_controls','response_settled','composer_ready','reply_matches_active','new_final_controls','disabled','last_transition','reply_samples','busy_controls','reply_structure','reply_layout','reply_ancestors','render_state','composer_controls','page_controls']) {
       if (page[key] !== undefined) detail(key, page[key]);
     }
   } catch (error) {

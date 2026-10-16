@@ -100,7 +100,7 @@
       if (site.backgroundFrames) document.dispatchEvent(new CustomEvent('aiflame:render-inspect'));
       const s = adapter.snapshot();
       reply({source_id:site.id, site:site.name, recognized:s.recognized, busy:s.busy, active:!!machine.active,
-        disabled, pending:!!machine.pending, final_controls:!!s.final, composer_ready:s.ready,
+        disabled, pending:!!machine.pending, final_controls:!!s.final, response_settled:s.settled, composer_ready:s.ready,
         reply_matches_active:machine.active?.generationTurn ? s.turnKey === machine.active.generationTurn : null,
         new_final_controls:!!s.final && s.final !== machine.active?.final,
         reply_samples:replySamples, render_state:renderStatus,

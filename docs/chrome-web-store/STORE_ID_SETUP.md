@@ -6,4 +6,4 @@
 
 用户按 [使用指南](../quick-start.md) 的商店引导操作。开发验收运行 `packaging/extension_release.py`，在 `chrome://extensions/` 加载生成的版本化扩展目录；重新加载后刷新网页、连接桥接并发起一条新任务。不要删除仍被浏览器加载的目录。旧 `SeeEnd/BrowserExtension` 和 `dist/SeeEnd-Web-extension` 属历史安装位置，不能作为新版本的固定路径。
 
-当前源码扩展为 0.2.12；本地生成、公开上传、商店提交和审核通过是不同阶段。后台结果仅按 [日期化记录](APPLICATION_STATUS.md) 确认，本轮未联网刷新。
+当前源码扩展为 0.2.13；本地生成、公开上传、商店提交和审核通过是不同阶段。2026-10-16 后台已核对草稿 0.2.13、已发布 0.2.12，详细结果按 [日期化记录](APPLICATION_STATUS.md) 确认。

@@ -1,6 +1,6 @@
 # SeeEnd 网页扩展
 
-当前源码版本 **0.2.12**，配套本地 App **0.8.55**。本地版本不代表商店已经更新；最近留存的后台记录在源码仓库 `docs/chrome-web-store/APPLICATION_STATUS.md`，本轮未联网刷新。
+当前源码版本 **0.2.13**，配套本地 App **0.8.56**。本地版本不代表商店已经更新；最近留存的后台记录在源码仓库 `docs/chrome-web-store/APPLICATION_STATUS.md`，本轮未联网刷新。
 
 支持 ChatGPT、DeepSeek、千问、豆包、腾讯元宝、Kimi、智谱清言、Claude 和 Gemini 的网页文字任务。各网站结构、登录态与特殊模式需分别验证；睡眠、冻结、标签被丢弃和浏览器退出期间不能保证采集。
 
@@ -8,7 +8,7 @@
 
 普通用户从 SeeEnd「应用接入 → 安装浏览器扩展」进入商店安装引导，安装后返回 App 允许连接、选择网站，刷新网页后用一条新任务验证。已有会话中的新提问也可追踪；已在生成的旧任务不接管。
 
-开发验收在源码仓库运行 `packaging/extension_release.py`，从 `chrome://extensions/` 加载生成的 `SeeEnd-Web-extension-0.2.12/`，重新加载后刷新网页。保持被加载目录的位置稳定。商店格式 ZIP 不含开发 key；商店提交与安装后验收另行进行。
+开发验收在源码仓库运行 `packaging/extension_release.py`，从 `chrome://extensions/` 加载生成的 `SeeEnd-Web-extension-0.2.13/`，重新加载后刷新网页。保持被加载目录的位置稳定。商店格式 ZIP 不含开发 key；商店提交与安装后验收另行进行。
 
 桥接使用商店 ID `miokmdeomlchjpihkcnommpnheagoimc`，兼容旧开发 ID `hifannlfdbbhmmgecknoakpbhfihihbg`。移动 App 或提示桥接需更新时，在 App 内重新连接。Edge 和 Windows 桥接需分别验收；不能用 Chrome/macOS 测试代替。
 
@@ -17,6 +17,7 @@
 - 用户发送后观察到明确生成控件，才上报 `working`；只用当前任务的新回复结束控件确认 `done`，持续确认 800 毫秒，不按正文停顿猜测成功。
 - 生成中每 30 秒续期；后台 service worker 每 5 秒检查已开始的原始文档。千问和智谱另有受限后台渲染辅助，不激活标签页，不读取网络响应。
 - 停止、切换会话、刷新或关闭页面撤销任务；观察中断和超时不算成功。Hub 失联停止转发，恢复后刷新并发起新任务，不补播历史完成。
+- Gemini 明确结束生成、但当前回复持续 5 秒没有可确认成功的操作栏时，上报「状态未知」并停止续期；不将中断或未确认结果算作完成。生成控件恢复或结束标记消失会重新等待，不按正文或发送按钮猜测结果。
 - 来源绑定精确 HTTPS 站点和主框架，页面与扩展不持有 Hub 令牌。配置就绪、真实任务结束和输出成功分别判断。
 
 ## 返回任务与本地数据

@@ -1,6 +1,6 @@
 # SeeEnd 架构与目录
 
-以 App 0.8.55、扩展 0.2.12 的当前源码为基线。用户操作见[使用指南](quick-start.md)，已实现范围见[产品基线](product/CURRENT_PRODUCT.md)，构建命令见 [README](../README.md#开发测试与构建)。
+以 App 0.8.56、扩展 0.2.13 的当前源码为基线。用户操作见[使用指南](quick-start.md)，已实现范围见[产品基线](product/CURRENT_PRODUCT.md)，构建命令见 [README](../README.md#开发测试与构建)。
 
 ## 模块边界
 

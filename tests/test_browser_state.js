@@ -72,6 +72,69 @@ test('expired submission does not adopt unrelated generation', () => {
   const f = fixture(); f.state.arm(f.view()); f.advance(15001); f.state.update(f.view({busy: true}));
   assert.equal(f.events.length, 0);
 });
+
+function settledFixture() {
+  const f = fixture();
+  f.state.arm(f.view({turnKey:'history',turnKeys:['history']}));
+  f.state.update(f.view({busy:true,turnKey:'current',final:null}));
+  const settled = patch => f.view({turnKey:'current',final:null,settled:true,...patch});
+  return {...f, settled};
+}
+test('explicitly settled reply without actions becomes unknown once, without claiming failure or completion', () => {
+  const f = settledFixture();
+  f.advance(30000); f.state.update(f.settled());
+  assert.deepEqual(f.events.map(e=>e.state),['working'],'no heartbeat at the settled boundary');
+  f.advance(4999); f.state.update(f.settled()); assert.ok(f.state.active);
+  f.advance(1); f.state.update(f.settled()); f.advance(30000); f.state.update(f.settled({final:'late'}));
+  assert.deepEqual(f.events.map(e=>e.state),['working','unknown']);
+  assert.equal(f.events[1].reason,undefined);
+  assert.equal(f.events[0].task_id,f.events[1].task_id);
+  assert.equal(f.state.lastTransition.cause,'completion_unconfirmed');
+});
+test('delayed final actions supersede the unknown candidate and still require stable completion', () => {
+  const f = settledFixture(); f.state.update(f.settled());
+  f.advance(4900); f.state.update(f.settled({final:'new-final'}));
+  f.advance(799); f.state.update(f.settled({final:'new-final'}));
+  assert.deepEqual(f.events.map(e=>e.state),['working']);
+  f.advance(1); f.state.update(f.settled({final:'new-final'}));
+  assert.deepEqual(f.events.map(e=>e.state),['working','done']);
+});
+test('settled candidate resets on busy, missing marker, unavailable composer, or different reply', () => {
+  for (const patch of [{busy:true},{settled:false},{ready:false},{turnKey:'other'}]) {
+    const f = settledFixture(); f.state.update(f.settled());
+    f.advance(4900); f.state.update(f.settled(patch));
+    f.advance(101); f.state.update(f.settled()); assert.ok(f.state.active);
+    f.advance(4999); f.state.update(f.settled()); assert.ok(f.state.active);
+    f.advance(1); f.state.update(f.settled());
+    assert.deepEqual(f.events.map(e=>e.state),['working','unknown']);
+  }
+});
+test('settled markers on historical or unrelated replies never terminate a current turn', () => {
+  for (const key of ['history','other',null]) {
+    const f = settledFixture(); f.state.update(f.settled({turnKey:key}));
+    f.advance(6000); f.state.update(f.settled({turnKey:key}));
+    assert.deepEqual(f.events.map(e=>e.state),['working']);
+  }
+});
+test('regeneration must remove a baseline settled marker before it can settle the new task', () => {
+  const f = fixture(), view = patch => f.view({turnKey:'same',turnKeys:['same'],final:null,settled:true,...patch});
+  f.state.arm(view()); f.state.update(view({busy:true}));
+  f.state.update(view()); f.advance(6000); f.state.update(view());
+  assert.deepEqual(f.events.map(e=>e.state),['working']);
+  f.state.update(view({busy:true,settled:false})); f.state.update(view());
+  f.advance(5000); f.state.update(view());
+  assert.deepEqual(f.events.map(e=>e.state),['working','unknown']);
+});
+test('explicit stop, offline, and errors cannot become unknown-completion or success afterward', () => {
+  for (const ending of ['stop','offline','error']) {
+    const f = settledFixture(); f.state.update(f.settled());
+    if (ending === 'stop') f.state.cancel();
+    else f.state.update(f.settled(ending === 'offline' ? {online:false} : {error:true}));
+    f.advance(6000); f.state.update(f.settled());
+    assert.deepEqual(f.events.map(e=>e.state),['working',ending === 'error' ? 'unknown' : 'idle']);
+    assert.equal(f.events[1].reason,ending === 'error' ? 'failed' : 'cancelled');
+  }
+});
 test('timeout and explicit errors are not success', () => {
   const f = fixture(); f.start(); f.advance(1800001); f.state.update(f.view({busy: true}));
   assert.equal(f.events.at(-1).reason, 'timeout');

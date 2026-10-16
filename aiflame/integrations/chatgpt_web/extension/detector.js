@@ -94,7 +94,8 @@
       return {turnKey, turnKeys, turnOrigin, route:routeFor(location), online:online(), busy:!!find(site.stop) || !!find(site.busy)
           || !!(rendered && find(site.turnBusy,turn)),
         ready:!!composer && !composer.disabled && composer.getAttribute('aria-disabled') !== 'true',
-        final:finalKey, error:!!(turn && find(site.error, turn)), recognized:!!composer};
+        final:finalKey, settled:!!(rendered && findUsable(site.settled, turn)),
+        error:!!(turn && find(site.error, turn)), recognized:!!composer};
     }
     function inspectBusyControls() {
       return [...doc.querySelectorAll(join(site.stop,site.busy))].slice(0,8).map(el => {

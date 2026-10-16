@@ -1,6 +1,6 @@
 # SeeEnd 当前产品基线
 
-基线：**App 0.8.55、浏览器扩展 0.2.12、事件协议 1.0**。版本以 `aiflame/__init__.py`、`pyproject.toml` 和扩展 `manifest.json` 为准；源码与本机构建不代表已公开发布。操作见[使用指南](../quick-start.md)，协作与发布见[仓库说明](../REPOSITORIES.md)，验证证据见[验证说明](../validation.md)。
+基线：**App 0.8.56、浏览器扩展 0.2.13、事件协议 1.0**。版本以 `aiflame/__init__.py`、`pyproject.toml` 和扩展 `manifest.json` 为准；源码与本机构建不代表已公开发布。操作见[使用指南](../quick-start.md)，协作与发布见[仓库说明](../REPOSITORIES.md)，验证证据见[验证说明](../validation.md)。
 
 ## 已实现范围
 

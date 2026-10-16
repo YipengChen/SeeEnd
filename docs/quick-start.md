@@ -1,6 +1,6 @@
 # SeeEnd 使用指南
 
-以 App **0.8.55**、浏览器扩展 **0.2.12** 的当前实现为准。公开下载和商店版本可能不同，发布状态见[协作与发布](REPOSITORIES.md)及[扩展申请进度](chrome-web-store/APPLICATION_STATUS.md)。自动测试和历史实机结果的适用范围见[验证说明](validation.md)。
+以 App **0.8.56**、浏览器扩展 **0.2.13** 的当前实现为准。公开下载和商店版本可能不同，发布状态见[协作与发布](REPOSITORIES.md)及[扩展申请进度](chrome-web-store/APPLICATION_STATUS.md)。自动测试和历史实机结果的适用范围见[验证说明](validation.md)。
 
 ## 打开与升级
 
@@ -40,7 +40,7 @@
 
 在「应用接入 → 安装浏览器扩展」打开引导，通过「在 Chrome 安装扩展」打开[商店页面](https://chromewebstore.google.com/detail/miokmdeomlchjpihkcnommpnheagoimc)。安装后回到 App 确认，再选择网站并允许连接。刷新网页，提交新提问，核对同一任务的开始与完成。打开商店、开启来源开关或通信成功都不代表真实验证通过。
 
-当前源码扩展为 0.2.12；商店是否已发布此版应以[申请进度](chrome-web-store/APPLICATION_STATUS.md)和实际安装版本为准。开发加载可运行 `python packaging/extension_release.py`，在 `chrome://extensions` 开启开发者模式，加载生成的版本化目录；更新后重载扩展并刷新网页。普通用户无需保留开发加载目录。Windows 桥接需要打包版提供的 Bridge 可执行文件。
+当前源码扩展为 0.2.13；商店是否已发布此版应以[申请进度](chrome-web-store/APPLICATION_STATUS.md)和实际安装版本为准。开发加载可运行 `python packaging/extension_release.py`，在 `chrome://extensions` 开启开发者模式，加载生成的版本化目录；更新后重载扩展并刷新网页。普通用户无需保留开发加载目录。Windows 桥接需要打包版提供的 Bridge 可执行文件。
 
 网站地址、页面诊断及各平台历史证据见[扩展说明](../aiflame/integrations/chatgpt_web/extension/README.md)。
 

@@ -1,7 +1,7 @@
 /* Site-specific control adapters. Never inspect message text, editor values or account data. */
 (function (root) {
   'use strict';
-  const VERSION = '0.2.12';
+  const VERSION = '0.2.13';
   function labels(values) {
     return values.flatMap(value => ['aria-label', 'title', 'data-tooltip'].map(
       attr => `button[${attr}="${value}"],[role="button"][${attr}="${value}"],a[${attr}="${value}"],div[${attr}="${value}"]`
@@ -111,6 +111,9 @@
       stop:join('button.stop-button',labels(['Stop response','停止回答']),stop), send:join('button.send-button',send), retry,
       turn:'model-response', copy:join('copy-button button,button[data-test-id="copy-button"]',copy),
       final:join('thumb-up-button button,thumb-down-button button,regenerate-button button,button[data-test-id="thumb-up-button"],button[data-test-id="thumb-down-button"]',labels(['答得好','答得不好','重做']),feedback,retry),
+      // Gemini also sets complete after an interrupted reply. This marker ends
+      // generation, but without reply actions it must never mean success.
+      settled:'.response-footer.complete',
       error:'[data-test-id="response-error"],[data-status="error"]',
       newRoute:/^\/app\/?$/, conversationRoute:/^\/app\/[^/]+/},
   ];

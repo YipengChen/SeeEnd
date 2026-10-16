@@ -6,7 +6,7 @@
 
 SeeEnd 是本机 AI 任务提醒应用：接收编程工具、网页对话和本地 API 的状态事件，用桌面火焰、系统通知、微信通知或实体设备提示工作中、等待输入和已完成。无需硬件或向 SeeEnd 提供模型 API Key。
 
-当前源码基线：**App 0.8.55** · 浏览器扩展 **0.2.12** · Python **3.11+** · [专有许可](LICENSE)。源码版本与本机构建不代表已经公开发布；分发与商店状态见[仓库与发布说明](docs/REPOSITORIES.md)和[扩展申请进度](docs/chrome-web-store/APPLICATION_STATUS.md)。
+当前源码基线：**App 0.8.56** · 浏览器扩展 **0.2.13** · Python **3.11+** · [专有许可](LICENSE)。源码版本与本机构建不代表已经公开发布；分发与商店状态见[仓库与发布说明](docs/REPOSITORIES.md)和[扩展申请进度](docs/chrome-web-store/APPLICATION_STATUS.md)。
 
 ## 产品与支持范围
 

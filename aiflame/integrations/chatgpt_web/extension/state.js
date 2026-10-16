@@ -44,7 +44,7 @@
       }
       if (!this.active && this.pending && s.busy && s.online) {
         this.active = {id: this.uuid(), seq: 0, route: s.route, final: this.pending.final,
-          baselineTurn:this.pending.turnKey, observedIncomplete:false,
+          baselineTurn:this.pending.turnKey, observedIncomplete:false, observedUnsettled:false,
           history:this.pending.history,
           generationTurn:s.turnKey && !this.pending.history.has(s.turnKey) ? s.turnKey : null,
           creating: this.isNewRoute(this.pending.route) || this.isTemporaryRoute(this.pending.route),
@@ -76,20 +76,33 @@
       if (now - a.started > 30 * 60 * 1000) { this.end('idle', 'timeout'); return; }
       // A provider may remove its initial loading marker while streaming the
       // same reply. Keep its lease while that verified reply has no final controls.
-      if (now - a.renewed >= 30000 && (s.busy || (a.generationTurn && s.turnKey === a.generationTurn && s.ready && !s.final))) {
+      if (now - a.renewed >= 30000 && (s.busy || (a.generationTurn && s.turnKey === a.generationTurn && s.ready && !s.final && !s.settled))) {
         a.renewed = now; this.send('working');
       }
       if (s.busy) {
         if (!a.generationTurn && s.turnKey && !a.history.has(s.turnKey)) a.generationTurn = s.turnKey;
         if (s.turnKey && s.turnKey === a.baselineTurn && !s.final) a.observedIncomplete = true;
-        a.candidate = null;
+        if (s.turnKey && s.turnKey === a.baselineTurn && !s.settled) a.observedUnsettled = true;
+        a.candidate = null; a.unconfirmed = null;
         return;
       }
+      if (!s.ready || (a.generationTurn && s.turnKey !== a.generationTurn)
+          || (a.history.has(s.turnKey) && s.turnKey !== a.baselineTurn)
+          || (s.turnKey && s.turnKey === a.baselineTurn && !a.observedIncomplete)) {
+        a.candidate = null; a.unconfirmed = null; return;
+      }
+      // Allow actions to mount after the provider's explicit end marker. If they
+      // never arrive, release the working state as unknown, never as success or
+      // a claimed provider failure. A missing stop button alone cannot do this.
+      if (!s.final && s.settled && s.turnKey && (s.turnKey !== a.baselineTurn || a.observedUnsettled)) {
+        a.candidate = null;
+        if (!a.unconfirmed || a.unconfirmed.key !== s.turnKey) a.unconfirmed = {key:s.turnKey, at:now};
+        else if (now - a.unconfirmed.at >= 5000) this.end('unknown', undefined, 'completion_unconfirmed');
+        return;
+      }
+      a.unconfirmed = null;
       // No silence/timer-based success: require new final controls and a live composer.
-      if (!s.ready || !s.final || s.final === a.final) { a.candidate = null; return; }
-      if (a.generationTurn && s.turnKey !== a.generationTurn) { a.candidate = null; return; }
-      if (a.history.has(s.turnKey) && s.turnKey !== a.baselineTurn) { a.candidate = null; return; }
-      if (s.turnKey && s.turnKey === a.baselineTurn && !a.observedIncomplete) { a.candidate = null; return; }
+      if (!s.final || s.final === a.final) { a.candidate = null; return; }
       if (!a.candidate || a.candidate.key !== s.final) a.candidate = {key: s.final, at: now};
       else if (now - a.candidate.at >= 800) this.end('done', 'completed');
     }

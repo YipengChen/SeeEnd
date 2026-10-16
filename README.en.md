@@ -6,7 +6,7 @@ Turn AI task status into a candle flame.
 
 SeeEnd is a local AI task notification app. It receives lifecycle events from coding tools, web conversations, and local APIs, then signals work, requests for input, and completion through a desktop flame, system notifications, WeChat, or physical devices. No hardware or model API key for SeeEnd is required.
 
-Source baseline: **App 0.8.55** · browser extension **0.2.12** · Python **3.11+** · [Proprietary license](LICENSE). Source versions and local builds do not imply public availability. See [repositories and releases](docs/REPOSITORIES.md) and [extension submission status](docs/chrome-web-store/APPLICATION_STATUS.md).
+Source baseline: **App 0.8.56** · browser extension **0.2.13** · Python **3.11+** · [Proprietary license](LICENSE). Source versions and local builds do not imply public availability. See [repositories and releases](docs/REPOSITORIES.md) and [extension submission status](docs/chrome-web-store/APPLICATION_STATUS.md).
 
 ## Product and support scope
 

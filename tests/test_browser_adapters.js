@@ -38,6 +38,42 @@ const fixtures = {
     stop:'<button class="btn stop" ga-data="stop"></button>',
     answer:'<div class="glm-3-conversation"><div class="answer"><div class="interact-operate"><i class="shim copy canuse"></i><i class="shim thumbs-up canuse"></i><i class="shim thumbs-down canuse"></i></div></div></div>'},
 };
+
+test('Gemini explicit end marker without actions releases working as unknown without reading text', () => {
+  const f=setup(SITES.find(site=>site.id==='gemini-web'));
+  for (const prototype of [f.dom.window.Element.prototype,f.dom.window.Node.prototype]) {
+    for (const name of ['textContent','innerText']) Object.defineProperty(prototype,name,{get(){throw Error('private text access');},configurable:true});
+  }
+  f.answer(); f.machine.arm(f.adapter.snapshot()); f.generating();
+  f.doc.querySelector('#messages').insertAdjacentHTML('beforeend','<model-response><div class="response-footer animated"></div></model-response>');
+  f.check(); f.finish(); f.check(); f.advance(6000); f.check();
+  assert.ok(f.machine.active,'missing stop alone is insufficient');
+  f.doc.querySelector('model-response:last-child .response-footer').className='response-footer complete';
+  assert.equal(f.adapter.snapshot().settled,true); assert.equal(f.adapter.snapshot().final,null);
+  f.check(); f.advance(5000); f.check();
+  assert.deepEqual(f.events.map(e=>e.state),['working','unknown']);
+  assert.equal(f.events[1].reason,undefined);
+  // A fresh successful task is independent from the unconfirmed outcome.
+  f.machine.arm(f.adapter.snapshot()); f.generating(); f.check(); f.answer(); f.finish();
+  f.check(); f.advance(801); f.check();
+  assert.deepEqual(f.events.map(e=>e.state),['working','unknown','working','done']);
+  assert.notEqual(f.events[0].task_id,f.events[2].task_id); f.dom.window.close();
+});
+
+test('Gemini production visibility and disabled checks apply to the explicit end marker', () => {
+  const site=SITES.find(site=>site.id==='gemini-web'), f=setup(site);
+  f.doc.querySelector('#messages').innerHTML='<model-response><div class="response-footer complete"></div></model-response>';
+  f.dom.window.Element.prototype.getClientRects=function(){return this.isConnected && !this.hasAttribute('data-no-rect') ? [{width:100,height:0}] : [];};
+  const adapter=createAdapter(site,f.doc,f.dom.window.location,()=>true);
+  const footer=f.doc.querySelector('.response-footer');
+  assert.equal(adapter.snapshot().settled,true,'zero height can still have a layout box');
+  footer.setAttribute('data-no-rect',''); assert.equal(adapter.snapshot().settled,false);
+  footer.removeAttribute('data-no-rect'); footer.style.visibility='hidden'; assert.equal(adapter.snapshot().settled,false);
+  footer.style.visibility='visible'; footer.setAttribute('aria-disabled','true'); assert.equal(adapter.snapshot().settled,false);
+  footer.removeAttribute('aria-disabled'); footer.parentElement.setAttribute('disabled',''); assert.equal(adapter.snapshot().settled,false);
+  footer.parentElement.removeAttribute('disabled'); assert.equal(adapter.snapshot().settled,true);
+  f.dom.window.close();
+});
 function setup(site) {
   const f = fixtures[site.id];
   const dom = new JSDOM(f.composer + '<div id="messages"></div><div id="busy"></div>', {url:site.origins[0]+f.home});

@@ -1,6 +1,6 @@
 # SeeEnd Browser Extension Privacy Policy
 
-Policy date: October 16, 2026. Applies to the local 0.2.12 draft of the SeeEnd AI web chat status extension. Local changes do not imply store publication.
+Policy date: October 16, 2026. Applies to the local 0.2.13 draft of the SeeEnd AI web chat status extension. Local changes do not imply store publication.
 
 ## Purpose
 
