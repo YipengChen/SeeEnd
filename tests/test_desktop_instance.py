@@ -78,6 +78,7 @@ class DesktopInstanceTests(unittest.TestCase):
         process = subprocess.Popen(
             [sys.executable, "-u", "-c", SCRIPT, str(self.directory), mode, str(timeout)],
             cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            encoding="utf-8", env={**os.environ, "PYTHONIOENCODING": "utf-8"},
         )
         process.lines = queue.Queue()
 
