@@ -36,7 +36,7 @@ class LightControlsTests(unittest.TestCase):
         self.assertTrue(any(not text.isascii() for text in expected.values()))
         device_svg.cache_clear()
         self.addCleanup(device_svg.cache_clear)
-        with patch('pathlib.io.open', side_effect=ansi_open):
+        with patch.object(io, 'open', side_effect=ansi_open):
             for model, text in expected.items():
                 with self.subTest(model=model):
                     self.assertEqual(device_svg(model), text)
