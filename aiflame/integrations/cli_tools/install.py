@@ -36,7 +36,7 @@ def settings(runtime=None):
     path = root / "cli-integrations.json"
     if path.is_symlink():
         raise ValueError("CLI 接入记录是符号链接，未修改")
-    data = json.loads(path.read_text()) if path.exists() else {}
+    data = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
     if not isinstance(data, dict) or any(not isinstance(value, dict) for value in data.values()):
         raise ValueError("无法识别 CLI 接入配置")
     for value in data.values():

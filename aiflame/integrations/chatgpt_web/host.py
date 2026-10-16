@@ -43,8 +43,8 @@ WEB_URLS = {'claude-web': 'https://claude.ai/', 'gemini-web': 'https://gemini.go
 def extension_id(root=ROOT):
     installed = root / "bridge-config.json"
     if installed.exists():
-        return json.loads(installed.read_text())["extension_id"]
-    manifest = json.loads((root / "extension/manifest.json").read_text())
+        return json.loads(installed.read_text(encoding="utf-8"))["extension_id"]
+    manifest = json.loads((root / "extension/manifest.json").read_text(encoding="utf-8"))
     digest = hashlib.sha256(base64.b64decode(manifest["key"])).hexdigest()[:32]
     return "".join(chr(97 + int(c, 16)) for c in digest)
 
@@ -113,7 +113,7 @@ def sanitize(message):
 def token_for(source):
     installed = ROOT / "bridge-config.json"
     if installed.exists():
-        config = json.loads(installed.read_text())
+        config = json.loads(installed.read_text(encoding="utf-8"))
         token = config.get("tokens", {}).get(source)
         if token is None and source == "chatgpt-web":
             token = config.get("token")
@@ -144,7 +144,7 @@ def forward(message, port=8765):
     source = message.get("source_id", "chatgpt-web") if ping else event["source_id"]
     installed = ROOT / "bridge-config.json"
     if installed.exists():
-        config = json.loads(installed.read_text())
+        config = json.loads(installed.read_text(encoding="utf-8"))
         # Retain old ChatGPT installations; other sources require bridge repair.
         token = config.get("tokens", {}).get(source)
         if token is None and source == "chatgpt-web":

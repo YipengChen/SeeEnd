@@ -123,5 +123,5 @@ def deliver(event, port=8765):
     if event is None:
         return
     from aiflame.integrations.local_api.client import send
-    config = json.loads((ensure_runtime() / "credentials.json").read_text())
+    config = json.loads((ensure_runtime() / "credentials.json").read_text(encoding="utf-8"))
     return send(event, config["tokens"][event["source_id"]], port=port, timeout=0.6)

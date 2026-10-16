@@ -46,7 +46,7 @@ def diagnostics(db, *, source=None, config_dirs=None, profiles=None,
                 for profile in result["profiles"]:
                     manifest = profile_directory() / profile / "package.json"
                     try:
-                        package = json.loads(manifest.read_text())
+                        package = json.loads(manifest.read_text(encoding="utf-8"))
                         dependencies = package.get("dependencies", {})
                         bundles = package.get("dsh", {}).get("profile", {}).get("bundles", [])
                         if isinstance(dependencies, dict) and isinstance(bundles, list) and "aiflame-deepseek-harness" in dependencies and "aiflame-deepseek-harness" in bundles:
@@ -71,7 +71,7 @@ def diagnostics(db, *, source=None, config_dirs=None, profiles=None,
                 if result["installed_profiles"]:
                     bridge_path = Path(config.get("bundle", "")) / "bridge.json"
                     try:
-                        bridge = json.loads(bridge_path.read_text())
+                        bridge = json.loads(bridge_path.read_text(encoding="utf-8"))
                         if bridge.get("helperArgv") != command("--cli-hook", current):
                             result["issues"].append("DeepSeek 桥接指向旧版 SeeEnd：" + str(bridge_path) + "；使用 SeeEnd Skill 修复所选 Profile 的接入路径")
                     except (OSError, ValueError, AttributeError):
@@ -98,7 +98,7 @@ def diagnostics(db, *, source=None, config_dirs=None, profiles=None,
                         result["checks"].append({"id": relative, "status": "ok", "message": "插件文件已就绪：" + str(target), "action": ""})
                 target = directory / "aiflame/bridge.json"
                 try:
-                    bridge = json.loads(target.read_text())
+                    bridge = json.loads(target.read_text(encoding="utf-8"))
                     if bridge.get("helperArgv") != command("--cli-hook", current):
                         result["issues"].append("OpenCode 桥接指向旧版 SeeEnd：" + str(target) + "；使用 SeeEnd Skill 修复接入，仅更新本应用拥有的文件")
                 except (OSError, ValueError, AttributeError):

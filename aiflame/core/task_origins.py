@@ -1,7 +1,7 @@
 """Bounded, content-free task destinations. Destinations are data, never commands."""
 
 import json
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 import re
 import uuid
 
@@ -68,7 +68,8 @@ def validate_context(value, source):
             raise ValueError()
     except ValueError as error:
         raise EventError("任务定位信息格式错误") from error
-    if not value["cwd"].startswith("/") or len(json.dumps(value).encode()) > 3000:
+    if (not (PurePosixPath(value["cwd"]).is_absolute() or PureWindowsPath(value["cwd"]).is_absolute())
+            or len(json.dumps(value).encode()) > 3000):
         raise EventError("任务定位信息格式错误")
     return dict(value)
 

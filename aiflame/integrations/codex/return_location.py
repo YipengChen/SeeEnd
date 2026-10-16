@@ -8,7 +8,7 @@ from contextlib import closing
 from dataclasses import dataclass
 import hashlib
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 import re
 import sqlite3
 import subprocess
@@ -88,7 +88,9 @@ class ResolvedTerminal:
 
 
 def _directory(value):
-    if not isinstance(value, str) or not value.startswith("/") or any(ord(c) < 32 for c in value):
+    if (not isinstance(value, str)
+            or not (PurePosixPath(value).is_absolute() or PureWindowsPath(value).is_absolute())
+            or any(ord(c) < 32 for c in value)):
         raise EventError("会话目录信息不可用，暂时无法定位。", 409)
     return os.path.realpath(value)
 

@@ -42,7 +42,7 @@ def extension_folder_info(runtime):
     prepared = False
     try:
         if folder.is_dir() and not folder.is_symlink() and marker.is_file() and not marker.is_symlink():
-            owned = json.loads(marker.read_text()) == {"owner": "SeeEnd"}
+            owned = json.loads(marker.read_text(encoding="utf-8")) == {"owner": "SeeEnd"}
             source = PACKAGE / "integrations/chatgpt_web/extension"
             prepared = owned and all((folder / asset.name).is_file() and not (folder / asset.name).is_symlink()
                                      and (folder / asset.name).read_bytes() == asset.read_bytes()
@@ -63,10 +63,10 @@ def prepare_extension_folder(runtime):
             if folder.parent.is_symlink() or folder.is_symlink() or marker.is_symlink():
                 raise EventError("扩展文件夹路径不可用，请移除该路径的符号链接后重试")
             if folder.exists() and any(folder.iterdir()):
-                if not marker.is_file() or json.loads(marker.read_text()) != {"owner": "SeeEnd"}:
+                if not marker.is_file() or json.loads(marker.read_text(encoding="utf-8")) != {"owner": "SeeEnd"}:
                     raise EventError("扩展文件夹包含其他文件，未覆盖；请先移走该文件夹后重试")
             folder.mkdir(parents=True, exist_ok=True)
-            marker.write_text(json.dumps({"owner": "SeeEnd"}))
+            marker.write_text(json.dumps({"owner": "SeeEnd"}), encoding="utf-8")
             source = PACKAGE / "integrations/chatgpt_web/extension"
             for asset in sorted(source.iterdir()):
                 if asset.is_file() and asset.suffix in (".json", ".js", ".html", ".md", ".png"):

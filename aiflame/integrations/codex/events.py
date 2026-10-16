@@ -89,5 +89,5 @@ def deliver(event, port=8765):
         return
     from aiflame.integrations.local_api.client import send
 
-    config = json.loads((ensure_runtime() / "credentials.json").read_text())
+    config = json.loads((ensure_runtime() / "credentials.json").read_text(encoding="utf-8"))
     return send(event, config["tokens"]["codex"], port=port, timeout=0.6)

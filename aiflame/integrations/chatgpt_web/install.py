@@ -60,7 +60,7 @@ def install(browser="chrome", uninstall=False, output=None):
         "allowed_origins": list(extension_origins()),
     }
     if target.exists():
-        previous = json.loads(target.read_text())
+        previous = json.loads(target.read_text(encoding="utf-8"))
         if (
             previous.get("name") != HOST
             or previous.get("type") != "stdio"
@@ -111,7 +111,7 @@ def install(browser="chrome", uninstall=False, output=None):
                     },
                 )
                 args = [str(Path(sys.executable).resolve()), str(host)]
-            launcher.write_text("#!/bin/sh\nexec " + shlex.join(args) + ' "$@"\n')
+            launcher.write_text("#!/bin/sh\nexec " + shlex.join(args) + ' "$@"\n', encoding="utf-8")
             launcher.chmod(0o700)
     write_private(target, manifest)
     if sys.platform == "win32" and not output:

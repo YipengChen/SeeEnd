@@ -50,7 +50,7 @@ class WechatCredentials(TokenStore):
             saved = json.loads(value) if value else {}
         else:
             path = self._path(account_id)
-            saved = json.loads(path.read_text()) if path.exists() else {}
+            saved = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
         if not saved:
             return {}
         if (not isinstance(saved, dict) or not bounded_string(saved.get("token"))
