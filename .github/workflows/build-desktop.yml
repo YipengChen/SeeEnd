@@ -1,6 +1,12 @@
 name: Build desktop preview
 on:
   workflow_dispatch:
+    inputs:
+      target_os:
+        description: Desktop build runner
+        type: choice
+        default: all
+        options: [all, windows-latest, macos-14, ubuntu-22.04]
   push:
     tags: ['v*']
 jobs:
@@ -8,10 +14,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-14, windows-latest, ubuntu-22.04]
+        os: ${{ fromJSON((github.event_name == 'workflow_dispatch' && inputs.target_os != 'all') && format('["{0}"]', inputs.target_os) || '["macos-14","windows-latest","ubuntu-22.04"]') }}
     runs-on: ${{ matrix.os }}
     env:
       QT_QPA_PLATFORM: offscreen
+      PYTHONFAULTHANDLER: '1'
+      PYTHONUNBUFFERED: '1'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -26,6 +34,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libegl1 libopengl0
       - run: python -m pip install ".[desktop,build]"
+      - name: Diagnose Windows desktop lifecycle
+        if: runner.os == 'Windows'
+        run: python -X faulthandler -m unittest discover -s tests -p test_desktop_runtime.py -v
       - run: python -m unittest discover -s tests -v
       - run: npm ci --ignore-scripts --no-audit --no-fund
       - run: npm test
