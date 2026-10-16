@@ -67,3 +67,15 @@ Gemini 明确结束生成但缺少本轮成功操作栏时，连续确认 5 秒�
 源码 JavaScript 192 项通过；完整 Python 680 项中 677 通过、3 项按原条件跳过。匹配的 App 0.8.56 冻结包通过构建身份、原生模块和 25 项辅助进程检查，3 项真实 HTTP／返回任务测试另行通过。Skill 1.0.3 的当前 App 契约快照与跨仓检查单独运行。此前子代理受旧沙箱限制的失败日志不计作通过；主进程完整权限补验结果已单独留存。
 
 新版扩展尚未完成真实账号生成复验；旧版 0.2.12 的短答、长答、停止及任务返回观察不算新版成功。实体设备、系统横幅和其他平台没有新增验收。构建与分发身份见公开下载仓库的 0.8.56 资产清单，商店上传结果见[日期化记录](chrome-web-store/APPLICATION_STATUS.md)。
+
+## 2026-10-17：Windows x64 云端构建
+
+App 0.8.56／扩展 0.2.13 在 GitHub Windows Server 2025 AMD64 runner 上完成原生构建：[成功任务](https://github.com/YipengChen/SeeEnd/actions/runs/38927977422)，源码提交 `2598da203d7af04b9b453133428e352e6cbfb11f`，构建时工作树干净。构建 receipt 的源码 SHA-256 为 `cf90d9529e1b9db3c7ac796dabe7e71ec73f100955ba86003b2800de878a8ed3`。
+
+Windows 前置桥接 20 项、设备 30 项和 JavaScript 192 项通过；34 个 Cython 原生模块全部加载且没有 Python 回退。编译核心的完整回归共 682 项：667 通过、15 项按既有条件跳过，0 失败／错误，未因网络环境权限限制跳过。随后冻结包通过构建身份与资源检查、25 项 Helper／Bridge 子进程检查及 3 项真实 HTTP 生命周期／返回任务测试；Windows 原生窗口后端的 2 项最小尺寸测试通过。相同提交的 Linux Python 3.11／3.13 完整 CI 也通过。
+
+本轮修复了 Windows 默认文本编码、原子文件换行、绝对路径与 UNC 校验、桥接响应等待，以及测试夹具的 SQLite 关闭与共享连接锁；构建隔离检查同时解析模块路径和工作目录。Qt offscreen 测试单独加载 runner 的系统字体，并由原生窗口后端补验；字体不随产品分发。独立兼容性诊断的 20 项界面测试及 2 项原生窗口测试也已通过：[诊断任务](https://github.com/YipengChen/SeeEnd/actions/runs/38923841330)。
+
+本机产物为 `dist/windows-0.8.56/SeeEnd-0.8.56-Windows-AMD64.zip`（62,575,841 字节），SHA-256 为 `f47a10df6397027a97fbe3855bb2f1a6b62043942814b292bf073f62f2b59329`。下载后核对了 GitHub artifact 摘要、ZIP CRC、3 个 EXE 与 34 个原生库的 AMD64 PE 架构、包内外 receipt 一致性，并确认没有捆绑系统字体。匹配的第三方源码包、receipt 和校验清单保存在同目录。
+
+证据仅覆盖云端自动验证；Windows 用户桌面的安装、系统横幅、真实浏览器账号及实体设备尚未新增实机验收。终端会话激活仍限 macOS。回归和冻结日志均出现返回连接失效后客户端关闭连接引起的 `WinError 10054`，测试断言均通过；不将日志称为完全无异常。当前 Windows 包没有覆盖公开 macOS Release 的资产或 receipt。

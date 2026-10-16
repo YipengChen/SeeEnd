@@ -31,7 +31,7 @@ SeeEnd 是本机 AI 任务提醒应用：接收编程工具、网页对话和本
 
 设备使用原厂局域网协议；配网、默认参数、连接及故障边界统一见[使用指南](docs/quick-start.md#连接设备)。AI Flame 旧灯板与固件不属于当前产品，旧实现保存在[归档分支](https://github.com/YipengChen/SeeEnd/tree/archive/ai-flame-2026-10-09)。
 
-macOS 有历史实机记录；Windows 和 Linux 提供共享实现与原生构建流程，需分别验收。自动测试、设备协议回执和发送成功均不能证明用户已看到通知或真实灯光；证据边界见[验证说明](docs/validation.md)。
+macOS 有历史实机记录；Windows x64 已完成云端原生构建、自动回归和冻结验证，Windows 用户桌面与实体设备仍需实机验收；Linux 提供原生构建流程，发行包需单独验证。自动测试、设备协议回执和发送成功均不能证明用户已看到通知或真实灯光；证据边界见[验证说明](docs/validation.md)。
 
 ## 启动与接入
 
@@ -73,7 +73,9 @@ python packaging/verify_frozen.py
 python packaging/archive.py
 ```
 
-默认输出 `dist/SeeEnd.app` 和对应分发包；三个命令可统一加 `--dist-dir dist/staging` 使用独立目录。首次构建下载并校验第三方材料，准备完成后可省略 `--download-sources` 离线重建。需要本机 C 编译器；核心模块经 Cython 原生编译，无 Python 回退。修改核心逻辑可先运行 `python packaging/verify_native.py`，或构建时加 `--verify-native`。
+macOS 默认输出 `dist/SeeEnd.app`，Windows 输出 `dist/SeeEnd/SeeEnd.exe`，归档命令生成对应平台的分发包；三个命令可统一加 `--dist-dir dist/staging` 使用独立目录。首次构建下载并校验第三方材料，准备完成后可省略 `--download-sources` 离线重建。需要本机 C 编译器；核心模块经 Cython 原生编译，无 Python 回退。修改核心逻辑可先运行 `python packaging/verify_native.py`，或构建时加 `--verify-native`。
+
+云端原生构建可手动触发 `Build desktop preview`，选择 `target_os=windows-latest`、`probe_only=false`；完整流程包含编译核心回归、冻结验证和归档，成功后下载 `seeend-windows-latest` artifact。Windows 分发 ZIP 需完整解压并保留 `_internal` 等配套文件，再运行 `SeeEnd/SeeEnd.exe`。
 
 `SeeEnd-build.json` 记录版本、源码指纹、Git 状态与第三方材料身份；源码变更后须重建，冻结验证与归档拒绝复用不匹配的 App。分发 App ZIP（Linux 为 `.tar.gz`）是用户安装入口；第三方源码 ZIP 独立按需下载，使用 App 无需下载。当前机器的签名与发布验收状态应以实际产物为准。
 
