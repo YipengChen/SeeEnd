@@ -168,7 +168,8 @@ def forward(message, port=8765):
         },
     )
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
-    with opener.open(request, timeout=2) as response:
+    # Allow Windows durable writes to finish before declaring delivery unknown.
+    with opener.open(request, timeout=5 if sys.platform == 'win32' else 2) as response:
         result = json.load(response)
     if ping:
         return {"ok": True, **result}

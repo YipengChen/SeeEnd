@@ -44,8 +44,15 @@ jobs:
       - name: Windows compatibility diagnostics
         if: inputs.probe_only
         run: python .github/scripts/windows_compatibility.py
-      - if: ${{ !inputs.probe_only }}
+      - if: ${{ !inputs.probe_only && runner.os != 'Windows' }}
         run: python -m unittest discover -s tests -v
+      - name: Verify Windows source integration regressions
+        if: ${{ !inputs.probe_only && runner.os == 'Windows' }}
+        # The build step runs the complete suite against the compiled core.
+        run: python -m unittest discover -s tests -p test_desktop_services.py -v
+      - name: Verify Windows source fleet regressions
+        if: ${{ !inputs.probe_only && runner.os == 'Windows' }}
+        run: python -m unittest discover -s tests -p test_device_fleet.py -v
       - if: ${{ !inputs.probe_only }}
         run: npm ci --ignore-scripts --no-audit --no-fund
       - if: ${{ !inputs.probe_only }}

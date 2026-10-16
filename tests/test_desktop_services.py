@@ -244,7 +244,8 @@ class HTTPTests(unittest.TestCase):
 
         root = Path(self.temp.name)
         tokens = {source: "test-" + source for source in host.WEB_SOURCES}
-        self.hub.config["tokens"].update(tokens)
+        with self.hub.lock:
+            self.hub.config["tokens"].update(tokens)
         (root / "bridge-config.json").write_text(json.dumps({"tokens": tokens}))
         original_request = urllib.request.Request
 
@@ -263,24 +264,26 @@ class HTTPTests(unittest.TestCase):
                         source, "00000000-0000-4000-8000-000000000001", state, seq
                     )
                     self.assertTrue(host.forward(event)["ok"])
-                    row = self.hub.engine.db.execute(
-                        "SELECT source,state FROM events WHERE id=?",
-                        (event["event_id"],),
-                    ).fetchone()
+                    with self.hub.lock:
+                        row = self.hub.engine.db.execute(
+                            "SELECT source,state FROM events WHERE id=?",
+                            (event["event_id"],),
+                        ).fetchone()
                     self.assertEqual((row["source"], row["state"]), (source, state))
                 self.assertTrue(
                     host.forward({"kind": "ping", "source_id": source})[
                         "source_enabled"
                     ]
                 )
-            self.hub.engine.update_settings(
-                {
-                    "source_enabled": {
-                        **self.hub.engine.settings["source_enabled"],
-                        "kimi-web": False,
+            with self.hub.lock:
+                self.hub.engine.update_settings(
+                    {
+                        "source_enabled": {
+                            **self.hub.engine.settings["source_enabled"],
+                            "kimi-web": False,
+                        }
                     }
-                }
-            )
+                )
             self.assertFalse(
                 host.forward({"kind": "ping", "source_id": "kimi-web"})[
                     "source_enabled"

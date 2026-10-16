@@ -144,7 +144,7 @@ class FleetTests(unittest.TestCase):
         self.assertFalse(self.fleet.outputs["two"].settings["reduced"])
         self.assertEqual(self.engine.settings["brightness"], 20)
         self.assertTrue(all(manager.worker is workers[key] for key, manager in self.fleet.connections.items()))
-        saved = json.loads((Path(self.temp.name) / "credentials.json").read_text())
+        saved = json.loads((Path(self.temp.name) / "credentials.json").read_text(encoding="utf-8"))
         restarted = FleetTransportManager(self.engine.flame, self.lock, saved)
         self.assertEqual(restarted.outputs["one"].settings["brightness"], 8)
         self.assertFalse(restarted.outputs["one"].settings["reduced"])
@@ -173,7 +173,8 @@ class FleetTests(unittest.TestCase):
         self.assertEqual(self.fleet.outputs["two"].desired()["key"], event_id)
 
     def test_legacy_settings_migrate_once_and_offline_edit_survives_restart(self):
-        self.engine.update_settings({"brightness": 0, "reduced": True})
+        with self.lock:
+            self.engine.update_settings({"brightness": 0, "reduced": True})
         config = {"devices": {"legacy": {"device_id": "legacy", "hardware_model": "yeelight-yltd003", "connection_paused": True}}}
         fleet = FleetTransportManager(self.engine.flame, self.lock, config)
         service = FleetDeviceService(config, self.temp.name, fleet, self.lock)
@@ -182,7 +183,7 @@ class FleetTests(unittest.TestCase):
         self.assertFalse(self.engine.flame.brightness_off())
         service.update_light_settings({"hardware_model": "yeelight-yltd003", "device_id": "legacy", "settings": {"brightness": 7}})
         self.assertFalse(self.engine.flame.brightness_off())
-        saved = json.loads((Path(self.temp.name) / "credentials.json").read_text())
+        saved = json.loads((Path(self.temp.name) / "credentials.json").read_text(encoding="utf-8"))
         restarted = FleetTransportManager(self.engine.flame, self.lock, saved)
         self.assertEqual(restarted.outputs["legacy"].settings["brightness"], 7)
         self.assertFalse(restarted.outputs["legacy"].settings["reduced"])
@@ -245,7 +246,7 @@ class FleetTests(unittest.TestCase):
         self.assertTrue(workers["two"].is_alive())
         self.emit("working")
         self.wait(lambda: any(frame["state"] == "working" for frame in workers["two"].frames))
-        saved = json.loads((Path(self.temp.name) / "credentials.json").read_text())
+        saved = json.loads((Path(self.temp.name) / "credentials.json").read_text(encoding="utf-8"))
         self.assertTrue(saved["devices"]["one"]["connection_paused"])
         self.assertFalse(saved["devices"]["two"].get("connection_paused", False))
 
@@ -400,7 +401,7 @@ class FleetTests(unittest.TestCase):
         self.assertNotIn('two', self.fleet.outputs)
         self.assertEqual(result['selected_device_id'], '')
         self.assertTrue(self.engine.flame.device['online'])
-        saved = json.loads((Path(self.temp.name) / 'credentials.json').read_text())
+        saved = json.loads((Path(self.temp.name) / 'credentials.json').read_text(encoding="utf-8"))
         self.assertEqual(set(saved['devices']), {'one'})
         self.assertEqual(set(FleetTransportManager(self.engine.flame, self.lock, saved).records), {'one'})
         self.fleet.records['one']['hardware_model'] = 'yeelight-yldp005'
