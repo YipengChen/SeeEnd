@@ -27,7 +27,7 @@ class LocalAPI(QObject):
         self.worker.start()
 
     def request(
-        self, path, callback=None, body=None, raw=False, content_type=None, failed=None
+        self, path, callback=None, body=None, raw=False, content_type=None, failed=None, error_callback=None
     ):
         if self.closed:
             return
@@ -38,12 +38,15 @@ class LocalAPI(QObject):
             content_type = "application/json"
         self.sequence += 1
         identifier = self.sequence
-        self.pending[identifier] = (path, callback, failed)
+        self.pending[identifier] = (path, callback, failed, error_callback)
         try:
             self.jobs.put_nowait((identifier, path, body, raw, content_type))
         except queue.Full:
             self.pending.pop(identifier)
-            self.error.emit("请求过于频繁，请稍后重试")
+            if error_callback:
+                error_callback("请求过于频繁，请稍后重试")
+            else:
+                self.error.emit("请求过于频繁，请稍后重试")
             if failed:
                 failed()
 
@@ -60,7 +63,7 @@ class LocalAPI(QObject):
                 try:
                     result = self._perform(opener, job)
                 except Exception:
-                    result = job[0], None, "Hub 未连接，请检查 SeeEnd 服务"
+                    result = job[0], None, "本地服务未连接，请重新打开 SeeEnd 后重试。"
                 if not self.stopping.is_set():
                     self.completed.emit(result)
                 # Release bodies/results before blocking for the next job.
@@ -92,7 +95,7 @@ class LocalAPI(QObject):
                 error.close()
             return identifier, None, message
         except (OSError, ValueError, UnicodeError):
-            return identifier, None, "Hub 未连接，请检查 SeeEnd 服务"
+            return identifier, None, "本地服务未连接，请重新打开 SeeEnd 后重试。"
 
     @Slot(object)
     def _finished(self, result):
@@ -100,9 +103,12 @@ class LocalAPI(QObject):
         record = self.pending.pop(identifier, None)
         if self.closed or record is None:
             return
-        _, callback, failed = record
+        _, callback, failed, error_callback = record
         if error:
-            self.error.emit(error)
+            if error_callback:
+                error_callback(error)
+            else:
+                self.error.emit(error)
             if failed:
                 failed()
         elif callback:

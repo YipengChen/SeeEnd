@@ -15,9 +15,9 @@ def requested_devices():
 
 def hardware_targets(snapshot, device_ids=None):
     """Freeze intended physical sessions before sending any manual test tasks."""
-    assert snapshot["settings"]["mode"] == "hardware", "Switch to hardware mode first"
-    assert not snapshot["settings"]["paused"] and not snapshot["emergency"], "Resume the Hub first"
-    assert snapshot.get("display", {}).get("key") != "muted", "Disable quiet hours before hardware verification"
+    assert snapshot["settings"]["hardware_notifications"] is True, "Enable Device alerts first"
+    assert not snapshot["emergency"], "Reopen SeeEnd before hardware verification"
+    assert snapshot.get("display", {}).get("key") != "muted", "Increase lamp brightness before hardware verification"
     rows = {row["device_id"]: row for row in snapshot.get("devices", [])}
     ids = device_ids if device_ids is not None else [
         key for key, row in rows.items()
@@ -37,7 +37,7 @@ def hardware_targets(snapshot, device_ids=None):
 
 def targets_connected(snapshot, targets):
     rows = {row["device_id"]: row for row in snapshot.get("devices", [])}
-    return snapshot["settings"]["mode"] == "hardware" and all(
+    return snapshot["settings"]["hardware_notifications"] is True and all(
         key in rows and rows[key].get("online") and not rows[key]["connection_paused"]
         and rows[key]["light_settings"]["brightness"] > 0
         and (rows[key].get("session_id"), rows[key].get("connected_at")) == token

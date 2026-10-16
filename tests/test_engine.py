@@ -1,4 +1,5 @@
 import datetime as dt
+import json
 from pathlib import Path
 import sys
 import tempfile
@@ -13,6 +14,102 @@ from aiflame.integrations.cli_tools.providers import CLI_SOURCES
 
 
 class TestEngine(unittest.TestCase):
+    def test_upgrade_removes_saved_pause_and_quiet_hours_without_changing_other_preferences(self):
+        self.engine.update_settings({"duration": 17, "desktop_notifications": True})
+        expected = dict(self.engine.settings)
+        previous = {**expected, "paused": True, "quiet_enabled": True,
+                    "quiet_start": "00:00", "quiet_end": "00:00"}
+        self.engine.db.execute("INSERT OR REPLACE INTO settings VALUES (?,?)", ("main", json.dumps(previous)))
+        self.engine.db.commit()
+        self.engine.db.close()
+        self.engine = Engine(Path(self.temp.name) / "db", lambda: self.now, lambda: self.wall, sources=SOURCES)
+        self.assertEqual(self.engine.settings, expected)
+        saved = json.loads(self.engine.db.execute("SELECT value FROM settings WHERE key='main'").fetchone()["value"])
+        self.assertEqual(saved, expected)
+        result, _ = self.accept("done", "after-upgrade")
+        self.assertNotEqual(result["deliveries"]["flame"], "suppressed")
+        self.assertEqual(result["deliveries"]["desktop"], "pending")
+        self.assertEqual(self.engine.desired()["state"], "done")
+
+    def test_removed_pause_and_quiet_settings_are_rejected(self):
+        for key, value in (("paused", True), ("quiet_enabled", True),
+                           ("quiet_start", "22:00"), ("quiet_end", "08:00")):
+            with self.subTest(key=key), self.assertRaises(EventError):
+                self.engine.update_settings({key: value})
+
+    def test_unfinished_count_includes_tasks_outside_recent_list_and_ignores_disabled_sources(self):
+        self.accept("needs_input", "older")
+        for index in range(31):
+            self.wall += 1
+            self.accept("done", f"recent-{index}")
+        snapshot = self.engine.snapshot()
+        self.assertEqual(snapshot["active_count"], 0)
+        self.assertNotIn("older", {task["task"] for task in snapshot["tasks"]})
+        self.assertEqual(snapshot["unfinished_count"], 1)
+        self.engine.update_settings({"source_enabled": {**self.engine.settings["source_enabled"], "manual": False}})
+        self.assertEqual(self.engine.snapshot()["unfinished_count"], 0)
+        self.engine.update_settings({"source_enabled": {**self.engine.settings["source_enabled"], "manual": True}})
+        self.accept("cancelled", "older", seq=2)
+        self.assertEqual(self.engine.snapshot()["unfinished_count"], 0)
+
+    def test_task_history_keeps_fifty_tasks_with_all_retained_events(self):
+        for index in range(51):
+            self.wall += 1
+            self.accept("working", f"task-{index}")
+            self.accept("needs_input" if index == 0 else "done", f"task-{index}", seq=2)
+        snapshot = self.engine.snapshot()
+        self.assertEqual(len(snapshot["events"]), 50)
+        history = snapshot["task_events"]
+        self.assertEqual(len(history), 100)
+        self.assertEqual({r["event"] for r in snapshot["deliveries"]}, {e["id"] for e in history})
+        self.assertEqual({e["task"] for e in history}, {f"task-{i}" for i in range(1, 51)})
+        self.assertEqual([e["state"] for e in history[:2]], ["done", "working"])
+        # An older task becomes recent again; all its earlier events return.
+        self.wall += 1
+        self.accept("working", "task-0", seq=3)
+        history = self.engine.snapshot()["task_events"]
+        self.assertEqual(history[0]["task"], "task-0")
+        self.assertEqual(len([e for e in history if e["task"] == "task-0"]), 3)
+        self.assertNotIn("task-1", {e["task"] for e in history})
+
+    def test_large_snapshot_receipts_are_linear_and_origins_refresh_next_poll(self):
+        from unittest.mock import patch
+        from aiflame.core.delivery import delivery_summary
+        for task in range(5):
+            for seq in range(1, 21):
+                self.accept('working' if seq < 20 else 'done', f'busy-{task}', seq=seq, source='codex')
+        visits = []
+        def summarize(flame, event, receipts):
+            visits.append(len(receipts))
+            return delivery_summary(flame, event, receipts)
+        with patch('aiflame.core.engine.delivery_summary', side_effect=summarize), \
+             patch.object(self.engine.origins, 'summary', return_value={'available': True}) as origins:
+            first = self.engine.snapshot()
+            self.assertLessEqual(origins.call_count, 11)
+            self.assertLessEqual(sum(visits), 2 * len(first['deliveries']))
+            self.assertEqual(len(first['task_events']), 100)
+            for event in first['events'] + first['task_events']:
+                self.assertEqual(event['delivery_summary'], delivery_summary(self.engine.flame, event, first['deliveries']))
+                self.assertTrue(event['return_to']['available'])
+            origins.reset_mock()
+            origins.return_value = {'available': False}
+            second = self.engine.snapshot()
+            self.assertLessEqual(origins.call_count, 11)
+            self.assertTrue(all(not event['return_to']['available'] for event in second['task_events']))
+
+    def test_live_snapshot_keeps_current_state_without_building_history(self):
+        from unittest.mock import patch
+        self.accept('working', 'active')
+        with patch('aiflame.core.engine.delivery_summary', side_effect=AssertionError('history scanned')):
+            live = self.engine.snapshot(include_history=False)
+        self.assertEqual(live['active_count'], 1)
+        self.assertEqual(live['unfinished_count'], 1)
+        for field in ('events', 'task_events', 'deliveries'):
+            self.assertNotIn(field, live)
+        full = self.engine.snapshot()
+        self.assertTrue(full['events'])
+        self.assertTrue(full['task_events'])
+
     def test_restart_removes_receipts_for_history_expired_at_startup(self):
         self.accept("done", "old")
         self.assertGreater(self.engine.db.execute("SELECT COUNT(*) FROM deliveries").fetchone()[0], 0)
@@ -119,7 +216,7 @@ class TestEngine(unittest.TestCase):
         return self.engine.accept(e, e["source_id"])
 
     def test_hold_completion_waits_for_new_activity_once(self):
-        self.engine.update_settings({"hold_until_activity": True})
+        self.assertTrue(self.engine.settings["hold_until_activity"])
         self.accept("done")
         self.assertEqual(self.engine.desired()["duration_ms"], 0)
         self.engine.human_activity(self.now - 1)
@@ -152,14 +249,14 @@ class TestEngine(unittest.TestCase):
         self.now += 1
         self.engine.human_activity(self.now)
         self.now += 2
-        self.accept("error", task="error")
-        self.assertEqual(self.engine.desired()["state"], "error")
+        self.accept("needs_input", task="needs_input")
+        self.assertEqual(self.engine.desired()["state"], "needs_input")
         self.now += 11
         self.assertEqual(self.engine.desired()["state"], "idle")
 
     def test_hold_does_not_change_error_duration(self):
         self.engine.update_settings({"hold_until_activity": True})
-        self.accept("error")
+        self.accept("needs_input")
         self.assertEqual(self.engine.desired()["duration_ms"], 10000)
         self.now += 11
         self.assertEqual(self.engine.desired()["state"], "idle")
@@ -199,10 +296,11 @@ class TestEngine(unittest.TestCase):
         )
 
     def test_native_hooks_wait_for_explicit_terminal_event(self):
+        self.engine.update_settings({"hold_until_activity": False})
         for source in ("codex", *CLI_SOURCES):
             enabled = {**self.engine.settings["source_enabled"], source: True}
             self.engine.update_settings({"source_enabled": enabled})
-            for terminal, reason in (("done", "completed"), ("error", "failed"), ("idle", "cancelled")):
+            for terminal, reason in (("done", "completed"), ("needs_input", "failed"), ("idle", "cancelled")):
                 with self.subTest(source=source, terminal=terminal):
                     task = source + terminal
                     self.accept("working", task, source=source)
@@ -221,6 +319,7 @@ class TestEngine(unittest.TestCase):
         self.assertEqual(self.engine.desired()["state"], "idle")
 
     def test_done_returns_to_other_work(self):
+        self.engine.update_settings({"hold_until_activity": False})
         self.accept("working", "a")
         self.accept("done", "b")
         desired = self.engine.desired()
@@ -231,15 +330,15 @@ class TestEngine(unittest.TestCase):
     def test_priority_and_limit(self):
         for i in range(22):
             self.accept("done", str(i))
-        self.accept("error", "failed")
+        self.accept("needs_input", "failed")
         self.assertLessEqual(len(self.engine.queue), 20)
-        self.assertEqual(self.engine.desired()["state"], "error")
+        self.assertEqual(self.engine.desired()["state"], "needs_input")
         self.assertEqual(self.engine.dropped, 3)
 
-    def test_silent_no_replay(self):
-        self.engine.update_settings({"paused": True})
+    def test_zero_brightness_does_not_replay_suppressed_alerts(self):
+        self.engine.update_settings({"brightness": 0})
         self.accept("done")
-        self.engine.update_settings({"paused": False})
+        self.engine.update_settings({"brightness": 20})
         self.assertEqual(self.engine.desired()["state"], "idle")
 
     def test_expired_and_future(self):
@@ -256,6 +355,7 @@ class TestEngine(unittest.TestCase):
             self.engine.accept(self.event("done"), "local-script")
 
     def test_pending_expiry(self):
+        self.engine.update_settings({"hold_until_activity": False})
         self.accept("done")
         self.engine.desired()
         self.now += 61
@@ -271,11 +371,33 @@ class TestEngine(unittest.TestCase):
     def test_saved_settings_persist_across_restart(self):
         settings = dict(self.engine.settings)
         settings["brightness"] = 7
-        settings["source_enabled"] = {**settings["source_enabled"], "codex": False}
+        settings["desktop_flame_enabled"] = False
+        settings["source_enabled"] = {**settings["source_enabled"], "codex": False, "claude-code": False}
         self.engine.update_settings(settings)
         self.engine.db.close()
         self.engine = Engine(Path(self.temp.name) / "db", sources=SOURCES)
         self.assertEqual(self.engine.settings, settings)
+
+    def test_missing_coding_sources_default_to_enabled_on_restart(self):
+        import json
+        self.assertTrue(all(self.engine.settings["source_enabled"][source]
+                            for source in ("codex", *CLI_SOURCES)))
+        self.engine.db.execute("INSERT INTO settings VALUES ('main', ?)", (
+            json.dumps({"source_enabled": {"codex": False}}),
+        ))
+        self.engine.db.commit()
+        self.engine.db.close()
+        self.engine = Engine(Path(self.temp.name) / "db", sources=SOURCES)
+        self.assertFalse(self.engine.settings["source_enabled"]["codex"])
+        self.assertTrue(all(self.engine.settings["source_enabled"][source]
+                            for source in CLI_SOURCES))
+
+    def test_desktop_flame_rejects_non_boolean_settings_without_changing_preferences(self):
+        self.assertTrue(self.engine.settings["desktop_flame_enabled"])
+        for value in (0, 1, "false", None, [], {}):
+            with self.assertRaises(EventError):
+                self.engine.update_settings({"desktop_flame_enabled": value})
+            self.assertTrue(self.engine.settings["desktop_flame_enabled"])
 
 
 if __name__ == "__main__":

@@ -85,7 +85,7 @@ class IntegrationGuidanceTests(unittest.TestCase):
         self.assertEqual(code, 200)
         self.assertEqual(contract, integration_contract())
         self.assertEqual(set(contract['capabilities']['native_sources']), set(DOCS))
-        self.assertEqual(contract['optional_fields'], ['reason', 'device_id'])
+        self.assertEqual(contract['optional_fields'], ['reason', 'device_id', 'return_target', 'return_context'])
         self.assertTrue(contract['capabilities']['device_targeting'])
         self.assertEqual(before, sorted(str(path.relative_to(self.root)) for path in self.root.rglob('*')))
         for path in ('/api/verification-evidence', '/api/verification-evidence?source=codex&source=qoder',

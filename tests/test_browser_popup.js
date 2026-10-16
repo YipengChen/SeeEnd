@@ -24,14 +24,17 @@ test('freshly installed page gets a refresh instruction instead of a misleading 
 test('Chrome extensions page gets a clear switch-to-AI-page instruction',async()=>{
   const d=await popup({url:'chrome://extensions/'}); assert.match(d.window.document.getElementById('status').textContent,/不是支持/); assert.match(d.window.document.getElementById('next').textContent,/对话网页/); d.window.close();
 });
-test('no lamp is needed and a passing page check is not real-task verification',async()=>{
-  const d=await popup(); const text=d.window.document.getElementById('status').textContent; assert.match(text,/页面检查通过/); assert.doesNotMatch(text,/开发板|灯具|离线/); assert.match(d.window.document.getElementById('next').textContent,/还不代表真实任务已验证/); d.window.close();
+test('a connected page invites a new task without verification labels or a lamp requirement',async()=>{
+  const d=await popup(); const text=d.window.document.getElementById('status').textContent; assert.match(text,/页面检查通过/); assert.doesNotMatch(text,/开发板|灯具|离线/); const next=d.window.document.getElementById('next').textContent; assert.match(next,/自动提醒/); assert.doesNotMatch(text+next,/验证/); d.window.close();
 });
 test('unreachable desktop App points to the exact setup step and keeps technical errors in details',async()=>{
-  const d=await popup({bridge:{ok:false,error:'bridge_update_required'}}); assert.match(d.window.document.getElementById('next').textContent,/第 4 步/); assert.doesNotMatch(d.window.document.getElementById('status').textContent,/Hub|桥接|bridge/); assert.match(d.window.document.getElementById('details').textContent,/bridge_update_required/); d.window.close();
+  const d=await popup({bridge:{ok:false,error:'bridge_update_required'}}); assert.match(d.window.document.getElementById('next').textContent,/第 2 步/); assert.doesNotMatch(d.window.document.getElementById('status').textContent,/Hub|桥接|bridge/); assert.match(d.window.document.getElementById('details').textContent,/bridge_update_required/); d.window.close();
 });
-test('source-disabled and quiet states give distinct next actions',async()=>{
-  for(const [bridge,pattern] of [[{ok:true,source_enabled:false},/开关/],[{ok:true,source_enabled:true,muted:true},/静默/]]){const d=await popup({bridge}); assert.match(d.window.document.getElementById('next').textContent,pattern); d.window.close();}
+test('source-disabled pages explain how to enable reminders',async()=>{
+  const d=await popup({bridge:{ok:true,source_enabled:false}}); assert.match(d.window.document.getElementById('next').textContent,/开关/); d.window.close();
+});
+test('lamp suppression does not block browser integration guidance for independent notification channels',async()=>{
+  const d=await popup({bridge:{ok:true,source_enabled:true,muted:true}}); assert.match(d.window.document.getElementById('status').textContent,/页面检查通过/); assert.doesNotMatch(d.window.document.getElementById('next').textContent,/暂停|静默|恢复提醒/); d.window.close();
 });
 
 test('a hidden tab URL does not reject a supported page or require broader browser permissions',async()=>{

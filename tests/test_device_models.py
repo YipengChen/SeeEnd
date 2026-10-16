@@ -1,12 +1,12 @@
 """Supported models and safe migration away from retired hardware."""
 import unittest
 from aiflame.core.events import EventError
-from aiflame.devices.models import MODELS, DEFAULT_MODEL, YEELIGHT_MODELS, hardware_model
+from aiflame.devices.models import MODELS, DEFAULT_MODEL, YEELIGHT_MODELS, SUPPORTED_MODELS, hardware_model
 from aiflame.devices.registry import migrate_devices
 
 class DeviceModelTests(unittest.TestCase):
-    def test_only_yeelight_models_are_registered(self):
-        self.assertEqual(tuple(model['id'] for model in MODELS), YEELIGHT_MODELS)
+    def test_supported_models_are_registered(self):
+        self.assertEqual(tuple(model['id'] for model in MODELS), SUPPORTED_MODELS)
         self.assertIn(DEFAULT_MODEL, YEELIGHT_MODELS)
         for retired in ('ai-flame-v01', 'ai-flame-v02'):
             with self.assertRaises(EventError):

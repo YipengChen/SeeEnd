@@ -13,6 +13,11 @@ from aiflame.core.i18n import english_catalog, translate
 
 
 class LanguageSettingsTests(unittest.TestCase):
+    def test_connected_device_count_uses_singular_only_for_one_device(self):
+        for count, expected in ((0, "Connected 0 devices"), (1, "Connected 1 device"),
+                                (2, "Connected 2 devices")):
+            self.assertEqual(translate(f"已连接 {count} 台设备", "en"), expected)
+
     def test_language_is_persisted_without_changing_other_preferences(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "events.sqlite"

@@ -89,7 +89,7 @@ def main():
         widget.navigate(1)
         settle()
         widget.grab().save(str(output / "virtual-device.png"))
-        engine.update_settings({"mode": "hardware"})
+        engine.update_settings({"hardware_notifications": True})
         widget.navigate(0)
         widget.render({**engine.snapshot(), "maintenance": False, "hardware_paired": False})
         settle()
@@ -152,11 +152,9 @@ def main():
         widget.grab().save(str(output / "activity-selected.png"))
         widget.navigate(3)
         settle()
-        widget.grab().save(str(output / "preferences-quiet-off.png"))
+        widget.grab().save(str(output / "preferences.png"))
         for name, settings in (
-            ("quiet-on", {"quiet_enabled": True, "quiet_start": "12:00", "quiet_end": "12:00"}),
             ("zero", {"brightness": 0}),
-            ("paused", {"paused": True}),
         ):
             widget.render({**snapshot, "settings": {**snapshot["settings"], **settings}, "display": {**snapshot["display"], "state": "idle"}})
             settle()
@@ -174,7 +172,7 @@ def main():
         settle()
         widget.grab().save(str(output / "overview-error.png"))
         widget.navigate(3)
-        widget.on_error("Hub 未连接，请检查 SeeEnd 服务")
+        widget.on_error("本地服务未连接，请重新打开 SeeEnd 后重试。")
         settle()
         widget.grab().save(str(output / "service-disconnected.png"))
         widget.shutdown()

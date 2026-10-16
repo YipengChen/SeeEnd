@@ -20,7 +20,7 @@ def command(mode, *args):
     return prefix + [mode] + list(args)
 
 
-def run(mode, *args, timeout=60, input=None, binary=False):
+def run(mode, *args, timeout=60, input=None, binary=False, environment=None):
     options = {"creationflags": subprocess.CREATE_NO_WINDOW} if os.name == "nt" else {}
     return subprocess.run(
         command(mode, *args),
@@ -28,5 +28,6 @@ def run(mode, *args, timeout=60, input=None, binary=False):
         capture_output=True,
         text=not binary,
         timeout=timeout,
+        env=environment,
         **options
     )

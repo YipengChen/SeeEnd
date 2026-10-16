@@ -33,7 +33,12 @@ class WindowRestorer(QObject):
         self.activate = activate
         self.pending = False
         self.closed = False
+        self.activation_suppressed = False
+        self.activation_guard = None
         app.installEventFilter(self)
+
+    def set_activation_suppressed(self, suppressed):
+        self.activation_suppressed = suppressed
 
     def request(self):
         if not self.closed and not self.pending:
@@ -65,6 +70,8 @@ class WindowRestorer(QObject):
         if (
             watched is self.app
             and event.type() == QEvent.Type.ApplicationActivate
+            and not self.activation_suppressed
+            and not (self.activation_guard and self.activation_guard())
             and (self.window.isHidden() or self.window.isMinimized())
         ):
             # Qt forwards Cocoa's applicationShouldHandleReopen to this event,

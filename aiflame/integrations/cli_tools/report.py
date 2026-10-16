@@ -75,8 +75,8 @@ def summarize(result, enabled=None, verification=None):
         result.update(status="connected", summary="此来源已有同一真实任务的开始与完成记录；本次配置目录或 Profile 尚需单独验证。", next_action="在实际使用的配置目录或 Profile 会话发起新任务，用 SeeEnd Skill 核对当前验证窗口的事件。")
     elif evidence.get("status") == "working":
         result.update(status="receiving", summary="已收到真实任务开始，正在等待本次完成。", next_action="等工具回复结束后再次检查。")
-    elif evidence.get("status") in {"error", "cancelled", "timeout", "needs_input", "incomplete", "unknown"}:
-        label = {"error": "任务失败", "cancelled": "任务已取消", "timeout": "任务超时", "needs_input": "等待输入", "incomplete": "开始或完成信号不完整", "unknown": "任务状态未确定"}[evidence["status"]]
+    elif evidence.get("status") in {"cancelled", "timeout", "needs_input", "incomplete", "unknown"}:
+        label = {"cancelled": "任务已取消", "timeout": "任务超时", "needs_input": "等待输入", "incomplete": "开始或完成信号不完整", "unknown": "任务状态未确定"}[evidence["status"]]
         result.update(status="task_incomplete", summary="已收到真实任务信号，最近一次" + label + "；尚未确认完整接入。", next_action="按工具中的任务状态处理，再完成一条新任务验证；任务失败不一定是接入故障。")
     else:
         result.update(status="ready_unverified", summary="配置已就绪，但尚未验证真实任务接入。", next_action="按 SeeEnd Skill 的提示完成加载与授权，再用 Skill 验证一条新任务。")

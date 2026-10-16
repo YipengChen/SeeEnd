@@ -15,6 +15,7 @@ class NotificationHttpTests(unittest.TestCase):
         self.env.start()
         self.hub = Hub(port=0, config=load_config())
         self.hub.start(hardware=False)
+        self.hub.update_settings({'desktop_notifications': True})
         self.client = DashboardClient(f'http://127.0.0.1:{self.hub.port}')
 
     def tearDown(self):
@@ -32,5 +33,5 @@ class NotificationHttpTests(unittest.TestCase):
         receipt = {'event_id': message['event_id'], 'claim': message['claim'], 'status': 'denied'}
         self.assertEqual(self.client.call('/api/notifications/ack', receipt)['status'], 'denied')
         receipts = {r['output']: r['status'] for r in self.client.call('/api/status')['deliveries']}
-        self.assertEqual(receipts, {'flame': 'suppressed', 'desktop': 'denied'})
+        self.assertEqual(receipts, {'flame': 'suppressed', 'desktop': 'denied', 'wechat': 'disabled'})
         self.assertEqual(self.client.request('/api/notifications/ack', receipt)[0], 409)

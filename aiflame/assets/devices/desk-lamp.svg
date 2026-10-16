@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="96" height="108" viewBox="0 0 96 108">
+  <title>台灯</title>
+  <defs>
+    <linearGradient id="color"><stop stop-color="#ffd0a0"/></linearGradient>
+  </defs>
+  <path d="M28 43 L12 91 Q48 100 84 91 L68 43 Z" fill="url(#color)" opacity=".16"/>
+  <ellipse cx="48" cy="91" rx="32" ry="5" fill="url(#color)" opacity=".2"/>
+  <rect x="45" y="41" width="6" height="51" rx="3" fill="#9b8b77"/>
+  <path d="M33 16 Q34 12 39 12 H57 Q62 12 63 16 L76 43 Q77 46 73 46 H23 Q19 46 20 43 Z" fill="#f6f1e7" stroke="#c7bba8" stroke-width="2"/>
+  <path d="M24 43 H72" stroke="#c7bba8" stroke-width="2" stroke-linecap="round"/>
+  <ellipse cx="48" cy="46" rx="24" ry="3" fill="url(#color)"/>
+  <path d="M29 90 Q30 86 35 86 H61 Q66 86 67 90 L69 94 H27 Z" fill="#f6f1e7" stroke="#c7bba8" stroke-width="2" stroke-linejoin="round"/>
+</svg>

@@ -52,7 +52,7 @@ class FleetTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.engine = Engine(Path(self.temp.name) / "events.sqlite", sources=SOURCES)
-        self.engine.update_settings({"mode": "hardware"})
+        self.engine.update_settings({"hardware_notifications": True})
         self.lock = threading.RLock()
         self.config = {"hub_id": "fixture", "devices": {
             "one": {"device_id": "one", "port": "wifi://192.0.2.1:55443", "hardware_model": "yeelight-yltd003"},
@@ -272,17 +272,50 @@ class FleetTests(unittest.TestCase):
         with self.assertRaises(EventError):
             self.service.start({"action": "install", "device_id": "one", "port": "wifi://192.0.2.2:55443", "hardware_model": "yeelight-yltd003"})
 
+    def test_selected_state_preview_is_pinned_renewable_and_cancellable(self):
+        with self.lock:
+            shared = self.engine.flame.desired().copy()
+            preview = self.fleet.test_light("two", "done")
+            output = self.fleet.outputs["two"]
+            output.light_test["started"] -= 3600
+            self.assertIsNone(output.light_test["expires"])
+            self.assertTrue(output.desired()["holding"])
+            self.assertTrue(preview["continuous"])
+            with patch.object(self.engine.flame, "clock", return_value=self.engine.flame.clock() + 3600):
+                self.assertEqual(output.desired()["state"], "done")
+                self.assertTrue(output.desired()["continuous"])
+            row = next(row for row in self.fleet.snapshot() if row["device_id"] == "two")
+            self.assertTrue(row["test_continuous"])
+            self.assertEqual(row["test_remaining_ms"], 0)
+            self.assertEqual(output.desired()["state"], "done")
+            self.assertEqual(self.fleet.outputs["one"].desired(), shared)
+            self.assertEqual(self.fleet.test_light("two", "done")["key"], preview["key"])
+            self.assertNotEqual(self.fleet.test_light("two", "working")["key"], preview["key"])
+            self.assertEqual(output.desired()["state"], "working")
+            self.fleet.test_light("two", "stop")
+            self.assertEqual(output.desired(), shared)
+            self.fleet.test_light("two", "needs_input")
+            output.device["online"] = False
+            self.assertEqual(output.desired(), shared)
+            output.device["online"] = True
+            self.fleet.test_light("two", "done")
+            self.emit("working", "real-task")
+            self.assertFalse(output.desired().get("device_test"))
+            with self.assertRaises(EventError):
+                self.fleet.test_light("two", "done")
+            with self.assertRaises(EventError):
+                self.fleet.test_light("two", "invalid")
+
     def test_light_targets_one_lamp_without_changing_shared_task_or_receipts(self):
-        self.emit("working")
         self.wait(lambda: self.fleet.confirmed(self.engine.flame.desired()["key"]))
         with self.lock:
             shared = self.engine.flame.desired().copy()
             current_ack = self.engine.flame.last_command
             preview = self.fleet.test_light("two")
-            self.assertEqual(preview["remaining_ms"], 10000)
+            self.assertEqual(preview["remaining_ms"], 15000)
             remaining = next(item for item in self.fleet.snapshot() if item["device_id"] == "two")["test_remaining_ms"]
-            self.assertGreater(remaining, 9000)
-            self.assertLessEqual(remaining, 10000)
+            self.assertGreater(remaining, 14000)
+            self.assertLessEqual(remaining, 15000)
         self.wait(lambda: self.fleet.outputs["two"].last_display_key == preview["key"])
         with self.lock:
             self.assertEqual(self.fleet.outputs["one"].desired(), shared)
@@ -292,7 +325,27 @@ class FleetTests(unittest.TestCase):
             self.fleet.outputs["two"].light_test["expires"] = self.engine.flame.clock() - 1
         self.wait(lambda: self.fleet.outputs["two"].last_display_key == shared["key"])
 
-    def test_light_plays_working_then_done_and_returns_to_shared_state(self):
+    def test_any_unfinished_task_blocks_each_device_test_and_cancels_an_existing_test(self):
+        with self.lock:
+            self.fleet.test_light("two")
+            self.emit("working", "other-task")
+            self.assertIsNone(self.fleet.outputs["two"].desired().get("device_test"))
+            for state, seq in (("working", 1), ("needs_input", 2)):
+                if seq > 1:
+                    self.emit(state, "other-task", seq)
+                # A visible completion must not hide another unfinished task.
+                self.emit("done", "completed-" + state)
+                self.assertEqual(self.engine.desired()["state"], "done" if state == "working" else "needs_input")
+                for device_id in ("one", "two"):
+                    with self.subTest(state=state, device_id=device_id), self.assertRaisesRegex(EventError, "有任务尚未结束"):
+                        self.fleet.test_light(device_id)
+                    self.assertIsNone(self.fleet.outputs[device_id].light_test)
+            self.emit("cancelled", "other-task", 3)
+            self.assertEqual(self.engine.snapshot()["unfinished_count"], 0)
+            self.fleet.test_light("two")
+            self.assertTrue(self.fleet.outputs["two"].desired().get("device_test"))
+
+    def test_light_plays_working_waiting_done_and_returns_to_shared_state(self):
         with self.lock:
             now = [100.0]
             with patch.object(self.engine.flame, "clock", lambda: now[0]):
@@ -301,10 +354,12 @@ class FleetTests(unittest.TestCase):
                 output = self.fleet.outputs["two"]
                 working_key = output.desired()["key"]
                 for elapsed, state, duration, remaining in (
-                    (0, "working", 5000, 10000),
-                    (4, "working", 1000, 6000),
-                    (5, "done", 5000, 5000),
-                    (9, "done", 1000, 1000),
+                    (0, "working", 5000, 15000),
+                    (4, "working", 1000, 11000),
+                    (5, "needs_input", 5000, 10000),
+                    (9, "needs_input", 1000, 6000),
+                    (10, "done", 5000, 5000),
+                    (14, "done", 1000, 1000),
                 ):
                     now[0] = 100 + elapsed
                     desired = output.desired()
@@ -313,7 +368,7 @@ class FleetTests(unittest.TestCase):
                     self.assertEqual(desired["remaining_ms"], remaining)
                     self.assertEqual(desired["key"] == working_key, state == "working")
                     self.assertEqual(self.fleet.outputs["one"].desired(), shared)
-                now[0] = 110
+                now[0] = 115
                 self.assertEqual(output.desired(), shared)
                 self.assertIsNone(output.light_test)
 
@@ -326,7 +381,7 @@ class FleetTests(unittest.TestCase):
             self.emit("working")
             self.assertNotIn("device_test", self.fleet.outputs["two"].desired())
             self.assertIsNone(self.fleet.outputs["two"].light_test)
-            self.engine.update_settings({"paused": True})
+            self.engine.stop()
             with self.assertRaises(EventError):
                 self.fleet.test_light("two")
 
@@ -391,7 +446,7 @@ class FleetReceiptTests(unittest.TestCase):
         self.now = 1000.0
         self.engine = Engine(":memory:", clock=lambda: self.now, sources=SOURCES)
         self.addCleanup(self.engine.db.close)
-        self.engine.update_settings({"mode": "hardware"})
+        self.engine.update_settings({"hardware_notifications": True})
         self.fleet = FleetTransportManager(self.engine.flame, threading.RLock(), {"devices": {
             "one": {"device_id": "one", "hardware_model": "yeelight-yltd003"},
             "two": {"device_id": "two", "hardware_model": "yeelight-yldp005"}}})
@@ -465,10 +520,10 @@ class FleetReceiptTests(unittest.TestCase):
         self.assertEqual({status for key, status in self.receipts(completed).items()
                           if key.startswith("flame")}, {"queued"})
 
-    def test_pausing_confirmed_completion_preserves_ack_and_settles_other_lamp(self):
+    def test_shutdown_preserves_confirmed_completion_and_settles_other_lamp(self):
         event_id = self.emit("done")
         self.ack("one")
-        self.engine.update_settings({"paused": True})
+        self.engine.stop()
         self.assertEqual(self.engine.desired()["state"], "idle")
         receipts = self.receipts(event_id)
         self.assertEqual(receipts["flame"], "applied")
@@ -476,6 +531,7 @@ class FleetReceiptTests(unittest.TestCase):
         self.assertEqual(receipts["flame:two"], "suppressed")
 
     def test_prompt_deadline_expires_only_targets_without_ack(self):
+        self.engine.update_settings({"hold_until_activity": False})
         event_id = self.emit("done")
         self.ack("one")
         self.now += self.engine.settings["duration"] + 1

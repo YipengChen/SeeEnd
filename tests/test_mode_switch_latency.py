@@ -20,14 +20,14 @@ class ModeSwitchLatencyTests(unittest.TestCase):
             "transport": "yeelight", "hardware_model": "yeelight-yltd003",
         })
         self.addCleanup(self.hub.stop)
-        self.hub.update_settings({"mode": "hardware"})
+        self.hub.update_settings({"hardware_notifications": True})
 
     def test_switch_back_reports_connecting_until_real_handshake(self):
-        self.hub.update_settings({"mode": "virtual"})
+        self.hub.update_settings({"hardware_notifications": False})
         self.hub.hardware_enabled = True
         with patch("aiflame.transports.manager.YeelightTransport") as factory:
             factory.return_value.is_alive.return_value = False
-            result = self.hub.update_settings({"mode": "hardware"})
+            result = self.hub.update_settings({"hardware_notifications": True})
             self.assertFalse(result["device"]["online"])
             self.assertTrue(result["device"]["connecting"])
             self.assertEqual(result["device"]["status"], "正在连接设备")
@@ -41,8 +41,8 @@ class ModeSwitchLatencyTests(unittest.TestCase):
         self.hub.transport.records["fixture-lamp"]["connection_paused"] = True
         self.hub.hardware_enabled = True
         with patch("aiflame.transports.manager.YeelightTransport") as factory:
-            self.hub.update_settings({"mode": "virtual"})
-            result = self.hub.update_settings({"mode": "hardware"})
+            self.hub.update_settings({"hardware_notifications": False})
+            result = self.hub.update_settings({"hardware_notifications": True})
             factory.assert_not_called()
             self.assertFalse(result["device"]["online"])
             self.assertFalse(result["device"]["connecting"])
@@ -87,8 +87,8 @@ class ModeSwitchLatencyTests(unittest.TestCase):
         with patch("aiflame.transports.manager.YeelightTransport") as factory:
             replacement = factory.return_value
             replacement.is_alive.return_value = False
-            self.hub.update_settings({"mode": "virtual"})
-            self.hub.update_settings({"mode": "hardware"})
+            self.hub.update_settings({"hardware_notifications": False})
+            self.hub.update_settings({"hardware_notifications": True})
             reaper = self.hub.transport.reaper
             factory.assert_not_called()
             self.assertIs(self.hub.transport.worker, worker)
@@ -104,8 +104,8 @@ class ModeSwitchLatencyTests(unittest.TestCase):
         worker, peer, command = self.blocked_worker()
         self.hub.hardware_enabled = True
         with patch("aiflame.transports.manager.YeelightTransport") as factory:
-            self.hub.update_settings({"mode": "virtual"})
-            self.hub.update_settings({"mode": "hardware"})
+            self.hub.update_settings({"hardware_notifications": False})
+            self.hub.update_settings({"hardware_notifications": True})
             # Hold the lifecycle guard to force the retirement callback to run
             # after maintenance has cancelled the pending restart.
             with self.hub.transport.guard:
@@ -126,23 +126,23 @@ class ModeSwitchLatencyTests(unittest.TestCase):
         replacement.stopping = threading.Event()
         self.addCleanup(release_replacement.set)
         with patch("aiflame.transports.manager.YeelightTransport", return_value=replacement):
-            self.hub.update_settings({"mode": "virtual"})
+            self.hub.update_settings({"hardware_notifications": False})
             with self.hub.transport.guard:
                 self.release_ack(peer, command)
                 worker.join(1)
                 self.assertFalse(worker.is_alive())
                 old_reaper = self.hub.transport.reaper
                 self.hub.transport.stop()
-                self.hub.update_settings({"mode": "hardware"})
+                self.hub.update_settings({"hardware_notifications": True})
                 self.assertIs(self.hub.transport.worker, replacement)
-                self.hub.update_settings({"mode": "virtual"})
+                self.hub.update_settings({"hardware_notifications": False})
                 new_reaper = self.hub.transport.reaper
                 self.assertIsNot(old_reaper, new_reaper)
             release_replacement.set()
             old_reaper.join(1)
             new_reaper.join(1)
             self.assertIsNone(self.hub.transport.worker)
-            self.assertEqual(self.hub.engine.device["status"], "虚拟模式")
+            self.assertEqual(self.hub.engine.device["status"], "设备提醒已关闭")
 
 
 

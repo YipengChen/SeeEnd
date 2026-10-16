@@ -11,7 +11,6 @@ import socket
 import subprocess
 import sys
 import tempfile
-import textwrap
 import unittest
 
 from native import NATIVE_MODULES, build_native, native_artifacts
@@ -55,7 +54,10 @@ def test_starts_hub(case):
     trees = []
     for function in functions:
         try:
-            trees.append(ast.parse(textwrap.dedent(inspect.getsource(function))))
+            source = inspect.getsource(function)
+            # Dedenting also changes multiline strings, whose contents can start
+            # at column zero. Parse methods in a suite without changing bytes.
+            trees.append(ast.parse("if True:\n" + source if source[:1].isspace() else source))
         except (OSError, TypeError):
             continue
 

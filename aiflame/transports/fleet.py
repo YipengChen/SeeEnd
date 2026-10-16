@@ -3,10 +3,12 @@ import threading
 import uuid
 
 from aiflame.core.events import EventError
+from aiflame.devices.models import YEELIGHT_CUBE_MODEL
+from aiflame.devices.cube_effects import CUBE_MODES
 from aiflame.devices.registry import migrate_devices, public_record
 from aiflame.devices.light_settings import light_settings, migrate_light_settings
 from aiflame.transports.manager import TransportManager
-from aiflame.outputs.flame import demo_display
+from aiflame.outputs.flame import DEMO_DURATION_SECONDS, demo_display
 
 
 class DeviceState(dict):
@@ -30,6 +32,7 @@ class DeviceOutput:
         self.last_command = None
         self.last_display_key = None
         self.light_test = None
+        self.cube_slots = [None] * 4
         self._device = DeviceState({"online": False, "connecting": False,
                                    "status": "未连接设备", "last_error": None}, fleet.refresh)
 
@@ -52,6 +55,13 @@ class DeviceOutput:
         return self.device.get("session_id"), self.device.get("connected_at")
 
     def desired(self):
+        result = self._desired()
+        if (self.record.get("hardware_model") == YEELIGHT_CUBE_MODEL
+                and self.settings.get("reminder_mode") in CUBE_MODES):
+            return self.cube_display(result)
+        return result
+
+    def _desired(self):
         if self.settings["brightness"] == 0:
             self.light_test = None
             return {"key": "device-muted", "state": "idle", "duration_ms": 0, "device_muted": True}
@@ -60,11 +70,16 @@ class DeviceOutput:
             test = self.light_test
             flame = self.fleet.engine
             now = flame.clock()
-            if (now >= test["expires"] or self.token != test["connection"]
-                    or not self.device.get("online") or flame.settings["mode"] != "hardware"
-                    or flame.muted() or result["key"] != test["shared_key"]):
+            if ((test["expires"] is not None and now >= test["expires"]) or self.token != test["connection"]
+                    or not self.device.get("online") or not flame.settings["hardware_notifications"]
+                    or flame.muted() or result["key"] != test["shared_key"]
+                    or flame.core.unfinished_task_count()):
                 self.light_test = None
             else:
+                if test.get("state"):
+                    return {"key": test["key"] + ":" + test["state"], "state": test["state"],
+                            "duration_ms": 30000, "remaining_ms": 0, "device_test": True,
+                            "holding": True, "continuous": True}
                 return {**demo_display(test["key"], now - test["started"]),
                         "device_test": True}
         current = self.fleet.engine.current
@@ -76,6 +91,45 @@ class DeviceOutput:
         if result["state"] == "working" and not result.get("preview"):
             return self.task_display()
         return result
+
+    def cube_display(self, result):
+        """Preserve the current prompt's exact state (including needs_input)."""
+        if result["state"] == "idle" or result.get("preview") or result.get("device_test"):
+            if result["state"] == "idle":
+                self.cube_slots = [None] * 4
+            return result
+        flame = self.fleet.engine
+        current = flame.current
+        state = result["state"]
+        if current and current["id"] == result["key"]:
+            row = flame.db.execute("SELECT state FROM events WHERE id=?", (current["id"],)).fetchone()
+            if row:
+                state = row["state"]
+        result = {**result, "cube_state": state}
+        if self.settings.get("reminder_mode") != "status":
+            return result
+        tasks = {key: "working" for key, item in flame.active.items()
+                 if item.get("device_id") in (None, self.record.get("device_id"))}
+        prompts = [item for item in ([current] if current else []) + flame.queue
+                   if not item.get("screen_only") and
+                   item.get("device_sessions", {}).get(self.record.get("device_id")) == self.token]
+        if prompts:
+            placeholders = ','.join('?' for _ in prompts)
+            states = {row["id"]: row["state"] for row in flame.db.execute(
+                f"SELECT id, state FROM events WHERE id IN ({placeholders})",
+                [item["id"] for item in prompts])}
+            tasks.update((item["key"], states.get(item["id"], item["state"])) for item in prompts)
+        self.cube_slots = [key if key in tasks else None for key in self.cube_slots]
+        # The scheduled prompt must be visible before its normal delivery ACK.
+        priority = current["key"] if current in prompts else None
+        if priority is not None and priority not in self.cube_slots:
+            slot = self.cube_slots.index(None) if None in self.cube_slots else 3
+            self.cube_slots[slot] = priority
+        for key in tasks:
+            if key not in self.cube_slots and None in self.cube_slots:
+                self.cube_slots[self.cube_slots.index(None)] = key
+        return {**result, "cube_tasks": tuple((key, tasks[key]) if key else None
+                                               for key in self.cube_slots)}
 
     def task_display(self):
         working = any(item.get("device_id") in (None, self.record.get("device_id"))
@@ -153,21 +207,36 @@ class FleetTransportManager:
         return {key: token for key, token in self.sessions().items()
                 if self.outputs[key].settings["brightness"] > 0}
 
-    def test_light(self, device_id):
+    def test_light(self, device_id, state=None):
+        if state not in (None, "working", "needs_input", "done", "stop"):
+            raise EventError("请选择有效的预览状态")
         with self.lock:
             output = self.outputs.get(device_id) if isinstance(device_id, str) else None
+            if state == "stop":
+                if output:
+                    output.light_test = None
+                return {"device_id": device_id, "remaining_ms": 0}
             if not output or device_id not in self.records or not output.device.get("online"):
                 raise EventError("请先连接当前设备", 409)
-            if output.settings["brightness"] == 0:
+            if state is None and output.settings["brightness"] == 0:
                 raise EventError("此设备亮度为 0%，请在设备配置中提高亮度", 409)
-            if self.engine.settings["mode"] != "hardware" or self.engine.muted():
-                raise EventError("请切换到硬件模式，并恢复亮度和提醒", 409)
+            if not self.engine.settings["hardware_notifications"] or self.engine.muted():
+                raise EventError("请开启设备提醒，并恢复亮度和提醒", 409)
             shared = self.engine.desired()
-            key = "device-test:" + uuid.uuid4().hex
+            if self.engine.core.unfinished_task_count():
+                raise EventError("有任务尚未结束，暂时无法演示灯效。", 409)
             started = self.engine.clock()
-            output.light_test = {"key": key, "started": started, "expires": started + 10,
-                                 "connection": output.token, "shared_key": shared["key"]}
-            return {"device_id": device_id, "key": key + ":working", "remaining_ms": 10000}
+            current = output.light_test
+            if (state is not None and current and current.get("state") == state
+                    and current["connection"] == output.token
+                    and current["shared_key"] == shared["key"]):
+                return {"device_id": device_id, "key": current["key"] + ":" + state,
+                        "remaining_ms": 0, "continuous": True}
+            key = "device-test:" + uuid.uuid4().hex
+            output.light_test = {"key": key, "started": started, "expires": None if state else started + DEMO_DURATION_SECONDS,
+                                 "connection": output.token, "shared_key": shared["key"], "state": state}
+            return {"device_id": device_id, "key": key + ":" + (state or "working"), "remaining_ms": 0 if state else DEMO_DURATION_SECONDS * 1000,
+                    "continuous": state is not None}
 
     def refresh(self):
         with self.lock:
@@ -190,7 +259,8 @@ class FleetTransportManager:
                 output = self.connection(key).engine
                 desired = output.desired()
                 remaining = desired["remaining_ms"] if desired.get("device_test") else 0
-                rows.append(public_record(record, {**output.device, "test_remaining_ms": remaining}))
+                rows.append(public_record(record, {**output.device, "test_remaining_ms": remaining,
+                                                   "test_continuous": bool(desired.get("continuous"))}))
             return rows
 
     def confirmed(self, key):

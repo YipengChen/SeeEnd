@@ -1,7 +1,9 @@
-importScripts('providers.js');
+importScripts('providers.js', 'returns.js');
 const HOST = 'com.aiflame.chatgpt';
 const ALLOWED = ['schema_version','event_id','source_id','task_id','seq','state','occurred_at','ttl_ms','reason'];
 let queue = Promise.resolve(), wakeTimer;
+const taskReturns = typeof FlameReturns === 'undefined' ? null : FlameReturns;
+taskReturns?.ensure();
 function scheduleWake() {
   if (wakeTimer === undefined) wakeTimer = setTimeout(wakeTabs, 5000);
 }
@@ -36,17 +38,22 @@ function valid(event) {
     && event.schema_version === '1.0' && FlameProviders.SITES.some(site => site.id === event.source_id)
     && /^[0-9a-f-]{36}$/i.test(event.event_id) && /^[0-9a-f-]{36}$/i.test(event.task_id)
     && Number.isInteger(event.seq) && event.seq > 0 && event.seq <= 2147483647
-    && ['working','done','idle','error'].includes(event.state)
+    && ['working','done','idle','needs_input','unknown','cancelled','timeout'].includes(event.state)
     && event.ttl_ms === 60000 && typeof event.occurred_at === 'string'
     && [undefined,'completed','cancelled','timeout','failed'].includes(event.reason);
 }
 function native(event) {
   return new Promise(resolve => chrome.runtime.sendNativeMessage(HOST, event, result => {
     const error = chrome.runtime.lastError;
+    if (!error && result?.ok) taskReturns?.ensure(true);
     resolve(error ? {ok: false, error: 'native_host_unavailable', detail: error.message} : result);
   }));
 }
-async function forward(event, tabId, documentId, cancelOrigin) {
+async function forward(event, tabId, documentId, cancelOrigin, sender, returnURL) {
+  if (taskReturns && sender) {
+    try { event = await taskReturns.remember(event, sender, returnURL); }
+    catch { /* A location failure must not drop lifecycle notifications. */ }
+  }
   const result = await native(event);
   const delivery = {...result, at:Date.now(), state:event.state, source_id:event.source_id,
     ...(cancelOrigin ? {cancel_origin:cancelOrigin} : {})};
@@ -70,7 +77,8 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
   let url; try { url = new URL(sender.url); } catch { return; }
   const site = FlameProviders.siteFor(url.href);
   if (!site || message.kind !== 'event' || !valid(message.event) || message.event.source_id !== site.id) return;
-  queue = queue.catch(() => {}).then(() => forward(message.event, sender.tab.id, sender.documentId));
+  queue = queue.catch(() => {}).then(() => forward(message.event, sender.tab.id, sender.documentId,
+    undefined, sender, message.return_url));
   queue.then(reply, () => reply({ok: false, error: 'bridge_failed'}));
   return true;
 });

@@ -2,93 +2,59 @@
 
 [中文](README.md) | **English**
 
-The software is named **SeeEnd**. Supported lamps are the Yeelight YLTD003 Screen Light Bar Pro and YLDP005 W3 color bulb.
-
 Turn AI task status into a candle flame.
 
-SeeEnd is a local AI task notification app. It receives status events from command-line tools, web conversations, and local APIs, then uses an on-screen candle, desktop notifications, or physical lamps to signal work in progress, requests for input, completion, and errors. **No hardware is required**: the first launch defaults to virtual mode.
+SeeEnd is a local AI task notification app. It receives lifecycle events from coding tools, web conversations, and local APIs, then signals work, requests for input, and completion through a desktop flame, system notifications, WeChat, or physical devices. No hardware or model API key for SeeEnd is required.
 
-Current version: **0.8.6 desktop preview** · Python **3.11+** · **Proprietary license**
+Source baseline: **App 0.8.55** · browser extension **0.2.12** · Python **3.11+** · [Proprietary license](LICENSE). Source versions and local builds do not imply public availability. See [repositories and releases](docs/REPOSITORIES.md) and [extension submission status](docs/chrome-web-store/APPLICATION_STATUS.md).
 
-[Download SeeEnd 0.8.6 · macOS Apple Silicon](https://github.com/YipengChen/SeeEnd-downloads/releases/download/v0.8.6/SeeEnd-0.8.6-Darwin-arm64.zip) · [SeeEnd Skill 1.0.1](https://github.com/YipengChen/SeeEnd-skill/releases/tag/v1.0.1)
+## Product and support scope
 
-## Features
+- Four independently controlled notification channels can run together. Only the desktop flame starts on after first launch or reset. System notifications need OS permission; WeChat needs account linking and a prepared connection; devices need a separate connection.
+- Return to a task from Overview, activity details, or its macOS system notification. Double-click the overview or desktop flame to return to the currently indicated task. See [task return](docs/quick-start.md#返回对应任务) for supported terminals, permissions, and limits.
+- Save each device's state colors, brightness, white-light settings, or power rules independently. Export activity as CSV. The interface supports Chinese and English.
+- The Hub defaults to `127.0.0.1:8765` with credential authentication. It stores lifecycle metadata without saving prompts or answers. Enabled WeChat alerts send source, status, and time to Tencent's service.
 
-- **Unified task status**: track task lifecycles by source, distinguishing real tasks, simulated diagnostics, cancellations, and timeouts.
-- **Multiple notification channels**: on-screen candle, menu bar / system tray status, desktop notifications, and Yeelight lamps over the LAN. Desktop notifications work independently of light output.
-- **Adjustable alerts**: set each lamp’s color and brightness independently for each task state; configure alert duration and quiet hours globally; export activity to CSV.
-- **Local processing**: the Hub listens only on `127.0.0.1:8765` and authenticates requests with credentials. Integrations collect task status metadata, without saving conversation content. No model API key is required by SeeEnd.
-- **Chinese and English**: choose **中文** or **English** under **Help and diagnostics → Language**. The selection is saved locally and applied immediately, including the tray and notifications.
+| Integration | Implementation |
+| --- | --- |
+| Coding tools | Codex, Claude Code, Qoder CLI, DeepSeek Harness, Gemini CLI, OpenCode; installed and maintained through [SeeEnd Skill](https://github.com/YipengChen/SeeEnd-skill) |
+| Browser extension | ChatGPT, DeepSeek, Qianwen, Doubao, Tencent Yuanbao, Kimi, Zhipu, Claude, Gemini; experimental and subject to website changes |
+| Local HTTP API | Authenticated lifecycle reporting from your own scripts and tools |
 
-## Integrations and platform scope
+| Optional device | Alert capability |
+| --- | --- |
+| Yeelight YLTD003 Screen Light Bar Pro | Color backlight or front white light |
+| Yeelight YLDP005 W3 color bulb | Color or white light |
+| Yeelight YLFWD-0021 Beam light bars | Both bars, color or RGB-simulated white |
+| Yeelight Cube Lite | Pixel status board, comet, snake, text status; full-screen color and white modes |
+| Mijia Smart Plug 3 (ZNCZ301KK), 4 (ZNCZ401KK) | Switch the connected lamp's power |
 
-| Integration | Current implementation | Verification limits |
-| --- | --- | --- |
-| Command line | Codex, Claude Code, Qoder CLI, DeepSeek Harness, Gemini CLI, OpenCode | Hooks or local plugins; load the configuration as instructed for each tool and verify a new task |
-| Browser extension | ChatGPT, DeepSeek, Qianwen, Doubao, Yuanbao, Kimi, Zhipu, Claude, Gemini | Experimental; page structure changes may affect detection. Automated tests do not replace acceptance with real accounts |
-| macOS desktop clients | Doubao, Qianwen, Yuanbao, ordinary ChatGPT conversations | Experimental and disabled by default; requires system permissions and depends on client version and control structure |
-| Local HTTP API | Report task events from your scripts and tools | Uses separate source credentials; see the architecture documentation |
+Devices use their original LAN protocols. Setup, default values, and connection limits are documented in the [user guide](docs/quick-start.md#连接设备). Legacy AI Flame boards and firmware are outside the current product; their implementation is in the [archive branch](https://github.com/YipengChen/SeeEnd/tree/archive/ai-flame-2026-10-09).
 
-macOS has records of testing on real machines. Windows and Linux share the implementation and have native build workflows, but still require testing on real machines. Desktop client detection currently supports only macOS. Signing, installers, and release acceptance are not complete on all platforms.
+macOS has historical real-machine evidence. Windows and Linux share the implementation and native build workflows, but require separate acceptance. Automated tests, device acknowledgements, and successful submissions do not prove a visible notification or physical light. See [validation](docs/validation.md).
 
-## Run from source
+## Launch and connect
 
-Requires Python 3.11 or newer; CI uses 3.11 / 3.13. Enter the repository directory.
+For a packaged app, put it in a stable location, then open App integrations. Copy the Skill installation instruction for coding tools, or follow Install browser extension for websites. Submit a new task and confirm its start and completion. Detailed instructions are in the [user guide](docs/quick-start.md).
+
+Run from source:
 
 ```sh
 python -m venv .venv
-```
-
-Activate the environment:
-
-```sh
 # macOS / Linux
 source .venv/bin/activate
-# Windows PowerShell
-.venv\Scripts\Activate.ps1
-```
-
-Install and start the desktop app:
-
-```sh
+# Windows PowerShell: .venv\Scripts\Activate.ps1
 python -m pip install -e ".[desktop]"
 python -m aiflame
 ```
 
-1. Keep the default **Virtual mode**. You do not need to buy or connect a lamp.
-2. Choose the sources you use under **App integrations**: use **SeeEnd Skill** for coding tools or **Install browser extension** for websites, then follow the guide to prepare and verify them.
-3. Submit a new task in the corresponding AI app and observe the candle and activity records. Simulated diagnostics only verify the event path.
-4. For desktop notifications, enable them under **Alert preferences** and grant system permission.
-5. Choose **中文 / English** under **Help and diagnostics → Language** to switch the interface.
+For a headless Hub, install the base package with `python -m pip install -e .` and run `python -m aiflame --hub`. The desktop app already includes a Hub.
 
-To run only the headless Hub, install the base dependencies and use this entry point. The desktop app already includes the Hub; a separate instance is usually unnecessary.
+Installed commands `seeend` / `seeend-hub` launch the desktop app / Hub. `ai-flame` / `ai-flame-hub` remain compatibility aliases. The `aiflame` package name, existing data directory, `AIFLAME_DATA_DIR`, and internal integration identifiers preserve existing configuration.
 
-```sh
-python -m pip install -e .
-python -m aiflame --hub
-```
+## Develop, test, and build
 
-After installation, `seeend` and `seeend-hub` launch the desktop app and Hub respectively. The legacy commands `ai-flame` and `ai-flame-hub` remain as compatibility aliases. The Python module name `aiflame`, original user data directory, `AIFLAME_DATA_DIR` environment variable, and internal integration identifiers remain compatible. Existing pairing, preferences, and task history are retained.
-
-Detailed setup steps are in the [user guide (Chinese)](docs/quick-start.md) and [browser extension documentation (Chinese)](aiflame/integrations/chatgpt_web/extension/README.md). On Windows, browser bridging requires the Bridge executable supplied with the packaged app.
-
-Open **App integrations → Install browser extension** for a four-stage guide with actual screenshots, path copying, expected results, and a new-task check. No manual unzipping, lamp, or model API key is required. The distribution also includes the offline illustrated instructions.
-
-## Connect coding tools with SeeEnd Skill
-
-In **App integrations → Coding tools**, select **Copy installation instruction** and paste it into your coding tool. The tool installs the complete `seeend/` Skill from [SeeEnd-skill](https://github.com/YipengChen/SeeEnd-skill) and configures its local integration. Use the same Skill in your tool for verification, diagnostics, repairs, updates, and removal.
-
-The app keeps one shared Skill entry, tool status, and reminder switches. Keep SeeEnd running; no lamp or model API key for SeeEnd is needed. Follow the Skill’s loading, Hook trust, or authorization steps, then verify a new task. Written configuration or simulated events do not prove a working integration. See the [user guide (Chinese)](docs/quick-start.md#编程工具通过-skill-接入).
-
-## Optional hardware
-
-Supports the RGB backlight of the **Yeelight YLTD003 Screen Light Bar Pro** and the **Yeelight YLDP005 W3 color bulb** through the original LAN protocol. Set up Wi-Fi and enable LAN control in the Yeelight App, then select a model in **My devices** and discover it or enter its IP. Multiple lamps can connect simultaneously, with independent connection details, colors, and per-state brightness. Browsing devices keeps connections active; virtual mode pauses all physical connections.
-
-The complete AI Flame 0.1 / 0.2 implementation is preserved on [`archive/ai-flame-2026-10-09`](https://github.com/YipengChen/SeeEnd/tree/archive/ai-flame-2026-10-09). The main branch no longer supports these boards, firmware maintenance, or flame tuning. Upgrading ignores old matrix connection records while retaining Yeelight devices, task history, and preferences.
-
-## Development and tests
-
-JavaScript tests require Node.js (build CI uses 22) and npm. Running the app itself does not require Node.js.
+Python CI uses 3.11 / 3.13. Browser tests also require Node.js (22 in build CI) and npm; the running app does not need Node.js.
 
 ```sh
 python -m unittest discover -s tests -v
@@ -96,13 +62,9 @@ npm ci --ignore-scripts
 npm test
 ```
 
-For headless environments, set `QT_QPA_PLATFORM=offscreen`. Python integration tests create loopback ports and local IPC; the environment must permit those operations. Some Qt tests are skipped if desktop dependencies are not installed.
+For a headless display, set `QT_QPA_PLATFORM=offscreen`. Some tests require loopback sockets, IPC, desktop dependencies, or a frozen Helper artifact. `tests/verify_*_live.py` scripts are manual acceptance tools outside routine regression; check their targets and arguments before running them.
 
-`tests/verify_*_live.py` and `tests/verify_live.py` are manual acceptance tools, separate from the automated tests above. Check their arguments and target environment before running them; some invoke real AI tools or devices.
-
-## Build the desktop app
-
-Build on the target operating system:
+Build on the target operating system, then verify and archive in order:
 
 ```sh
 python -m pip install -e ".[desktop,build]"
@@ -111,88 +73,19 @@ python packaging/verify_frozen.py
 python packaging/archive.py
 ```
 
-Output defaults to `dist/`; the macOS app is `dist/SeeEnd.app`. To use a separate output directory:
+The default output is `dist/SeeEnd.app` plus the platform distribution. Use `--dist-dir dist/staging` consistently on all three commands for a separate output directory. The first build downloads and verifies third-party materials; omit `--download-sources` for subsequent offline builds once those materials are ready. A local C compiler is required. Core modules are compiled with Cython without Python fallback. For core changes, run `python packaging/verify_native.py` first or build with `--verify-native`.
 
-```sh
-python packaging/build.py --download-sources --dist-dir dist/staging
-python packaging/verify_frozen.py --dist-dir dist/staging
-python packaging/archive.py --dist-dir dist/staging
-```
+`SeeEnd-build.json` records versions, source identity, Git state, and third-party material identity. Rebuild after source changes; verification and archiving reject mismatched artifacts. The app ZIP (`.tar.gz` on Linux) is the installation download. Third-party source ZIPs are separate and optional for app users. Signing and release acceptance must be checked against the actual artifact.
 
-The only App download is `SeeEnd-version-platform-architecture.zip` (`.tar.gz` on Linux). It includes the app, runtime dependencies, license notices, and an offline installation guide. `SeeEnd-third-party-sources-version.zip` supplies third-party source and build materials separately; it is not embedded in the App archive. Public download pages should label it “Optional; not required to use the App” and retain its link.
+`python packaging/extension_release.py` generates versioned development packages, a store-submission ZIP, and checksums. Generated packages do not imply submission or publication. The brand icon source is `aiflame/assets/icon.svg`; regenerate derivatives with `python packaging/render_icon.py`, then rebuild.
 
-For a clean checkout, use `--download-sources` to fetch and verify third-party source materials, or run `python packaging/prepare_licenses.py --download` first. Once prepared, omit the option to rebuild offline. Missing or invalid materials stop the build before native compilation. Build dependencies include PyYAML for reading distributor recipes.
+## Documentation and license
 
-The app and release archives contain `SeeEnd-build.json`, recording App and extension versions, Git revision, uncommitted-change status, source fingerprint, platform, architecture, Python version, and third-party material fingerprints. Source or version changes require a rebuild; verification and archiving reject renaming an old app as a new release. The third-party archive selects only verified upstream archives and recipes from its manifest, excluding unrelated cache files.
+- [User guide](docs/quick-start.md): channels, integrations, task return, and devices
+- [Current product baseline](docs/product/CURRENT_PRODUCT.md): implemented scope and compatibility
+- [Architecture](docs/architecture.md): modules, data, and protocol
+- [Validation](docs/validation.md): checks, evidence levels, and historical records
+- [Repositories and releases](docs/REPOSITORIES.md) · [Contributing](CONTRIBUTING.md)
+- [Third-party notices](THIRD_PARTY_NOTICES.md) · [Library replacement](LIBRARY_REPLACEMENT.md)
 
-Run `python packaging/extension_release.py` to stage a versioned unpacked extension, development ZIP, store submission ZIP, and checksum record. The store ZIP puts its manifest at the root and removes `key`; development packages retain the store public key. Historical `docs/chrome-web-store/extension-upload.zip` and the potentially loaded `dist/SeeEnd-Web-extension/` directory remain intact. Staging does not update the store.
-
-Building requires a local C compiler: Xcode Command Line Tools on macOS, Visual Studio C++ Build Tools on Windows, or GCC and the current Python development headers on Linux. `build.py` compiles 22 core modules from `core`, `outputs`, `hub`, `devices`, and `transports` with Cython, verifies that every native module loads, then freezes the application. Failures stop the build without a Python bytecode fallback. Source development continues to use `.py` files; generated C and debug files stay in temporary build directories.
-
-After changing core logic, run `python packaging/verify_native.py` to execute the full regression suite in an isolated directory without core Python sources, or use `python packaging/build.py --verify-native --download-sources` to test and package in one run, as desktop build CI does. Frozen verification checks that protected modules are absent from PYZ and that their `.py`, `.pyc`, and generated C files are excluded. Native compilation raises reverse-engineering cost without guaranteeing protection; UI, integration adapters, and bundled JavaScript remain outside the compiled core.
-
-GitHub Actions runs tests for pushes and PRs. The desktop build workflow supports manual runs and `v*` tag triggers. A successful cross-platform build does not imply acceptance on real machines.
-
-When a local sandbox denies loopback or IPC binding with EPERM/EACCES, native regression lists the affected skipped cases. Frozen verification still executes real helper processes to check ignored/private-invalid inputs, native-message frames and bundle contents, and explicitly reports that HTTP lifecycle delivery remains unverified. Other socket errors fail; CI requires these integration checks. Tests use isolated configuration and do not operate real devices.
-
-The brand icon source is `aiflame/assets/icon.svg`. After installing desktop dependencies and Pillow, run `python packaging/render_icon.py` to regenerate PNG, Windows ICO, and macOS ICNS assets, then rebuild the app. The menu bar flame indicates light status and is separate from the brand icon.
-
-## Project structure
-
-All directories below are inside this repository; documentation lives in `docs/`.
-
-```text
-aiflame/
-  core/           Events, task state machine, storage, user data paths, translations
-  hub/            Local HTTP service and orchestration
-  integrations/   CLI, web, desktop client, and local API integrations
-  outputs/        Light and desktop notification delivery
-  desktop/        Native PySide6 desktop interface
-  devices/        Yeelight discovery, connection, and configuration
-  transports/     Yeelight LAN communication
-  assets/         Desktop UI assets, icons, and translation catalog
-tests/            Automated tests and manual acceptance tools
-packaging/        PyInstaller build and archiving
-setup.py          Source distribution entry point
-docs/             User guide, architecture, historical validation, product materials
-```
-
-- [Architecture and platform boundaries (Chinese)](docs/architecture.md)
-- [Historical validation records (Chinese)](docs/validation.md): results for specific versions and devices; they do not imply that every current environment is verified.
-- [Contributing (Chinese)](CONTRIBUTING.md)
-- [Third-party notices](THIRD_PARTY_NOTICES.md)
-
-## License
-
-Starting with 0.8.4, original project code uses the [SeeEnd proprietary software license](LICENSE). The source repository remains private; previously granted rights are not revoked. Third-party dependencies and brand assets retain their respective licenses and ownership. See [third-party notices](THIRD_PARTY_NOTICES.md).
-
-### Yeelight YLTD003 (Screen Light Bar Pro)
-
-Select **Yeelight YLTD003** in **My devices**. First use the Yeelight App to connect the lamp to 2.4 GHz Wi-Fi and enable **LAN control**. The computer and lamp must be on the same LAN. In hardware mode, discover and select the lamp, or enter its IPv4 address manually. After connecting, use **Test this device** to check the backlight. This model retains its original firmware and uses the Yeelight App for network setup; USB and firmware flashing are unnecessary.
-
-This implementation controls only the rear RGB ambient light. The front white light keeps its existing settings. The default colors are listed below; each state's color and brightness can be adjusted independently:
-
-| AI status | Backlight |
-| --- | --- |
-| Working | Steady blue `#4A90E2`, default brightness 20% |
-| Completed | Steady green `#52C788`, default brightness 50%, for the alert duration; optionally held until user activity |
-| Error / Waiting for input | Steady orange `#FF9F43`, default brightness 50%, for the alert duration |
-| Idle, paused, quiet hours, current state's brightness at 0% | Backlight off |
-
-Under **My devices → Selected device**, set the color and 0–100% brightness independently for Working, Completed, and Error / Waiting for input. These settings affect only the selected device. At 100%, the app sends the lamp's protocol brightness parameter `100` directly, without additional scaling. Setting a state to 0% disables only that state's light alerts; other states retain their own settings. Both Yeelight models hold a steady color at the selected brightness and do not use breathing, pulses, or a **Reduce motion** setting. Each lamp has independent connection, disconnection, test, and receipt records, and can receive task status alongside other Yeelight lamps. Reconnecting does not replay old completion alerts.
-
-Implementation references: [Yeelight official LAN protocol](https://www.yeelight.com/download/Yeelight_Inter-Operation_Spec.pdf), [official Chroma Connector capability detection](https://github.com/Yeelight/Yeelight-Chroma-Connector/blob/main/ChromaBroadcastSampleApplication/ChromaBroadcastSampleApplicationDlg.cpp), and [official product brochure](https://en.yeelight.com/wp-content/uploads/sites/4/2023/08/Yeelight-Fun.pdf). Discovery responses identify compatible lamps through `lamp15`, physical `id`, and the `support` method list. Discovery uses SSDP-style UDP at `239.255.255.250:1982` (manual IPs are queried directly first); control uses CRLF-terminated JSON over TCP `55443`. Automatic reconnection discovers the physical ID again to avoid controlling another lamp after an IP change. A LAN search takes about 4 seconds and sends three queries, 1 second apart, collecting delayed replies on the same UDP socket and deduplicating by physical ID. Targeted IP discovery returns as soon as a valid reply arrives.
-
-The native finite color flow uses `bg_set_scene`, falling back to `bg_set_power` + `bg_start_cf` if the firmware does not declare the former. No front-light commands are sent. The official `action=2` turns off the backlight when a flow ends. Working and held alerts use native flows of at most 30 seconds, renewed every 20 seconds. After an app crash or network interruption, the last successfully submitted flow ends automatically. Commands are separated by at least 1.1 seconds, below the official per-connection quota of 60 commands per minute. The device-wide quota is 144 commands per minute, shared with other software. This version does not perform real-time per-frame UDP synchronization.
-
-Simulated discovery responses, TCP receipts, light behavior, and UI regressions have been tested. Testing on a physical YLTD003 is still pending. If both discovery and manual connection fail, check LAN control availability, router isolation, VPNs, and reachability of UDP 1982 / TCP 55443. A manual IP still requires a discovery response to confirm physical identity and capabilities.
-
-### Yeelight YLDP005 (W3 color bulb)
-
-Select **Yeelight YLDP005** in **My devices**. As with YLTD003, connect it to 2.4 GHz Wi-Fi and enable **LAN control** in the Yeelight App, then discover it or enter its IP manually. Independent tests, disconnection, automatic reconnection, and synchronization with multiple devices are supported. The lamps retain their original firmware.
-
-YLDP005 uses the entire bulb to show task status, with the same default colors and brightness as above: steady blue while working (20%), steady green on completion (50%), and steady orange for errors / input requests (50%). It turns off when idle, paused, during quiet hours, or when the current state's brightness is 0%. Each state's color and 0–100% brightness are set independently; 100% is sent directly without additional scaling. Alert duration and hold-until-activity settings are supported. While connected, SeeEnd uses the bulb for task alerts.
-
-The [official Yeelight product specifications](https://store.yeelight.com/sv/products/yeelight-smart-bulb) identify YLDP005 as the W3 color bulb; the [official Home Assistant device table](https://www.home-assistant.io/integrations/yeelight/) maps its LAN model to `colorb`. It uses the same SSDP discovery and TCP 55443 JSON protocol, but the bulb channel uses `set_scene`, `set_power`, `start_cf`, and `power` / `bright` / `rgb` properties. YLTD003 backlight control continues to use `bg_*` commands. Discovery filters by the selected model and advertised capabilities to avoid connecting the wrong light channel.
-
-Native flow renewal, rate limiting, automatic shutoff, and disconnection handling follow the YLTD003 implementation above. Simulated protocol and UI regression tests have passed. Discovery and TCP status queries have also been verified on a physical W3 reporting `colorb` and discovery firmware version `7`. This unit sometimes gives no reply when the first query is sent immediately after TCP connection; extending the reply timeout alone does not help. The client now waits 0.5 seconds after each connection before sending commands, and five consecutive fresh connections returned valid status replies. This interruptible wait covers both adding a device and automatic reconnection. Physical flow display, renewal, and shutoff still need separate verification.
+Original implementation has used the [SeeEnd Proprietary Software License](LICENSE) since 0.8.4. Earlier granted rights are not revoked. Third-party dependencies and brand assets retain their respective licenses and ownership.

@@ -48,7 +48,6 @@ a = Analysis(
         "numpy",
         "pandas",
         "tkinter",
-        "IPython",
         "pytest",
         "PyQt6",
         "PyQt5",
@@ -122,6 +121,7 @@ if sys.platform == "darwin":
             "LSBackgroundOnly": False,
             "LSUIElement": False,
             "NSHighResolutionCapable": True,
-            "NSLocalNetworkUsageDescription": "SeeEnd 在局域网发现并控制你的 Yeelight 灯光设备。",
+            "NSAppleEventsUsageDescription": "SeeEnd 仅在你返回任务时，读取终端标题和位置，确认唯一匹配后切换对应的 Terminal 标签页或 iTerm2 分屏。",
+            "NSLocalNetworkUsageDescription": "SeeEnd 在局域网发现并控制你的 Yeelight 灯具与米家智能插座。",
         },
     )

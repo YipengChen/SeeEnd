@@ -40,8 +40,9 @@ def event_for(session, turn, state, seq, suffix, reason=None):
 
 
 def from_hook(payload, runtime=None):
+    from aiflame.integrations.cli_tools.lifecycle import session_key
     kind = payload.get("hook_event_name")
-    session, turn = payload.get("session_id"), payload.get("turn_id")
+    session, turn = session_key(payload), payload.get("turn_id")
     if kind == "UserPromptSubmit":
         return event_for(session, turn, "working", 1, "start")
     if kind == "Interrupt":

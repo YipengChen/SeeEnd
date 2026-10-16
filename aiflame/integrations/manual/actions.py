@@ -7,7 +7,7 @@ from aiflame.core.events import EventError, make_event
 
 def test(engine, body):
     state = body.get("state")
-    if state not in ("idle", "working", "done", "error"):
+    if state not in ("idle", "working", "done", "needs_input"):
         raise EventError("测试状态不受支持")
     task = body.get("task_id") or str(uuid.uuid4())
     event = make_event("manual", task, state, body.get("seq", 1), body.get("reason"))
@@ -28,7 +28,7 @@ class DemoTasks:
     def start(self, body):
         c = self.context
         outcome = body.get("outcome", "done")
-        if outcome not in ("done", "error"):
+        if outcome not in ("done", "needs_input"):
             raise EventError("演示结果不受支持")
         if c.engine.muted():
             raise EventError("请先恢复触发", 409)
@@ -59,7 +59,7 @@ class DemoTasks:
                         task,
                         outcome,
                         2,
-                        "completed" if outcome == "done" else "failed",
+                        "completed" if outcome == "done" else None,
                     ),
                     "demo",
                 )

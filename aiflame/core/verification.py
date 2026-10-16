@@ -114,8 +114,6 @@ def verification_summary(engine):
                 if last["reason"] == "timeout" or last["state"] == "timeout"
                 else "unknown"
                 if last["state"] == "unknown"
-                else "error"
-                if last["state"] == "error"
                 else "timeout"
                 if last["state"] == "working"
                 and (

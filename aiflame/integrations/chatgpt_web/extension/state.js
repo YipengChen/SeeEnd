@@ -72,7 +72,7 @@
         }
         else { this.end('idle', 'cancelled', 'navigation'); return; }
       }
-      if (s.error) { this.end('error', 'failed'); return; }
+      if (s.error) { this.end('unknown', 'failed'); return; }
       if (now - a.started > 30 * 60 * 1000) { this.end('idle', 'timeout'); return; }
       // A provider may remove its initial loading marker while streaming the
       // same reply. Keep its lease while that verified reply has no final controls.

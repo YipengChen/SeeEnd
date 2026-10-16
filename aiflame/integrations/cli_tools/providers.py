@@ -22,6 +22,16 @@ PROVIDERS = {
 }
 CLI_SOURCES = {source: provider.name for source, provider in PROVIDERS.items()}
 
+# Official product repositories; Qoder publishes its CLI release notes here.
+REPOSITORY_URLS = {
+    "codex": "https://github.com/openai/codex",
+    "claude-code": "https://github.com/anthropics/claude-code",
+    "qoder": "https://github.com/QoderAI/changelog-CLI",
+    "deepseek-harness": "https://github.com/deepseek-ai/deepseek-harness",
+    "gemini-cli": "https://github.com/google-gemini/gemini-cli",
+    "opencode": "https://github.com/anomalyco/opencode",
+}
+
 
 def config_directory(source, override=None):
     if override:

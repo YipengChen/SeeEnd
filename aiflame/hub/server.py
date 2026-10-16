@@ -24,9 +24,11 @@ from aiflame.integrations.manual.actions import DemoTasks, test as manual_test
 from aiflame.integrations.chatgpt_web.downloads import extension_archive, extension_folder_info, prepare_extension_folder
 from aiflame.integrations.chatgpt_web.host import WEB_SOURCES
 from aiflame.integrations.testing import TriggerTests
-from aiflame.integrations.registry import SOURCES, integration_contract
-from aiflame.integrations.desktop_clients.service import DesktopClients
+from aiflame.integrations.registry import BACKGROUND_SOURCES, SOURCES, integration_contract
 from aiflame.integrations.cli_tools.providers import CLI_SOURCES
+from aiflame.integrations.wechat.service import WechatService
+from aiflame.outputs.wechat import WechatOutput
+from aiflame.hub.task_returns import TaskReturns
 
 
 class Hub:
@@ -40,7 +42,15 @@ class Hub:
         self.runtime = runtime or ensure_runtime()
         self.config = config if config is not None else load_config()
         self.lock = threading.RLock()
+        self.task_returns = TaskReturns()
         self.engine = Engine(self.runtime / "events.sqlite", sources=SOURCES)
+        enabled = self.engine.settings["source_enabled"]
+        if any(not enabled[source] for source in BACKGROUND_SOURCES):
+            self.engine.update_settings({
+                "source_enabled": {**enabled, **dict.fromkeys(BACKGROUND_SOURCES, True)}
+            })
+        self.wechat = WechatService(self)
+        self.engine.router.register(WechatOutput(self.wechat))
         self.transport = TransportManager(self.engine.flame, self.lock, self.config)
         self.engine.flame.transport = self.transport
         self.devices = DeviceService(
@@ -49,7 +59,6 @@ class Hub:
         self.tests = TriggerTests(self)
         self.limits = {}
         self.demos = DemoTasks(self)
-        self.desktop_clients = DesktopClients(self)
         self.server = None
         self.thread = None
         self.hardware_enabled = False
@@ -70,8 +79,7 @@ class Hub:
         self.thread.start()
         self.lifecycle_thread.start()
         self.activity_monitor.start()
-        if hardware:
-            self.desktop_clients.start()
+        self.wechat.start()
 
     def _lifecycle_loop(self):
         while not self.stopping.wait(0.5):
@@ -86,21 +94,23 @@ class Hub:
                 raise EventError("应用正在退出", 409)
             with self.lock:
                 settings = self.engine.validate_settings(patch)
-                changed = settings["mode"] != self.engine.settings["mode"]
+                changed = settings["hardware_notifications"] != self.engine.settings["hardware_notifications"]
             if changed and (self.devices.busy() or self.tests.busy()):
-                raise EventError("请等待设备操作或诊断结束后再切换模式", 409)
+                raise EventError("请等待设备操作或诊断结束后再切换设备提醒", 409)
             if changed:
+                self.devices.close()
                 self.transport.suspend()
             with self.lock:
                 self.engine.update_settings(patch)
                 if changed:
                     self.engine.device.update(
                         online=False, last_error=None,
-                        connecting=bool(settings["mode"] == "hardware" and self.hardware_enabled and self.config.get("device_id")),
-                        status="虚拟模式" if settings["mode"] == "virtual" else "正在连接设备" if self.hardware_enabled and self.config.get("device_id") else "未连接设备",
+                        connecting=bool(settings["hardware_notifications"] and self.hardware_enabled and self.config.get("device_id")),
+                        status="设备提醒已关闭" if not settings["hardware_notifications"] else "正在连接设备" if self.hardware_enabled and self.config.get("device_id") else "未连接设备",
                     )
             if changed and self.hardware_enabled:
                 self.transport.start()
+            self.wechat.settings_changed()
             with self.lock:
                 return self.engine.snapshot()
 
@@ -109,13 +119,15 @@ class Hub:
             if self.devices.busy():
                 raise RuntimeError("设备操作正在进行，请等待完成后退出")
             self.stopping.set()
+            self.task_returns.close()
+            self.devices.close()
             with self.lock:
                 self.engine.cancel_preview()
+        self.wechat.stop()
         if self.lifecycle_thread.is_alive():
             self.lifecycle_thread.join(timeout=2)
         if self.activity_monitor.is_alive():
             self.activity_monitor.join(timeout=2)
-        self.desktop_clients.stop()
         if self.tests.thread:
             self.tests.thread.join(timeout=12)
         if self.server:
@@ -233,6 +245,23 @@ class Handler(BaseHTTPRequestHandler):
                 return
             identity = self.identity()
             c = self.c
+            path = urlsplit(self.path).path
+            if path == "/v1/task-return/poll":
+                if identity != "chatgpt-web":
+                    raise EventError("需要浏览器桥接凭据", 403)
+                query = parse_qs(urlsplit(self.path).query, keep_blank_values=True)
+                if set(query) != {"client_id", "connection_id"} or any(len(v) != 1 for v in query.values()):
+                    raise EventError("浏览器返回查询错误")
+                self.reply(200, c.task_returns.poll(query["client_id"][0], query["connection_id"][0]))
+                return
+            if path == "/api/task-return":
+                if identity != "dashboard":
+                    raise EventError("需要桌面 App 会话", 403)
+                query = parse_qs(urlsplit(self.path).query, keep_blank_values=True)
+                if set(query) != {"request_id"} or len(query["request_id"]) != 1:
+                    raise EventError("任务返回查询错误")
+                self.reply(200, c.task_returns.status(query["request_id"][0]))
+                return
             if urlsplit(self.path).path in ("/api/integration-contract", "/api/verification-evidence"):
                 if identity != "dashboard":
                     raise EventError("需要桌面 App 会话", 403)
@@ -286,9 +315,6 @@ class Handler(BaseHTTPRequestHandler):
                                              verification=verification_summary(c.engine))
                 self.reply(200, result)
                 return
-            if identity == "dashboard" and self.path == "/api/desktop-clients":
-                self.reply(200, c.desktop_clients.status())
-                return
             if identity == "dashboard" and urlsplit(self.path).path == "/api/device":
                 query = parse_qs(urlsplit(self.path).query, keep_blank_values=True)
                 self.reply(200, c.devices.status(query.get("model", [None])[0], query.get("device_id", [None])[0]))
@@ -315,14 +341,15 @@ class Handler(BaseHTTPRequestHandler):
                     self.reply(
                         200,
                         {
+                            "latest_task": c.engine.latest_task(),
                             "display": {
                                 key: value
                                 for key, value in c.engine.display_status().items()
-                                if key in ("state", "simulated")
+                                if key in ("state", "task_state", "simulated", "return_task")
                             },
                             "settings": {
                                 key: c.engine.settings[key]
-                                for key in ("paused", "brightness", "mode", "language")
+                                for key in ("brightness", "hardware_notifications", "language", "desktop_flame_enabled", "reduced")
                             },
                             "emergency": c.engine.emergency,
                             "muted": c.engine.muted(),
@@ -334,13 +361,14 @@ class Handler(BaseHTTPRequestHandler):
                             "hardware_model": c.config.get("hardware_model", DEFAULT_MODEL),
                         },
                     )
-                elif self.path == "/api/status" and identity == "dashboard":
+                elif self.path in ("/api/status", "/api/status/live") and identity == "dashboard":
                     self.reply(
                         200,
                         {
-                            **c.engine.snapshot(),
+                            **c.engine.snapshot(include_history=self.path == "/api/status"),
                             "app_version": __version__,
                             "app_name": "SeeEnd",
+                            "wechat": c.wechat.snapshot(),
                             "maintenance": c.devices.busy(),
                             "hardware_paired": bool(c.transport.records),
                             "devices": c.transport.snapshot(),
@@ -361,7 +389,6 @@ class Handler(BaseHTTPRequestHandler):
                                 identity, False
                             ),
                             "device_online": c.engine.device["online"],
-                            "muted": c.engine.muted(),
                         },
                     )
                 elif self.path.startswith("/v1/events/"):
@@ -432,8 +459,33 @@ class Handler(BaseHTTPRequestHandler):
                     response, code = c.engine.accept(body, identity)
                 self.reply(code, response)
                 return
+            if self.path in ("/v1/task-return/connect", "/v1/task-return/result"):
+                if identity != "chatgpt-web":
+                    raise EventError("需要浏览器桥接凭据", 403)
+                if self.path.endswith("/connect"):
+                    if set(body) != {"client_id"}:
+                        raise EventError("浏览器返回连接错误")
+                    self.reply(200, c.task_returns.register(body["client_id"]))
+                else:
+                    if set(body) != {"client_id", "connection_id", "request_id", "status"} or any(not isinstance(v, str) for v in body.values()):
+                        raise EventError("浏览器返回回执错误")
+                    self.reply(200, c.task_returns.result(**body))
+                return
             if identity != "dashboard":
                 raise EventError("需要桌面 App 会话", 403)
+            if self.path == "/api/task-return":
+                if set(body) != {"event_id"} or not isinstance(body["event_id"], str):
+                    raise EventError("请选择要返回的任务")
+                with c.lock:
+                    destination, source = c.engine.return_target(body["event_id"])
+                def is_current():
+                    with c.lock:
+                        return not c.stopping.is_set() and c.engine.origins.current(destination)
+                self.reply(200, c.task_returns.open(body["event_id"], destination, source, is_current))
+                return
+            if self.path == "/api/wechat":
+                self.reply(200, c.wechat.action(body))
+                return
             if self.path == "/api/browser-extension/prepare":
                 if body:
                     raise EventError("准备扩展文件夹不接受额外字段")
@@ -454,11 +506,6 @@ class Handler(BaseHTTPRequestHandler):
             if self.path == "/api/notifications/ack":
                 with c.lock:
                     self.reply(200, c.engine.desktop.acknowledge(body))
-                return
-            if self.path == "/api/desktop-clients/permissions":
-                if body:
-                    raise EventError("权限请求不接受额外字段")
-                self.reply(200, c.desktop_clients.request_permissions())
                 return
             if self.path in ("/api/integrations/install", "/api/integrations/uninstall"):
                 source = body.get("source")
@@ -523,7 +570,7 @@ class Handler(BaseHTTPRequestHandler):
                             from aiflame.integrations.chatgpt_web.install import install
 
                             install("chrome")
-                            message = "通信配置已准备。请刷新 AI 对话网页，并发送一条新提问验证；配置完成还不代表网页接入已验证。"
+                            message = "连接设置已完成。刷新 AI 网页后，即可接收新任务的提醒。"
                         else:
                             raise EventError("接入方式不受支持")
                 except json.JSONDecodeError as error:
@@ -540,13 +587,17 @@ class Handler(BaseHTTPRequestHandler):
                 with c.operation_lock:
                     self.reply(200, c.devices.update_light_settings(body))
                 return
+            if self.path == "/api/device/mijia":
+                with c.operation_lock:
+                    self.reply(202, c.devices.mijia_action(body))
+                return
             if self.path == "/api/device/test-light":
-                if set(body) != {"device_id"}:
+                if "device_id" not in body or set(body) - {"device_id", "state"}:
                     raise EventError("请选择要试亮的设备")
                 with c.operation_lock:
-                    if c.devices.busy() or c.tests.busy():
+                    if body.get("state") != "stop" and (c.devices.busy() or c.tests.busy()):
                         raise EventError("请等待设备维护或诊断结束", 409)
-                    self.reply(202, c.transport.test_light(body["device_id"]))
+                    self.reply(202, c.transport.test_light(body["device_id"], body.get("state")))
                 return
             if self.path == "/api/device/delete":
                 with c.operation_lock:

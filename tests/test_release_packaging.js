@@ -8,6 +8,38 @@ function python(script) {
     'import sys\nsys.path.insert(0, ' + JSON.stringify(packaging) + ')\n' + script], {encoding:'utf8'}).trim();
 }
 
+test('restricted-test inspection preserves unindented multiline payloads and detects actual Hub setup', () => {
+  assert.equal(python(`
+import importlib.util, tempfile
+from pathlib import Path
+from verify_native import test_starts_hub
+source = "\\n".join([
+    'import unittest',
+    'class Plain(unittest.TestCase):',
+    '    def test_payload(self):',
+    "        payload = '''",
+    'Hub().start(hardware=False)',
+    "'''",
+    '        self.assertTrue(payload)',
+    'class Network(unittest.TestCase):',
+    '    def setUp(self):',
+    '        self.hub = Hub()',
+    '        self.hub.start(hardware=False)',
+    '    def test_request(self):',
+    '        pass',
+])
+with tempfile.TemporaryDirectory() as work:
+    path = Path(work) / 'fixture.py'
+    path.write_text(source)
+    spec = importlib.util.spec_from_file_location('seeend_packaging_fixture', path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    assert not test_starts_hub(module.Plain('test_payload'))
+    assert test_starts_hub(module.Network('test_request'))
+print('ok')
+`), 'ok');
+});
+
 test('extension staging is reproducible, keeps the development key and preserves historical packages', () => {
   assert.equal(python(`
 import hashlib, json, tempfile, zipfile

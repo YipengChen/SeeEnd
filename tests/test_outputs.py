@@ -12,6 +12,7 @@ class OutputTests(unittest.TestCase):
         self.engine = Engine(':memory:', lambda: self.now, lambda: self.wall,
                              sources=[SourcePolicy('test', 'Test', 'test')])
         self.addCleanup(self.engine.db.close)
+        self.engine.update_settings({'desktop_notifications': True})
 
     def event(self, state, seq=1, task='task', **extra):
         event = make_event('test', task, state, seq)
@@ -49,7 +50,7 @@ class OutputTests(unittest.TestCase):
         self.assertEqual(self.send('working', 2)['phase'], 'renewed')
         self.assertEqual(self.engine.desktop.claim(), [])
         self.send('needs_input', 3)
-        self.assertEqual(self.engine.desired()['state'], 'error')
+        self.assertEqual(self.engine.desired()['state'], 'needs_input')
         self.assertEqual(self.engine.snapshot()['tasks'][0]['state'], 'needs_input')
         self.assertEqual(self.send('working', 4)['phase'], 'resumed')
         self.assertEqual(self.engine.desired()['state'], 'working')
@@ -112,7 +113,7 @@ class OutputTests(unittest.TestCase):
 
     def test_queue_victim_receipt_is_not_overwritten(self):
         for i in range(20):
-            self.send('error', task=str(i))
+            self.send('needs_input', task=str(i))
         result = self.send('done', task='overflow')
         self.assertEqual(result['deliveries']['flame'], 'dropped')
         self.assertEqual(result['deliveries']['desktop'], 'pending')
@@ -137,6 +138,7 @@ class OutputTests(unittest.TestCase):
         self.assertEqual(states[second], 'applied')
 
     def test_legacy_queued_start_is_reconciled_and_real_queue_is_explained(self):
+        self.engine.update_settings({"hold_until_activity": False})
         self.engine.device['online'] = True
         start = self.send('working')['event_id']
         completion = self.send('done', 2)['event_id']
@@ -163,11 +165,11 @@ class OutputTests(unittest.TestCase):
         row = next(event for event in self.engine.snapshot()['events'] if event['id'] == waiting)
         self.assertEqual(row['delivery_summary']['reason'], '排队中，当前完成提醒等待键鼠活动结束')
 
-    def test_pausing_does_not_erase_acknowledged_history(self):
+    def test_shutdown_does_not_erase_acknowledged_history(self):
         self.engine.device['online'] = True
         event_id = self.send('done')['event_id']
         self.engine.applied(self.engine.desired(), {'result': 'applied'})
-        self.engine.update_settings({'paused': True})
+        self.engine.stop()
         row = next(event for event in self.engine.snapshot()['events'] if event['id'] == event_id)
         self.assertEqual(row['status'], 'applied')
 

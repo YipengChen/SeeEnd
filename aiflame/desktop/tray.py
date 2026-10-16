@@ -11,10 +11,8 @@ from .localization import t, set_language
 def light_status(data):
     state, title = _light_status(data)
     if data:
-        if data["settings"].get("mode") == "hardware" and not data["device"]["online"]:
-            title += " · 正在连接设备 · 屏幕提醒" if data["device"].get("connecting") and not data["maintenance"] else " · 硬件未连接 · 屏幕提醒"
-        elif data["settings"].get("mode") == "virtual":
-            title += " · 虚拟模式 · 屏幕提醒"
+        if data["settings"].get("hardware_notifications") and not data["device"]["online"]:
+            title += " · 正在连接设备" if data["device"].get("connecting") and not data["maintenance"] else " · 设备未连接"
     return state, title
 
 
@@ -24,21 +22,17 @@ def _light_status(data):
     settings = data["settings"]
     if data["maintenance"]:
         return "maintenance", "设备维护中"
-    if settings["paused"]:
-        return "paused", "灯光提醒已暂停"
     if data.get("brightness_off", settings["brightness"] == 0):
         return "off", "灯光已熄灭 · 亮度为 0%"
-    if data["muted"]:
-        return "quiet", "静默时段"
-    state = data["display"]["state"]
+    state = data["display"].get("task_state", data["display"]["state"])
     title = {
         "idle": "当前无任务",
         "working": "任务进行中",
         "done": "任务已完成",
-        "error": "需关注",
+        "needs_input": "等待输入",
     }.get(state)
     if title and data["display"].get("simulated"):
-        title += " · 含测试提醒，不计入验证"
+        title += " · 测试提醒"
     return (state, title) if title else ("unavailable", "灯光状态未知")
 
 
@@ -46,11 +40,11 @@ def status_icon(state, dark=False):
     """Use both silhouette and badges, so color is not the only status cue."""
     ink = "#eee8db" if dark else "#353b32"
     rim = "#252a24" if dark else "#fffaf0"
-    active = state in ("working", "done", "error")
-    fill = {"working": "#d78e36", "done": "#ffc16b", "error": "#ef775d"}.get(
+    active = state in ("working", "done", "needs_input")
+    fill = {"working": "#d78e36", "done": "#ffc16b", "needs_input": "#ef775d"}.get(
         state, "none"
     )
-    scale = 0.91 if state in ("done", "error") else 0.70
+    scale = 0.91 if state in ("done", "needs_input") else 0.70
     # Keep the light-state flame distinct from the app's eye-shaped brand icon.
     flame = ICONS["flame"]
     body = (
@@ -60,9 +54,7 @@ def status_icon(state, dark=False):
     )
     badge = {
         "done": '<path d="m15 17 2 2 3.5-4"/>',
-        "error": '<path d="M18 13.5v4m0 2v.1"/>',
-        "paused": '<path d="M16.4 14v5m3.2-5v5"/>',
-        "quiet": '<path d="M19 13a3.5 3.5 0 1 0 2 5 3.8 3.8 0 0 1-2-5z"/>',
+        "needs_input": '<path d="M18 13.5v4m0 2v.1"/>',
         "off": '<path d="m15.5 19 5-5"/>',
         "offline": '<path d="m16 15 4 4m0-4-4 4"/>',
         "unavailable": '<path d="M16.5 15a1.5 1.5 0 0 1 3 0c0 1-1.5 1-1.5 2m0 2v.1"/>',
@@ -147,10 +139,6 @@ class TrayIndicator(QObject):
             set_language(data["settings"].get("language", "zh-CN"))
         self.refresh_icon()
         self.state_changed.emit(data)
-
-    def set_paused(self, paused):
-        if not self.closed and self.data is not None:
-            self.dashboard.act("/api/settings", {"paused": paused})
 
     def refresh_icon(self, _scheme=None):
         if self.closed:

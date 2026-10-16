@@ -1,4 +1,4 @@
-"""Opt-in hardware state and emergency-off checks; importing does not run them."""
+"""Opt-in hardware task-state checks; importing does not run them."""
 
 from pathlib import Path
 import sys
@@ -41,21 +41,22 @@ def main():
     targets = hardware_targets(original, device_ids)
     report.append("Physical targets: " + ", ".join(targets))
     assert client.request("/api/settings", {"duration": 3})[0] == 200
+    tasks = []
     try:
-        for mode in ("working", "done", "error"):
+        for mode in ("working", "done", "needs_input"):
             code, r = client.request("/api/test", {"state": mode})
             assert code == 202
+            tasks.append(r["task_id"])
             wait_for_state(client, mode, targets, event_id=r["event_id"])
             report.append(mode + " hardware applied ACK: PASS")
-            if mode in ("done", "error"):
+            if mode in ("done", "needs_input"):
                 time.sleep(3.3)
-        # Pausing turns the physical device off.
-        client.call("/api/settings", {"paused": True})
-        # Fleet confirmation checks the new muted display key on every active lamp.
+        for task in tasks:
+            client.call("/api/test", {"state": "idle", "seq": 2, "task_id": task})
         wait_for_state(client, "idle", targets)
-        report.append("Pause hardware ACK: PASS")
+        report.append("Idle hardware ACK: PASS")
     finally:
-        client.request("/api/settings", {"paused": False, "duration": original["settings"]["duration"]})
+        client.request("/api/settings", {"duration": original["settings"]["duration"]})
     (ensure_runtime() / "live-test.txt").write_text("\n".join(report) + "\n")
     print("\n".join(report))
 

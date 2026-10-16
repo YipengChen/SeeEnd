@@ -1,5 +1,6 @@
 """Fan out admitted task events and keep a separate receipt for every output."""
 from copy import deepcopy
+import json
 
 
 class OutputRouter:
@@ -45,6 +46,10 @@ class OutputRouter:
             results[name] = status
         return results
 
-    def snapshot(self):
+    def snapshot(self, event_ids=None):
+        if event_ids is not None:
+            return [dict(row) for row in self.db.execute(
+                "SELECT * FROM deliveries WHERE event IN (SELECT value FROM json_each(?)) ORDER BY updated DESC",
+                (json.dumps(list(event_ids)),))]
         return [dict(row) for row in self.db.execute(
             "SELECT * FROM deliveries WHERE event IN (SELECT id FROM events ORDER BY created DESC, rowid DESC LIMIT 50) ORDER BY updated DESC")]

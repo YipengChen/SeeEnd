@@ -1,5 +1,7 @@
 # 工作区维护资料备份
 
+> 历史记录：本文的“当前”“最新”和验证结果均指记录当时，不代表 0.8.55 或远端现状。当前入口见 [文档索引](README.md)，本轮审校见 [0.8.55 报告](CONTENT_AUDIT_0.8.55.md)。
+
 三个仓库以外的工作区内容没有独立 Git 远端。本次新增／更新的根目录索引、旧 docs 跳转、仓库对齐工具、模型共享脚本、打印说明、清理记录和历史归档，作为维护包上传到本私有仓库的 [workspace-2026-10-10 发布页](https://github.com/YipengChen/SeeEnd/releases/tag/workspace-2026-10-10)。
 
 附件名为 SeeEnd-workspace-maintenance-2026-10-10.zip，内部保留相对于工作区根目录的路径；维护清单列出逐文件 SHA-256。恢复前对照清单，选择所需文件解压到三个仓库的共同上级目录。包内 tools/check_workspace.py 支持 prepared 和已经核验的 published 状态。

@@ -7,7 +7,7 @@ from aiflame.core.events import EventError
 
 class DesktopOutput:
     name = "desktop"
-    LABELS = {"done": "任务已完成", "error": "任务出错", "needs_input": "任务等待你的输入",
+    LABELS = {"done": "任务已完成", "needs_input": "任务等待你的输入",
               "cancelled": "任务已取消", "timeout": "任务已超时", "unknown": "任务状态未知"}
 
     def __init__(self, core):
@@ -32,6 +32,8 @@ class DesktopOutput:
             self.db.execute("DELETE FROM notification_outbox WHERE event=?", (row["event"],))
         self.db.commit()
         state = event["state"]
+        if state == "unknown" and event.get("reason") == "failed":
+            return "not_requested"
         if state not in self.LABELS:
             return "not_requested"
         source = self.core.sources.get(event["source_id"])

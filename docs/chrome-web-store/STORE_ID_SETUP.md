@@ -1,17 +1,9 @@
 # SeeEnd 商店扩展 ID 对接
 
-> 历史提交资料：扩展 0.2.8 / 当时桌面版本；保留提交事实与原操作。当前 0.2.10 待提交资料见 prepared/0.2.10/，本地修订不表示重新提交。
+商店 ID 为 `miokmdeomlchjpihkcnommpnheagoimc`，公钥保存在 `store-public-key.txt`，源码 manifest 的 key 用于保持开发加载时的 ID 一致。商店格式 ZIP 移除 key；版本化开发包保留它。
 
-商店 ID：`miokmdeomlchjpihkcnommpnheagoimc`。公钥由后台“文件包 → 查看公钥”取得，保存在 store-public-key.txt。已验证公钥哈希与 Item ID 一致，并同步源码 manifest.json 的 key。
+桌面桥接还兼容旧开发 ID `hifannlfdbbhmmgecknoakpbhfihihbg`，用于迁移，不使用通配符。更新已注册桥接时，宿主名称、stdio 类型、应用路径与允许来源均须符合归属检查；同名配置不属于 SeeEnd 时拒绝覆盖。
 
-桌面桥接允许商店 ID 及原开发 ID `hifannlfdbbhmmgecknoakpbhfihihbg`，用于迁移兼容，不含通配符。原有注册必须使用相同宿主名称、stdio 类型、SeeEnd 启动路径和已知来源，才允许更新；宿主本身也校验调用来源。来源或路径不符的同名配置会拒绝修改。
+用户按 [使用指南](../quick-start.md) 的商店引导操作。开发验收运行 `packaging/extension_release.py`，在 `chrome://extensions/` 加载生成的版本化扩展目录；重新加载后刷新网页、连接桥接并发起一条新任务。不要删除仍被浏览器加载的目录。旧 `SeeEnd/BrowserExtension` 和 `dist/SeeEnd-Web-extension` 属历史安装位置，不能作为新版本的固定路径。
 
-新桌面应用已重新构建，11 项桥接测试及打包产物生命周期验证通过。当前应用请在「应用接入 → 安装浏览器扩展」按四步引导操作；第 4 步「连接并验证网站」先选网站，再允许连接、开启提醒，并通过「在 Chrome 打开」开始新任务验证。
-
-商店上传包 extension-upload.zip 不含 key，符合后台要求。应用内提供的开发加载包保留商店公钥，可取得与商店一致的 ID。当前 dist/SeeEnd-Web-extension 是浏览器已加载的原开发版本，暂时保留其 ID。
-
-提交审核前仍需：公开托管匹配商店 ID 的桌面应用，提供隐私政策网址，完成商店 ID 开发加载或商店安装后的真实 working → done 和停止取消验证。当时的提交与审核记录见 APPLICATION_STATUS.md；当前入口尚未确认可以直接安装。
-
-公钥和 ID 的官方流程：[保持一致的扩展 ID](https://developer.chrome.com/docs/extensions/reference/manifest/key)。
-
-应用现在直接准备固定的扩展目录，无需用户下载和解压；操作图文教程在桌面 App 内打开，使用真实 App 与 Chrome 截图，不依赖网页版控制台。扩展安装目录为独立的 SeeEnd/BrowserExtension。ZIP 下载接口保留用于开发和兼容用途。
+当前源码扩展为 0.2.12；本地生成、公开上传、商店提交和审核通过是不同阶段。后台结果仅按 [日期化记录](APPLICATION_STATUS.md) 确认，本轮未联网刷新。

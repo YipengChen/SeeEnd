@@ -52,6 +52,7 @@ class TrialTests(unittest.TestCase):
         return self.engine.snapshot()["verification"][source]
 
     def test_offline_completion_uses_duration_and_never_fakes_device_ack(self):
+        self.engine.update_settings({"hold_until_activity": False})
         self.send("working")
         self.send("working", task="other")
         self.assertEqual(self.engine.snapshot()["display"]["state"], "working")
@@ -66,6 +67,7 @@ class TrialTests(unittest.TestCase):
         self.assertEqual(self.engine.desired()["state"], "working")
 
     def test_device_connection_does_not_replay_offline_prompts(self):
+        self.engine.update_settings({"hold_until_activity": False})
         self.send("done", source="local-script")
         self.engine.snapshot()
         self.send("done", task="queued", source="local-script")
@@ -94,8 +96,8 @@ class TrialTests(unittest.TestCase):
         self.send("done", task="b", seq=2, source="local-script")
         self.assertEqual(self.summary("local-script")["status"], "incomplete")
         self.send("working")
-        self.send("error", seq=2)
-        self.assertEqual(self.summary()["status"], "error")
+        self.send("unknown", seq=2)
+        self.assertEqual(self.summary()["status"], "unknown")
         self.send("working", task="cancel")
         self.send("done", task="cancel", seq=2)
         self.assertEqual(self.summary()["status"], "verified")
@@ -131,7 +133,7 @@ class TrialTests(unittest.TestCase):
         self.assertEqual(self.summary()["status"], "verified")
 
     def test_muted_real_evidence_separates_detection_and_delivery(self):
-        self.engine.update_settings({"paused": True})
+        self.engine.stop()
         self.send("working")
         self.send("done", seq=2)
         summary = self.summary()
@@ -178,6 +180,7 @@ class TrialTests(unittest.TestCase):
         self.assertEqual(self.engine.desired()["state"], "idle")
 
     def test_previous_same_state_ack_does_not_confirm_new_prompt(self):
+        self.engine.update_settings({"hold_until_activity": False})
         self.engine.device["online"] = True
         self.send("done", source="local-script")
         self.engine.applied(

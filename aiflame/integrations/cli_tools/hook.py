@@ -4,6 +4,7 @@ import json
 import sys
 import argparse
 from aiflame.integrations.cli_tools.lifecycle import from_hooks, deliver
+from aiflame.integrations.cli_tools.origin import prepare
 
 
 class SilentParser(argparse.ArgumentParser):
@@ -19,8 +20,11 @@ def main():
         parser.add_argument("--port", type=int, default=8765)
         args = parser.parse_args()
         source = args.source
-        for event in from_hooks(args.source, json.load(sys.stdin)):
+        payload, origin = prepare(json.load(sys.stdin), args.source)
+        for event in from_hooks(args.source, payload):
             try:
+                if origin:
+                    event["return_target"] = origin
                 deliver(event, args.port)
             except Exception:
                 pass

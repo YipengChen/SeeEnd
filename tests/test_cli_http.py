@@ -56,6 +56,7 @@ class CliHttpTests(unittest.TestCase):
             code, _ = self.client.request("/api/integrations/install", body)
             self.assertEqual(code, 400)
 
+    @patch.dict(os.environ, {"TERM_PROGRAM": "Apple_Terminal", "TERM_SESSION_ID": "seeend-simulation"})
     def test_all_cli_helpers_reach_hub_without_counting_as_real_tasks(self):
         enabled = dict(self.hub.engine.settings["source_enabled"])
         enabled.update({source: True for source in CLI_SOURCES})
@@ -80,6 +81,7 @@ class CliHttpTests(unittest.TestCase):
                 self.assertTrue(all(event["simulated"] for event in status["events"]
                                     if event["source"] == source))
 
+    @patch.dict(os.environ, {"TERM_PROGRAM": "Apple_Terminal", "TERM_SESSION_ID": "seeend-simulation"})
     def test_codex_and_web_self_tests_use_the_ephemeral_hub_port(self):
         self.assertNotEqual(self.hub.port, 8765)
         for source in ('codex', 'chatgpt-web'):
@@ -99,7 +101,8 @@ class CliHttpTests(unittest.TestCase):
         executable = os.environ["AIFLAME_TEST_FROZEN_HELPER"]
         enabled = {**self.hub.engine.settings["source_enabled"],
                    **{source: True for source in CLI_SOURCES}}
-        self.client.call("/api/settings", {"source_enabled": enabled, "duration": 3})
+        self.client.call("/api/settings", {"source_enabled": enabled, "duration": 3,
+                                           "hold_until_activity": False})
         for source in CLI_SOURCES:
             kinds = (("BeforeAgent", "AfterAgent") if source == "gemini-cli"
                      else ("TurnStart", "TurnEnd") if source in ("opencode", "deepseek-harness")

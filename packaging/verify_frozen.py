@@ -133,18 +133,21 @@ def main():
     app_archive = CArchiveReader(str(helper))
     pyz = next(name for name in app_archive.toc if name.endswith(".pyz"))
     modules = app_archive.open_embedded_archive(pyz).toc
+    if "aiflame.integrations.codex.return_location" not in modules:
+        raise RuntimeError("Codex on-demand return resolver was not bundled")
     verify_native_payload(helper, modules)
     retired = ("esptool", "mpremote", "serial", "aiflame.devices.firmware",
-               "aiflame.transports.usb", "aiflame.transports.wifi", "aiflame.hub.tuning")
+               "aiflame.transports.usb", "aiflame.transports.wifi", "aiflame.hub.tuning",
+               "aiflame.integrations.desktop_clients")
     if any(name == prefix or name.startswith(prefix + ".") for name in modules for prefix in retired):
-        raise RuntimeError("Removed AI Flame modules were bundled")
+        raise RuntimeError("Retired modules were bundled")
     if sys.platform == "darwin" and (helper.parent.parent / "Resources/third_party/esptool").exists():
         raise RuntimeError("Removed esptool executable was bundled")
     resources = helper.parent.parent / "Resources" if sys.platform == "darwin" else helper.parent / "_internal"
     assets = resources / "aiflame/assets"
     if (assets / "web").exists():
         raise RuntimeError("Removed web console assets were bundled")
-    for filename in ("brands/codex.png", "devices/yeelight-yldp005.svg", "locales/en.json"):
+    for filename in ("brands/codex.png", "devices/yeelight-yldp005.svg", "devices/yeelight-ylfwd0021.svg", "devices/mijia-zncz301kk.svg", "locales/en.json"):
         if not (assets / filename).is_file():
             raise RuntimeError("Missing shared desktop resource: " + filename)
     print("Web console is absent; shared desktop icons and translations are bundled.")
@@ -158,7 +161,9 @@ def main():
     environment = {**os.environ, "AIFLAME_TEST_FROZEN_HELPER": str(helper)}
     result = subprocess.call(
         [sys.executable, "-m", "unittest",
-         "test_cli_http.CliHttpTests.test_frozen_helpers_deliver_real_lifecycle", "-v"],
+         "test_cli_http.CliHttpTests.test_frozen_helpers_deliver_real_lifecycle",
+         "test_task_return.ReturnHttpTests.test_codex_helper_metadata_reaches_authenticated_hub_and_explicit_return",
+         "test_task_return.ReturnHttpTests.test_actual_native_helper_delivers_return_commands_and_receipts", "-v"],
         cwd=root / "tests",
         env={**environment, "PYTHONPATH": str(root)},
     )

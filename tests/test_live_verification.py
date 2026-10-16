@@ -9,7 +9,7 @@ from verify_live import wait_for_state
 class LiveVerificationTests(unittest.TestCase):
     def snapshot(self):
         return {
-            "settings": {"mode": "hardware", "paused": False}, "emergency": False,
+            "settings": {"hardware_notifications": True}, "emergency": False,
             "devices": [{"device_id": key, "online": True, "connection_paused": False,
                          "light_settings": {"brightness": 20}, "session_id": key,
                          "connected_at": 1} for key in ("one", "two")],
@@ -33,8 +33,7 @@ class LiveVerificationTests(unittest.TestCase):
     def test_targets_require_hardware_connected_nonzero_sessions(self):
         original = self.snapshot()
         for mutation in (
-            lambda s: s["settings"].update(mode="virtual"),
-            lambda s: s["settings"].update(paused=True),
+            lambda s: s["settings"].update(hardware_notifications=False),
             lambda s: s.update(emergency=True),
             lambda s: s["display"].update(key="muted"),
             lambda s: s["devices"][1].update(online=False),
@@ -55,10 +54,9 @@ class LiveVerificationTests(unittest.TestCase):
         snapshot["devices"][1]["online"] = False
         self.assertFalse(targets_connected(snapshot, targets))
 
-    def test_pause_confirmation_uses_fleet_display_instead_of_global_seq(self):
+    def test_idle_confirmation_uses_fleet_display_instead_of_global_seq(self):
         snapshot = self.snapshot()
         targets = hardware_targets(snapshot)
-        snapshot["settings"]["paused"] = True
         snapshot["display"] = {"state": "idle", "device_confirmed": True}
         snapshot["last_ack"] = {"seq": 1, "state": "done"}
 

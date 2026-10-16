@@ -5,9 +5,9 @@ from pathlib import Path
 
 from aiflame.core.events import EventError
 from aiflame.core.paths import write_private
-from aiflame.devices.models import DEFAULT_MODEL, YEELIGHT_MODELS, CONNECTION_KEYS, hardware_model
+from aiflame.devices.models import DEFAULT_MODEL, YEELIGHT_MODEL, YEELIGHT_MODELS, SUPPORTED_MODELS, MIJIA_PLUG_MODEL, MIJIA_PLUG_MODELS, CONNECTION_KEYS, hardware_model
 from aiflame.devices.service import DeviceService
-from aiflame.devices.light_settings import light_settings, validate_patch
+from aiflame.devices.light_settings import light_settings, validate_patch, validate_flash_cycle
 
 
 class FleetDeviceService:
@@ -15,6 +15,8 @@ class FleetDeviceService:
         self.config, self.runtime, self.transport, self.lock = config, Path(runtime), transport, lock
         self.guard = threading.RLock()
         self.active = None
+        from aiflame.devices.mijia_cloud import MijiaLogin
+        self.mijia = MijiaLogin()
         write_private(self.runtime / "credentials.json", self.config)
 
     @property
@@ -59,6 +61,8 @@ class FleetDeviceService:
                           light_settings=light_settings(record or {"hardware_model": model_id}),
                           device=dict(manager.engine.device),
                           devices=[item for item in self.transport.snapshot() if item["hardware_model"] == model_id])
+            if model_id in MIJIA_PLUG_MODELS:
+                result["mijia_login"] = self.mijia.status()
             return result
 
     def update_light_settings(self, body):
@@ -68,6 +72,14 @@ class FleetDeviceService:
         with self.lock:
             record = self.target(body["hardware_model"], body["device_id"])
             updated = {**light_settings(record), **body["settings"]}
+            if body["hardware_model"] in MIJIA_PLUG_MODELS:
+                updated["state_power"] = {**light_settings(record)["state_power"], **body["settings"].get("state_power", {})}
+                updated["brightness"] = 100
+            if body["hardware_model"] in YEELIGHT_MODELS:
+                for field in ("front_state_brightness", "front_state_temperature", "front_flash"):
+                    updated[field] = {**light_settings(record)[field], **body["settings"].get(field, {})}
+                if "front_flash" in body["settings"]:
+                    validate_flash_cycle(updated["front_flash"])
             if "colors" in body["settings"]:
                 if body["hardware_model"] not in YEELIGHT_MODELS:
                     raise EventError("此设备不支持 RGB 颜色配置")
@@ -76,11 +88,15 @@ class FleetDeviceService:
             if body["hardware_model"] in YEELIGHT_MODELS:
                 updated["reduced"] = False
                 if "brightness" in body["settings"]:
-                    updated["state_brightness"] = {key: updated["brightness"] for key in updated["state_brightness"]}
+                    field = "front_state_brightness" if updated.get("reminder_mode") == "front" else "state_brightness"
+                    updated[field] = {key: updated["brightness"] for key in updated[field]}
                 if "state_brightness" in body["settings"]:
                     updated["state_brightness"] = {**light_settings(record)["state_brightness"],
                                                    **body["settings"]["state_brightness"]}
                     updated["brightness"] = max(updated["state_brightness"].values())
+                if body["hardware_model"] in YEELIGHT_MODELS:
+                    active_field = "front_state_brightness" if updated["reminder_mode"] == "front" else "state_brightness"
+                    updated["brightness"] = max(updated[active_field].values())
             saved = {**self.config, "devices": {**self.transport.records,
                      body["device_id"]: {**record, "light_settings": updated}}}
             write_private(self.runtime / "credentials.json", saved)
@@ -95,9 +111,9 @@ class FleetDeviceService:
 
     def delete(self, body):
         if (set(body) != {"hardware_model", "device_id"}
-                or body["hardware_model"] not in YEELIGHT_MODELS
+                or body["hardware_model"] not in SUPPORTED_MODELS
                 or not isinstance(body["device_id"], str) or not body["device_id"]):
-            raise EventError("请选择要删除的 Yeelight 设备", 422)
+            raise EventError("请选择要删除的设备", 422)
         with self.guard:
             if self.busy():
                 raise EventError("请等待当前设备维护完成", 409)
@@ -117,6 +133,14 @@ class FleetDeviceService:
                         saved["hardware_profiles"] = {key: value for key, value in saved["hardware_profiles"].items()
                                                       if value.get("device_id") != device_id}
                     write_private(self.runtime / "credentials.json", saved)
+                    if record.get("hardware_model") in MIJIA_PLUG_MODELS:
+                        from aiflame.devices.token_store import TokenStore
+                        try:
+                            TokenStore(self.runtime, service=record["miio_token_ref"]).delete(device_id)
+                        except (OSError, RuntimeError):
+                            # Keep the record available for a retry if the vault denies cleanup.
+                            write_private(self.runtime / "credentials.json", self.config)
+                            raise
                     self.config.clear()
                     self.config.update(saved)
                     self.transport.records = self.config["devices"]
@@ -126,9 +150,11 @@ class FleetDeviceService:
                     for item in flame.queue + ([flame.current] if flame.current else []):
                         item.get("device_sessions", {}).pop(device_id, None)
                     self.transport.refresh()
-            except OSError:
+            except (OSError, RuntimeError) as problem:
                 if was_running:
                     manager.start()
+                if record.get("hardware_model") in MIJIA_PLUG_MODELS:
+                    raise EventError("系统未允许清除插座凭据，设备已保留；请允许凭据访问后重试", 409) from None
                 raise
             return {**self.status(body["hardware_model"], ""), "deleted_device_id": device_id,
                     "message": "此设备已删除"}
@@ -137,7 +163,7 @@ class FleetDeviceService:
         action = body.get("action")
         model_id = body.get("hardware_model", self.config.get("hardware_model", DEFAULT_MODEL))
         hardware_model(model_id)
-        if action == "discover" and model_id not in YEELIGHT_MODELS:
+        if action == "discover" and model_id not in SUPPORTED_MODELS:
             raise EventError("此型号不使用 Yeelight 局域网搜索")
         if action == "select_model":
             # UI selection is not a connection operation and has no shared job.
@@ -187,3 +213,37 @@ class FleetDeviceService:
             if service.job:
                 service.job.update(device_id=original_id or "", hardware_model=model_id)
             return result
+
+    def mijia_action(self, body):
+        if body.get("action") == "cancel" and set(body) == {"action", "id"}:
+            if not isinstance(body["id"], str) or not body["id"]:
+                raise EventError("扫码会话无效")
+            self.mijia.cancel(body["id"])
+            return self.mijia.status() or {}
+        if not self.transport.engine.settings["hardware_notifications"]:
+            raise EventError("请先开启设备提醒", 409)
+        action = body.get("action")
+        if action == "login" and set(body) == {"action", "region"}:
+            return self.mijia.start(body["region"])
+        if action == "import" and set(body) == {"action", "id", "did", "host"}:
+            if not all(isinstance(body[key], str) for key in ("id", "did", "host")):
+                raise EventError("插座接入信息无效")
+            if self.busy():
+                raise EventError("请等待设备维护完成", 409)
+            # Validate the host before consuming the short-lived selection.
+            from aiflame.devices.mijia import lan_host
+            try:
+                host = lan_host(body["host"]) if body["host"] else None
+            except ValueError as problem:
+                raise EventError(str(problem)) from None
+            device = self.mijia.take(body["id"], body["did"])
+            try:
+                return self.start({"action": "connect", "hardware_model": device.get("hardware_model", MIJIA_PLUG_MODEL), "device_id": "",
+                    "transport": "miio", "did": device["did"], "host": host,
+                    "_token": device["token"]})
+            finally:
+                device.clear()
+        raise EventError("不支持的米家接入操作")
+
+    def close(self):
+        self.mijia.cancel()

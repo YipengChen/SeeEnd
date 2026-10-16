@@ -1,6 +1,7 @@
 """Adapter self-tests, clearly distinguished from a real AI task."""
 
 import json
+import os
 import io
 import struct
 import threading
@@ -38,7 +39,7 @@ class TriggerTests:
             raise EventError("请等待设备维护完成", 409)
         with c.lock:
             if c.engine.muted():
-                raise EventError("请先恢复触发并关闭静默", 409)
+                raise EventError("灯光提醒不可用，请检查灯光亮度或重新打开 SeeEnd。", 409)
             if not c.engine.settings["source_enabled"][source]:
                 raise EventError("请先启用该来源", 409)
         with self.guard:
@@ -62,6 +63,10 @@ class TriggerTests:
     def _run(self, source):
         c = self.context
         task = str(uuid.uuid4())
+        # Diagnostics have no real host tool or terminal destination. Keep their
+        # task namespace identical to the events marked as simulated below.
+        helper_env = {key: value for key, value in os.environ.items()
+                      if key not in ("TERM_PROGRAM", "TERM_SESSION_ID", "ITERM_SESSION_ID")}
         try:
             for seq, state in ((1, "working"), (2, "done")):
                 if source == "codex":
@@ -73,7 +78,8 @@ class TriggerTests:
                     event = from_hook(payload)
                     self._mark(event)
                     response = run(
-                        "--codex-hook", "--port", str(c.port), timeout=10, input=json.dumps(payload)
+                        "--codex-hook", "--port", str(c.port), timeout=10, input=json.dumps(payload),
+                        environment=helper_env,
                     )
                     if response.returncode:
                         raise RuntimeError("Hook 进程未正常退出")
@@ -88,6 +94,7 @@ class TriggerTests:
                     response = run(
                         "--cli-hook", source, "--port", str(c.port),
                         timeout=10, input=json.dumps(payload),
+                        environment=helper_env,
                     )
                     if response.returncode:
                         raise RuntimeError("CLI Hook 进程未正常退出")

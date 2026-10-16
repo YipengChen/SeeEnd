@@ -12,13 +12,13 @@ class HardwarePreviewTests(unittest.TestCase):
         self.now = 1000.0
         self.engine = Engine(":memory:", clock=lambda: self.now, sources=SOURCES)
         self.addCleanup(self.engine.db.close)
-        self.engine.update_settings({"mode": "hardware"})
+        self.engine.update_settings({"hardware_notifications": True})
         self.engine.device.update(online=True, session_id="session", connected_at=1)
 
-    def test_shared_ten_second_schedule_does_not_create_tasks_or_settings(self):
+    def test_shared_fifteen_second_schedule_does_not_create_tasks_or_settings(self):
         settings = dict(self.engine.settings)
         self.engine.start_preview("first")
-        for elapsed, state in ((0, "working"), (4.99, "working"), (5, "done"), (9.99, "done")):
+        for elapsed, state in ((0, "working"), (4.99, "working"), (5, "needs_input"), (9.99, "needs_input"), (10, "done"), (14.99, "done")):
             self.now = 1000 + elapsed
             desired = self.engine.desired()
             display = self.engine.snapshot()["display"]
@@ -29,7 +29,7 @@ class HardwarePreviewTests(unittest.TestCase):
             self.assertTrue(self.engine.snapshot()["display"]["device_confirmed"])
             # Let the next phase independently prove its acknowledgement.
             self.engine.last_display_key = None
-        self.now = 1010
+        self.now = 1015
         result = self.engine.snapshot()
         self.assertEqual(result["display"]["state"], "idle")
         self.assertIsNone(self.engine.preview)
@@ -57,8 +57,7 @@ class HardwarePreviewTests(unittest.TestCase):
         self.assertEqual(self.engine.desired()["preview"], "first")
 
     def test_start_requires_idle_connected_unmuted_hardware(self):
-        for setting in ({"mode": "virtual"}, {"paused": True}, {"brightness": 0},
-                        {"quiet_enabled": True, "quiet_start": "12:00", "quiet_end": "12:00"}):
+        for setting in ({"hardware_notifications": False}, {"brightness": 0}):
             before = dict(self.engine.settings)
             self.engine.update_settings(setting)
             with self.assertRaises(EventError):
@@ -82,8 +81,22 @@ class HardwarePreviewTests(unittest.TestCase):
         self.engine.stop()
         self.assertIsNone(self.engine.preview)
 
+    def test_waiting_task_blocks_demo_even_after_its_visible_prompt_ends(self):
+        self.engine.accept(make_event("local-script", "waiting", "needs_input"), "local-script")
+        self.engine.clear_prompts("suppressed")
+        snapshot = self.engine.snapshot()
+        self.assertEqual(snapshot["display"]["state"], "idle")
+        self.assertEqual(snapshot["active_count"], 0)
+        self.assertEqual(snapshot["unfinished_count"], 1)
+        with self.assertRaisesRegex(EventError, "有任务尚未结束"):
+            self.engine.start_preview("blocked")
+        self.assertIsNone(self.engine.preview)
+        self.engine.accept(make_event("local-script", "waiting", "cancelled", 2), "local-script")
+        self.engine.start_preview("allowed")
+        self.assertEqual(self.engine.preview["id"], "allowed")
+
     def test_settings_cancel_preview_without_replay(self):
-        for patch in ({"mode": "virtual"}, {"paused": True}, {"brightness": 0}):
+        for patch in ({"hardware_notifications": False}, {"brightness": 0}):
             before = dict(self.engine.settings)
             self.engine.start_preview("first")
             self.engine.update_settings(patch)

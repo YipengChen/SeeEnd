@@ -2,8 +2,9 @@
 
 import threading
 
-from aiflame.devices.models import DEFAULT_MODEL, YEELIGHT_MODELS
+from aiflame.devices.models import DEFAULT_MODEL, YEELIGHT_MODELS, SUPPORTED_MODELS, MIJIA_PLUG_MODELS
 from aiflame.transports.yeelight import YeelightTransport
+from aiflame.transports.mijia import MijiaTransport
 
 
 class TransportManager:
@@ -18,9 +19,9 @@ class TransportManager:
     def start(self):
         with self.guard:
             with self.lock:
-                if self.engine.settings["mode"] != "hardware":
+                if not self.engine.settings["hardware_notifications"]:
                     self.running = False
-                    self.engine.device.update(online=False, connecting=False, status="虚拟模式", last_error=None)
+                    self.engine.device.update(online=False, connecting=False, status="设备提醒已关闭", last_error=None)
                     return
             if self.config.get("connection_paused"):
                 self.running = False
@@ -42,11 +43,12 @@ class TransportManager:
         if not c.get("device_id"):
             self.engine.device.update(online=False, connecting=False, status="未连接设备，请连接 Yeelight 灯具")
             return
-        if c.get("hardware_model", DEFAULT_MODEL) not in YEELIGHT_MODELS:
+        if c.get("hardware_model", DEFAULT_MODEL) not in SUPPORTED_MODELS:
             self.running = False
             self.engine.device.update(online=False, connecting=False, status="不支持的硬件型号")
             return
-        self.worker = YeelightTransport(self.engine, self.lock, c)
+        transport_type = MijiaTransport if c.get("hardware_model") in MIJIA_PLUG_MODELS else YeelightTransport
+        self.worker = transport_type(self.engine, self.lock, c)
         self.worker.start()
 
     def suspend(self):
@@ -75,7 +77,7 @@ class TransportManager:
 
     def stop(self):
         # Maintenance and app shutdown still require exclusive access to a
-        # fully released device; mode changes use suspend() instead.
+        # fully released device; reminder changes use suspend() instead.
         with self.guard:
             self.running = False
             with self.lock:

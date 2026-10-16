@@ -1,76 +1,76 @@
 # SeeEnd 架构与目录
 
-当前支持 Yeelight YLTD003、YLDP005 局域网灯具和虚拟模式。AI Flame 0.1 / 0.2 的 USB、专用 Wi-Fi 协议、固件与调参功能已移除，旧实现保存在 [归档分支](https://github.com/YipengChen/SeeEnd/tree/archive/ai-flame-2026-10-09)。Python 包 `aiflame`、应用标识、旧 CLI 别名、数据目录和浏览器桥接名称保留，保证已有安装能继续使用。
+以 App 0.8.55、扩展 0.2.12 的当前源码为基线。用户操作见[使用指南](quick-start.md)，已实现范围见[产品基线](product/CURRENT_PRODUCT.md)，构建命令见 [README](../README.md#开发测试与构建)。
 
-## 目录
-
-以下目录均位于本仓库内：
+## 模块边界
 
 ```text
 app.py                         桌面与打包辅助进程入口
 aiflame/
-  core/                        事件、任务生命周期、状态汇总、历史与数据路径
-  outputs/                     输出路由、灯光调度和桌面通知
-  hub/                         鉴权 HTTP 接口、服务生命周期、重置
-  desktop/                     PySide6 原生窗口、托盘、设置与设备操作
-  devices/                     支持型号、配置迁移、发现和连接任务
-  transports/                  Yeelight TCP 通信、连接生命周期和多设备管理
+  core/                        事件校验、任务生命周期、历史与用户数据路径
+  hub/                         鉴权 HTTP 接口、任务编排、服务生命周期和重置
+  outputs/                     灯光、系统通知与微信通知的输出调度
+  desktop/                     原生 Qt 窗口、菜单栏／托盘、桌面火焰与设备操作
+  devices/                     六款型号、配置、发现、凭据与点阵灯效
+  transports/                  Yeelight、像素帧、miIO 及多设备通信
   integrations/
-    codex/                     Hooks 注册、派发与诊断
-    cli_tools/                 其他编程工具 Hooks、插件与轮次关联
-    chatgpt_web/                九平台共用浏览器扩展和 Native Messaging
-    desktop_clients/           macOS 客户端身份、原生控件识别与诊断
+    codex/                     Codex Hooks、诊断与按需终端定位
+    cli_tools/                 其他编程工具 Hooks、插件和轮次关联
+    chatgpt_web/                九平台浏览器扩展与 Native Messaging
     local_api/                 鉴权 HTTP 客户端
     manual/                    手动模拟事件
-  assets/                      桌面图标与翻译资源
-packaging/                     构建、产物验证、许可证准备与归档
-tests/                         自动回归、隔离截图夹具与实机辅助测试
-docs/                          使用指南、架构、历史验收及发布资料
+  assets/                      图标与翻译资源
+packaging/                     原生编译、冻结验证、许可材料与分发归档
+tests/                         自动回归、隔离截图与手动实机验收工具
+docs/                          当前指南、架构、发布材料及历史研究
 ```
 
-桌面使用原生 Qt Widgets，不加载 Qt WebEngine。App 可在进程内运行 Hub，`--hub` 提供无界面服务；关闭窗口保留托盘，退出停止本 App 启动的 Hub，独立 Hub 不受影响。单实例协调用于恢复已有窗口。窗口隐藏时停止完整页面轮询，托盘独立刷新轻量状态接口。
+桌面使用 PySide6 Qt Widgets，不加载 Qt WebEngine。App 可在进程内运行 Hub，`--hub` 提供独立无界面服务。单实例协调恢复已有窗口；隐藏窗口停止完整页面轮询，托盘单独刷新轻量状态，Hub 和提醒继续运行。退出只停止本 App 启动的 Hub。
 
-## 任务与输出
+macOS 的 `desktop/macos_accessibility.py` 在创建 Cocoa 平台后安装进程内选中项保护，通过有效接口和当前模型读取选择，过期节点返回空选择，避开 Qt 原生失效指针；不修改系统权限或 Qt 动态库，不关闭无障碍服务。
 
-`Engine` 校验统一事件、来源策略、序号和任务生命周期。`OutputRouter` 将准入事件交给独立输出，每条通路保存投递记录；重复事件不重复投递，单个输出失败不阻断其他输出。
+## 事件与输出
 
-- `FlameOutput` 管理状态颜色、亮度、时长、静默、队列和演示。屏幕烛火用于可视提醒，实体 Yeelight 使用常亮颜色。
-- `DesktopOutput` 保存待通知事件；桌面通过鉴权的 claim / ack 接口领取并回报。亮度、灯具连接、灯光暂停和静默不影响桌面通知，来源开关作用于全部输出。
-- 通知领取使用一次性 token；失联不重播，过期和服务重启保留明确的未确认状态。系统接受通知请求不能证明用户看到了横幅。
-- `needs_input` 可恢复工作；取消与超时保持终态；未知状态不推断成功。续期不产生桌面弹窗，Hub 独立推进租期。
+`Engine` 校验协议 1.0 事件、来源策略、序号和生命周期。状态为 `idle`、`working`、`needs_input`、`done`、`cancelled`、`timeout`、`unknown`；旧 `error` 转为 `unknown`，不再作为单独提醒状态。`needs_input` 可恢复工作，取消与超时不推断成功。Hub 独立推进租期，续期不重复弹通知。
 
-## 灯具与配置
+`OutputRouter` 将准入事件交给各输出，分别记录投递结果；重复事件不重复投递，单个通道失败不阻断其他通道。`desktop_notifications`、`wechat_notifications`、`desktop_flame_enabled`、`hardware_notifications` 独立保存，首次启动／重置只开启桌面火焰；旧 `mode` 仅用于迁移设备提醒开关。
 
-`devices/models.py` 集中定义两款受支持型号；发现响应按型号和原厂 LAN 能力过滤；一次搜索使用同一 UDP socket 在 4 秒内发出 3 轮查询，按物理 ID 合并响应。已知 IP 查询验证到目标后提前结束，重连搜索可在退出时及时取消。`devices/service.py` 在后台处理搜索、连接、试亮、断开和删除。灯具配网和原厂固件升级由 Yeelight App 完成，SeeEnd 不枚举串口或刷写固件。
+`FlameOutput` 管理状态、提醒时长与演示，设备传输按型号渲染。`DesktopOutput` 保存待通知事件，桌面以鉴权 claim／ack 接口一次性领取并回报；过期或失联不补播。微信独立处理绑定、连接与发送。来源开关作用于各输出，亮度和实体设备连接不影响系统／微信通知。接受请求不证明用户已看到提醒。
 
-`FleetTransportManager` 为每台灯具创建独立连接和输出状态，共享 AI 任务及提醒偏好，独立保存状态颜色与亮度。`YeelightTransport` 使用 TCP 55443 和有限时长 color flow，按状态发送常亮颜色；YLTD003 控制 RGB 背光，YLDP005 控制灯泡。协议回执表示指令已被接受，不证明物理发光。
+快照 `active_count` 统计工作中任务，`unfinished_count` 统计已开启来源的全部工作中／等待输入任务，不受最近任务列表限制。演示与单台试亮共用未结束任务限制，服务端再次校验；新任务取消演示。设备提醒关闭或无设备在线时仅做屏幕演示，有在线设备且开关开启时做设备同步演示；状态卡试亮只作用于当前设备。
 
-配置按物理 `device_id` 保存。旧配置中的 Yeelight 信息继续迁移，AI Flame 型号记录忽略。虚拟模式立即停止设备调度，在后台关闭旧连接；切回硬件模式等旧连接释放后再恢复。重连不补播历史完成提醒。
+## 设备与凭据
 
-## 接入与隐私
+`devices/models.py` 是型号与能力的唯一注册表：YLTD003、YLDP005、Beam、Cube Lite、米家插座 3 和 4。`devices/light_settings.py` 定义按状态保存的颜色、亮度、白灯和插座规则；`cube_effects.py` 提供像素状态牌、彗星巡航、贪吃蛇、文字状态四种点阵效果。具体默认值和操作只在[使用指南](quick-start.md#连接设备)维护。
 
-CLI 接入增量修改本应用拥有的 Hooks / 插件；移除不覆盖其他配置。移动 App 后重新连接来源，并重启工具会话以更新绝对路径。
+发现按设备身份、所选型号及能力过滤；局域网搜索在约 4 秒接收窗口发出 3 轮查询并按物理 ID 合并，定向 IP 验证成功后提前结束。`devices/service.py` 在后台处理发现、连接和设备操作。SeeEnd 不枚举旧灯板串口或刷写固件。
 
-浏览器扩展以显式 DOM 控件识别开始与完成，不读取提示词或回复正文；原生桥接按浏览器提供的精确 HTTPS 来源选择独立令牌。隐藏标签的任务通过后台脉冲续期与检测，系统睡眠、页面冻结和丢弃不在保证范围。特殊模式和真实客户端需分别验收。
+`FleetTransportManager` 为每台设备维护独立连接与输出状态。屏幕挂灯／W3 使用有限原生 color flow，Beam／Cube 使用像素帧，插座使用局域网 miIO／MIoT。Beam 与 Cube 待机发送黑帧；断网／崩溃后 Beam 可能恢复原厂效果，Cube 可能保留最后画面。协议确认或帧发送不证明实际发光。配网和固件维护由原厂工具完成。
 
-macOS 桌面实验接入通过 Accessibility 识别控件身份、标签与可用状态，不读取聊天正文或输入值；输入监控只用于保守取消跟踪。权限由用户明确操作触发，未授权、标签变更或跟踪不确定时不猜测完成。Windows / Linux 不加载 macOS 框架。
+配置按物理 `device_id` 保存。旧 Yeelight 配置继续迁移，AI Flame 灯板记录忽略。关闭设备提醒停止调度并在后台释放连接，重新开启等待旧连接释放后恢复；重连不补播旧完成提醒。
 
-## 运行数据
+小米扫码云会话与候选凭据短时驻留内存，仅持久化选中设备 Token。macOS 使用私有目录中的 AES-GCM 密文与独立密钥文件，Windows 使用当前用户 DPAPI；日常局域网控制无需持续云登录。微信凭据在 macOS 使用钥匙串，Windows 使用 DPAPI，Linux 使用权限受限文件。重置与删除按所属范围清理凭据，失败保留重试信息。
 
-源码和安装版均使用系统用户数据目录，兼容名称保留：
+## 接入与任务返回
 
-| 系统 | 默认目录 |
+`integrations/registry.py` 组合来源策略：六种编程工具、九种网页和本地 API／手动／模拟来源。编程工具安装器只增量维护 SeeEnd 自有 Hook 或插件，Skill 负责调用安装、诊断与验证接口；移动 App 后须更新绝对路径并重载宿主配置。没有桌面客户端监测来源。
+
+网页通过明确 DOM 状态控件识别开始与完成，不读取提问或回复正文。原生桥接按精确 HTTPS 来源选择独立凭据；后台任务通过脉冲检测与续期，系统睡眠、冻结和丢弃不在保证范围。
+
+事件可选 `return_target`／`return_context`；旧事件仍可提交。`core/task_origins.py` 校验有界元数据，仅在开始事件保存不可变位置。网页在 Hub 只保存客户端／定位 ID，URL 留在扩展；终端保存进程身份、TTY、运行实例、会话和可选项目名，iTerm2 另有 GUID。Hook 的 `cli-origin-cache.sqlite` 稳定实例命名空间，重置时清除。
+
+`hub/task_returns.py` 只接受桌面凭据发起用户返回请求（`POST /api/task-return`），可查询异步结果；来源凭据不能主动切换窗口。网页独立控制连接绑定原浏览器配置，重连撤销旧连接。扩展核对会话和浏览器 epoch，再选中原标签页或用已保存的正式会话地址恢复。
+
+Terminal／iTerm2 选择使用固定 AppleScript 和有界参数，不注入命令或终端输入。后台线程先请求自动化授权，再次校验进程／会话后选中标签页或分屏。普通 Codex 共享 daemon 缺少客户端 TTY 时，按需只读查询原生会话名称和完整目录，以存活 CLI、标题及目录判断当前活位置唯一性；不统计历史重名，也不保证历史任务仍是原客户端。歧义或读取不完整拒绝返回，不查询对话正文、终端内容或后台持续扫描。
+
+## 数据与发布边界
+
+| 系统 | 默认数据目录 |
 | --- | --- |
 | macOS | `~/Library/Application Support/AI Flame` |
 | Windows | `%LOCALAPPDATA%/AI Flame` |
 | Linux | `$XDG_DATA_HOME/ai-flame`，默认 `~/.local/share/ai-flame` |
 
-测试可设置 `AIFLAME_DATA_DIR`。数据目录包含凭据，不随源码或安装包分发。历史保留 7 天、最多 10,000 条；去重保留 24 小时，运行中任务保留至结束或租期失效。启动和运行期间定期清理。
+保留 `aiflame` 包名、应用／桥接标识与旧 CLI 别名以兼容已有安装。`AIFLAME_DATA_DIR` 可隔离测试。事件历史最长 7 天、最多 10,000 条，去重保留 24 小时；运行中任务保留至结束或租期失效。网页返回缓存最长 7 天、最多 1,000 项。数据目录含凭据，不随分发包或测试夹具公开。
 
-## 验证与发布边界
-
-Python / JavaScript 自动测试覆盖模拟协议、生命周期、权限边界和界面行为；截图夹具不连接硬件或读取用户配置。模拟测试不证明真实客户端、系统横幅或灯具发光。
-
-构建、验证和归档依次执行 `packaging/build.py`、`packaging/verify_frozen.py`、`packaging/archive.py`。打包验证包括实际冻结辅助进程生命周期与已删除硬件组件的排除检查。源码分发直接包含仓库内 `docs/`，不再依赖父目录。
-
-当前默认产物为 macOS Apple 芯片 `.app`，使用 ad-hoc 签名；其他系统必须分别构建与实机验收。第三方动态库附许可证、对应源码与替换说明，当前包不含 esptool、mpremote 或 pyserial。原创代码许可见根目录 [LICENSE](../LICENSE)。历史验收见 [validation.md](validation.md)，当前操作见 [quick-start.md](quick-start.md)。
+发布顺序为 `build.py` → `verify_frozen.py` → `archive.py`；构建身份包括 App／扩展版本、源码指纹及第三方材料，禁止用旧 App 改名充当新构建。各操作系统需原生构建与分别验收。第三方许可证随包，源码材料单独提供；当前签名、商店与公开分发状态见[发布说明](REPOSITORIES.md)。历史结果不替代当前平台与设备的[实际验收](validation.md)。

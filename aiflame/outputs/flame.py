@@ -1,54 +1,44 @@
 """Fire light output: scheduling, display preferences, device state and acknowledgements."""
-import datetime as dt
 import json
 from aiflame.core.events import EventError
 
+DEMO_DURATION_SECONDS = 15
+
 
 def demo_display(key, elapsed):
-    """Shared ten-second sequence for synchronized and per-device demos."""
-    if elapsed >= 10:
+    """Shared working, waiting-for-input, completed sequence: five seconds each."""
+    if elapsed >= DEMO_DURATION_SECONDS:
         return None
-    state = "working" if elapsed < 5 else "done"
+    state, end = ("working", 5) if elapsed < 5 else ("needs_input", 10) if elapsed < 10 else ("done", 15)
     return {
         "key": f"{key}:{state}",
         "state": state,
-        "duration_ms": max(1, int(((5 if elapsed < 5 else 10) - elapsed) * 1000)),
-        "remaining_ms": max(1, int((10 - elapsed) * 1000)),
+        "duration_ms": max(1, int((end - elapsed) * 1000)),
+        "remaining_ms": max(1, int((DEMO_DURATION_SECONDS - elapsed) * 1000)),
     }
 
 
 class FlameOutput:
     name = "flame"
     DEFAULTS = {
-        "mode": "virtual",
+        "hardware_notifications": False,
         "brightness": 20,
         "duration": 10,
-        "hold_until_activity": False,
-        "paused": False,
+        "hold_until_activity": True,
         "reduced": False,
-        "quiet_enabled": False,
-        "quiet_start": "22:00",
-        "quiet_end": "08:00",
     }
 
     @staticmethod
     def validate_settings(data):
-        if data["mode"] not in ("virtual", "hardware"):
-            raise EventError("请选择虚拟模式或硬件模式")
+        if type(data["hardware_notifications"]) is not bool:
+            raise EventError("设备提醒设置格式错误")
         if type(data["brightness"]) is not int or not 0 <= data["brightness"] <= 25:
             raise EventError("样机亮度范围为 0–25%")
         if type(data["duration"]) is not int or not 3 <= data["duration"] <= 60:
             raise EventError("提示时长范围为 3–60 秒")
-        for key in ("paused", "reduced", "quiet_enabled", "hold_until_activity"):
+        for key in ("reduced", "hold_until_activity"):
             if type(data[key]) is not bool:
                 raise EventError("设置格式错误")
-        for key in ("quiet_start", "quiet_end"):
-            try:
-                if not isinstance(data[key], str) or len(data[key]) != 5:
-                    raise ValueError()
-                dt.datetime.strptime(data[key], "%H:%M")
-            except ValueError:
-                raise EventError("静默时间格式应为 HH:MM")
 
 
     def __init__(self, core):
@@ -99,7 +89,7 @@ class FlameOutput:
             output = self.transport.outputs.get(key)
             status = result
             if result == "queued":
-                status = ("screen" if self.settings["mode"] != "hardware" else
+                status = ("screen" if not self.settings["hardware_notifications"] else
                           "disabled" if record.get("connection_paused") else
                           "muted" if light_settings(record)["brightness"] == 0 else
                           "offline" if not output or not output.device.get("online") else "queued")
@@ -139,7 +129,7 @@ class FlameOutput:
         self.cancel_preview()
         if event["phase"] == "lease_expired":
             self.mark(event["previous_event_id"], "lease_expired")
-        if event["state"] in ("idle", "unknown", "cancelled", "timeout", "working", "done", "error", "needs_input"):
+        if event["state"] in ("idle", "unknown", "cancelled", "timeout", "working", "done", "needs_input"):
             for item in list(self.queue):
                 if item["key"] == key:
                     self.queue.remove(item)
@@ -149,11 +139,11 @@ class FlameOutput:
                 if not self.current["applied"]:
                     self.mark(self.current["id"], "superseded")
                 self.current = None
-        if result == "queued" and event["state"] in ("done", "error", "needs_input"):
-            state = "error" if event["state"] == "needs_input" else event["state"]
+        if result == "queued" and event["state"] in ("done", "needs_input"):
+            state = event["state"]
             item = {
                 "id": eid, "key": key, "state": state,
-                "priority": 2 if state == "error" else 1,
+                "priority": 2 if state == "needs_input" else 1,
                 "arrived": now, "expiry": event["expires"],
                 "duration": self.settings["duration"],
                 "holding": state == "done" and self.settings["hold_until_activity"],
@@ -179,7 +169,7 @@ class FlameOutput:
 
     def settings_changed(self):
         enabled = self.settings["source_enabled"]
-        if self.settings["mode"] != "hardware" or self.muted():
+        if not self.settings["hardware_notifications"] or self.muted():
             self.cancel_preview()
         if self.muted():
             self.clear_prompts("suppressed")
@@ -193,23 +183,13 @@ class FlameOutput:
 
     def brightness_off(self):
         records = getattr(self.transport, "records", {})
-        if self.settings["mode"] == "hardware" and records:
+        if self.settings["hardware_notifications"] and records:
             from aiflame.devices.light_settings import light_settings
             return all(light_settings(record)["brightness"] == 0 for record in records.values())
         return self.settings["brightness"] == 0
 
     def muted(self):
-        if (
-            self.emergency
-            or self.settings["paused"]
-            or self.brightness_off()
-        ):
-            return True
-        if not self.settings["quiet_enabled"]:
-            return False
-        now = dt.datetime.fromtimestamp(self.wall()).strftime("%H:%M")
-        start, end = self.settings["quiet_start"], self.settings["quiet_end"]
-        return (start <= now < end) if start < end else (now >= start or now < end)
+        return self.emergency or self.brightness_off()
 
     def clear_prompts(self, result):
         for item in self.queue + ([self.current] if self.current else []):
@@ -219,10 +199,13 @@ class FlameOutput:
         self.current = None
 
     def start_preview(self, identifier):
-        if self.settings["mode"] != "hardware" or not self.device["online"]:
+        self.cleanup()
+        if self.core.unfinished_task_count():
+            raise EventError("有任务尚未结束，暂时无法演示灯效。", 409)
+        if not self.settings["hardware_notifications"] or not self.device["online"]:
             raise EventError("请先连接设备，再开始同步灯效演示", 409)
         if self.muted():
-            raise EventError("请先恢复触发、提高亮度或关闭静默，再开始演示", 409)
+            raise EventError("灯光提醒不可用，请检查灯光亮度或重新打开 SeeEnd。", 409)
         display = self.desired()
         if self.preview or display["state"] != "idle":
             raise EventError("当前有任务或演示正在进行，请结束后再试", 409)
@@ -244,7 +227,7 @@ class FlameOutput:
             return None
         elapsed = self.clock() - self.preview["started"]
         if (
-            elapsed >= 10 or self.muted() or self.settings["mode"] != "hardware"
+            elapsed >= DEMO_DURATION_SECONDS or self.muted() or not self.settings["hardware_notifications"]
             or not self.device["online"]
             or self.preview["connection"] != self.preview_connection()
         ):
@@ -305,7 +288,7 @@ class FlameOutput:
         if (
             self.current
             and self.current["state"] == "done"
-            and any(x["state"] == "error" for x in self.queue)
+            and any(x["state"] == "needs_input" for x in self.queue)
         ):
             old = self.current
             remaining = (old["deadline"] - now) if old["deadline"] else old["duration"]
@@ -385,6 +368,7 @@ class FlameOutput:
     def display_status(self):
         display = self.desired()
         if display.get("preview"):
+            display["task_state"] = display["state"]
             display["simulated"] = True
             display["device_confirmed"] = self.transport.confirmed(display["key"]) if self.transport and hasattr(self.transport, "confirmed") and self.transport.records else self.last_display_key == display["key"]
             return display
@@ -400,11 +384,18 @@ class FlameOutput:
             for event_id in ids
             if (
                 row := self.db.execute(
-                    "SELECT status, (source IN ('manual','demo') OR EXISTS(SELECT 1 FROM self_tests WHERE event=events.id)) AS simulated FROM events WHERE id=?",
+                    "SELECT state, status, (source IN ('manual','demo') OR EXISTS(SELECT 1 FROM self_tests WHERE event=events.id)) AS simulated FROM events WHERE id=?",
                     (event_id,),
                 ).fetchone()
             )
         ]
+        # Physical lights share the error pattern for input requests. Desktop
+        # indicators retain the task meaning without changing that pattern.
+        display["task_state"] = (
+            records[0]["state"]
+            if self.current and records and self.current["id"] == display["key"]
+            else display["state"]
+        )
         display["simulated"] = any(row["simulated"] for row in records)
         display["device_confirmed"] = bool(
             self.device["online"]

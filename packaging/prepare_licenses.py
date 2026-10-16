@@ -30,7 +30,7 @@ CONDA_NOTICES = {'python', 'pyobjc-core', 'pyobjc-framework-cocoa',
                  'ncurses', 'libavif', 'lerc'}
 PYTHON_PACKAGES = {'PySide6', 'shiboken6',
                    'pyobjc-core', 'pyobjc-framework-Cocoa', 'pyobjc-framework-UserNotifications',
-                   'PyInstaller', 'packaging', 'Cython'}
+                   'PyInstaller', 'packaging', 'Cython', 'cryptography', 'cffi', 'pycparser', 'qrcode'}
 
 
 def fetch(url, path, expected, download):
@@ -61,6 +61,7 @@ def main(download=False):
         shutil.rmtree(NOTICES)
     NOTICES.mkdir()
     shutil.copy2(ROOT / 'docs/legal/LEGACY_GPL_3_0.txt', NOTICES / 'GPL-3.0.txt')
+    shutil.copy2(ROOT / 'docs/legal/MIJIA_QR_MIT.txt', NOTICES / 'Xiaomi-cloud-tokens-extractor-MIT.txt')
     records = []
     prefix = Path(sys.base_prefix)
     conda = prefix / 'conda-meta'

@@ -49,7 +49,7 @@ class TrayTests(unittest.TestCase):
         self.indicator = TrayIndicator(
             self.tray, self.widget, self.status_action, self.widget
         )
-        self.hub.update_settings({"mode": "hardware"})
+        self.hub.update_settings({"hardware_notifications": True})
         with self.hub.lock:
             self.hub.engine.device["online"] = True
 
@@ -86,7 +86,7 @@ class TrayTests(unittest.TestCase):
         self.assertTrue(data["device"]["connecting"])
         title = light_status(data)[1]
         self.assertIn("正在连接设备", title)
-        self.assertNotIn("硬件未连接", title)
+        self.assertNotIn("设备未连接", title)
 
     def test_indicator_endpoint_is_small_and_requires_dashboard_auth(self):
         status, _ = self.client.request("/api/indicator", authenticated=False)
@@ -101,18 +101,19 @@ class TrayTests(unittest.TestCase):
             data = self.client.call("/api/indicator")
         full_snapshot.assert_not_called()
         self.assertEqual(data["display"]["state"], "idle")
-        self.assertLess(len(json.dumps(data)), 400)
+        self.assertLess(len(json.dumps(data)), 512)
+        self.assertTrue(data["settings"]["desktop_flame_enabled"])
+        self.assertIn("reduced", data["settings"])
         self.assertFalse({"events", "tasks", "sources"} & data.keys())
 
-    def test_hardware_warning_survives_pause_and_virtual_mode_removes_it(self):
-        self.client.call("/api/settings", {"paused": True})
+    def test_hardware_warning_clears_when_device_alerts_are_off(self):
         self.hub.engine.device["online"] = False
-        self.refresh("paused")
-        self.assertIn("硬件未连接", self.tray.toolTip())
-        self.client.call("/api/settings", {"mode": "virtual"})
-        self.refresh("paused")
-        self.assertIn("虚拟模式", self.tray.toolTip())
-        self.assertNotIn("硬件未连接", self.tray.toolTip())
+        self.refresh("idle")
+        self.assertIn("设备未连接", self.tray.toolTip())
+        self.client.call("/api/settings", {"hardware_notifications": False})
+        self.refresh("idle")
+        self.assertNotIn("模式", self.tray.toolTip())
+        self.assertNotIn("设备未连接", self.tray.toolTip())
 
     def test_hidden_window_keeps_tracking_actual_states_without_rendering_dashboard(
         self,
@@ -126,7 +127,7 @@ class TrayTests(unittest.TestCase):
             for state, seq, title in (
                 ("working", 1, "任务进行中"),
                 ("done", 2, "任务已完成"),
-                ("error", 3, "需关注"),
+                ("needs_input", 3, "等待输入"),
                 ("idle", 4, "当前无任务"),
             ):
                 with self.hub.lock:
@@ -144,31 +145,19 @@ class TrayTests(unittest.TestCase):
         self.assertFalse(self.indicator.timer.isActive())
 
     def test_muting_and_maintenance_override_but_offline_keeps_screen_status(self):
-        self.client.call("/api/settings", {"paused": True})
-        self.refresh("paused")
-        self.client.call("/api/settings", {"paused": False, "brightness": 0})
+        self.client.call("/api/settings", {"brightness": 0})
         self.refresh("off")
-        self.client.call(
-            "/api/settings",
-            {
-                "brightness": 8,
-                "quiet_enabled": True,
-                "quiet_start": "00:00",
-                "quiet_end": "00:00",
-            },
-        )
-        self.refresh("quiet")
-        self.client.call("/api/settings", {"quiet_enabled": False})
+        self.client.call("/api/settings", {"brightness": 8})
         with self.hub.lock:
             self.hub.engine.device["online"] = False
         self.refresh("idle")
-        self.assertIn("屏幕提醒", self.tray.toolTip())
+        self.assertIn("设备未连接", self.tray.toolTip())
         with self.hub.lock:
             self.hub.engine.accept(
                 make_event("local-script", "no-lamp", "working"), "local-script"
             )
         self.refresh("working")
-        self.assertIn("屏幕提醒", self.tray.toolTip())
+        self.assertIn("设备未连接", self.tray.toolTip())
         self.client.call("/api/settings", {"brightness": 0})
         self.refresh("off")
         with patch.object(self.hub.devices, "busy", return_value=True):
@@ -179,7 +168,7 @@ class TrayTests(unittest.TestCase):
         self.widget.start_preview()
         self.widget.preview_started -= 5.5
         self.widget.advance_preview()
-        self.assertEqual(self.widget.flame.state, "done")
+        self.assertEqual(self.widget.flame.state, "needs_input")
         with patch.object(self.tray, "setIcon") as change_icon:
             self.refresh("idle")
             change_icon.assert_not_called()
@@ -192,19 +181,7 @@ class TrayTests(unittest.TestCase):
             )
         self.refresh("working")
         self.assertIn("测试提醒", self.tray.toolTip())
-        self.assertIn("不计入验证", self.status_action.text())
-
-    def test_hidden_menu_actions_use_fresh_indicator_instead_of_stale_dashboard(self):
-        self.refresh("idle")
-        self.widget.hide()
-        self.wait(lambda: not self.widget.api.pending)
-        self.assertFalse(self.widget.model["settings"]["paused"])
-        self.client.call("/api/settings", {"paused": True})
-        self.refresh("paused")
-        self.assertFalse(self.widget.model["settings"]["paused"])
-        self.indicator.set_paused(False)
-        self.wait(lambda: not self.widget.writing and not self.widget.api.pending)
-        self.assertFalse(self.hub.engine.settings["paused"])
+        self.assertIn("测试提醒", self.status_action.text())
 
     def test_connection_failure_and_retry_do_not_leave_stale_success(self):
         self.refresh("idle")
@@ -213,7 +190,7 @@ class TrayTests(unittest.TestCase):
             self.widget.api,
             "_perform",
             side_effect=lambda opener, job: (
-                (job[0], None, "Hub 未连接，请检查 SeeEnd 服务")
+                (job[0], None, "本地服务未连接，请重新打开 SeeEnd 后重试。")
                 if job[1] == "/api/indicator"
                 else perform(opener, job)
             ),
@@ -251,10 +228,8 @@ class TrayTests(unittest.TestCase):
                 "idle",
                 "working",
                 "done",
-                "error",
-                "paused",
+                "needs_input",
                 "off",
-                "quiet",
                 "unavailable",
                 "maintenance",
             ):

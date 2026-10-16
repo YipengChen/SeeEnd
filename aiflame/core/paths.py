@@ -74,7 +74,12 @@ def load_config():
     changed = not path.exists()
     from aiflame.integrations.registry import SOURCES
 
-    for source in (s.id for s in SOURCES if s.authenticated):
+    authenticated_sources = {s.id for s in SOURCES if s.authenticated}
+    if set(config["tokens"]) - authenticated_sources:
+        config["tokens"] = {source: token for source, token in config["tokens"].items()
+                            if source in authenticated_sources}
+        changed = True
+    for source in authenticated_sources:
         if source not in config["tokens"]:
             config["tokens"][source] = secrets.token_urlsafe(32)
             changed = True

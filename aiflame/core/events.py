@@ -5,8 +5,8 @@ from dataclasses import dataclass
 import uuid
 
 REQUIRED_FIELDS = ("schema_version", "event_id", "source_id", "task_id", "seq", "state", "occurred_at", "ttl_ms")
-OPTIONAL_FIELDS = ("reason", "device_id")
-STATES = ("idle", "working", "needs_input", "done", "error", "cancelled", "timeout", "unknown")
+OPTIONAL_FIELDS = ("reason", "device_id", "return_target", "return_context")
+STATES = ("idle", "working", "needs_input", "done", "cancelled", "timeout", "unknown")
 REASONS = ("completed", "failed", "cancelled", "timeout")
 
 

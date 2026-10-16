@@ -1,11 +1,13 @@
 """Native controls and a vector light with bounded, visible-only motion."""
 
 import math
+from html import escape
 from pathlib import Path
 from functools import lru_cache
 
-from PySide6.QtCore import QByteArray, QElapsedTimer, QPointF, QRectF, QSize, Qt, QTimer
+from PySide6.QtCore import QByteArray, QElapsedTimer, QEvent, QPoint, QPointF, QRectF, QSize, Qt, QTimer, Signal
 from PySide6.QtGui import (
+    QBitmap,
     QColor,
     QIcon,
     QLinearGradient,
@@ -14,22 +16,33 @@ from PySide6.QtGui import (
     QPen,
     QPixmap,
     QRadialGradient,
+    QRegion,
 )
 from PySide6.QtSvg import QSvgRenderer
-from PySide6.QtWidgets import QHBoxLayout, QSizePolicy, QVBoxLayout
-from aiflame.desktop.localization import QCheckBox, QFrame, QLabel, QPushButton, QWidget
+from PySide6.QtWidgets import QHBoxLayout, QSizePolicy, QToolTip, QVBoxLayout, QTabBar
+from aiflame.desktop.localization import QCheckBox, QFrame, QLabel, QPushButton, QSlider, QWidget, localized_type, t
+from aiflame.desktop.theme import COLORS
 
 ICONS = {
     "home": '<rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/>',
     "device": '<rect x="6" y="3" width="12" height="18" rx="4"/><path d="M10 17h4M10 7h4"/>',
     "apps": '<rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><path d="M14 17.5h7m-3.5-3.5v7"/>',
     "settings": '<path d="M4 6h16M4 12h16M4 18h16"/><circle cx="9" cy="6" r="2" fill="{fill}"/><circle cx="16" cy="12" r="2" fill="{fill}"/><circle cx="8" cy="18" r="2" fill="{fill}"/>',
+    "bell": '<path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/>',
+    "message": '<path d="M21 11a8 8 0 0 1-8 8H8l-5 3 1-6a8 8 0 0 1-1-5 8 8 0 0 1 8-8h2a8 8 0 0 1 8 8zM8 10h8M8 14h5"/>',
     "history": '<path d="M3 11a9 9 0 1 1 3 7M3 5v6h6m3-4v5l3 2"/>',
     "help": '<circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 0 1 5 0c0 2-2.5 2-2.5 4m0 3h.01"/>',
     "arrow": '<path d="M5 12h14m-5-5 5 5-5 5"/>',
+    "back": '<path d="M19 12H5m5-5-5 5 5 5"/>',
+    "chevron": '<path d="m9 5 7 7-7 7"/>',
+    "chevron-down": '<path d="m5 9 7 7 7-7"/>',
+    "external": '<path d="M14 3h7v7m0-7L10 14M10 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-5"/>',
+    "close": '<path d="m6 6 12 12M18 6 6 18"/>',
     "play": '<path d="m8 5 11 7-11 7z"/>',
     "shield": '<path d="m12 3 8 3v6c0 4-5 8-8 9-3-1-8-5-8-9V6zM8 12l3 3 5-6"/>',
     "check": '<path d="m5 12 4 4L19 6"/>',
+    "minus": '<path d="M5 12h14"/>',
+    "plus": '<path d="M5 12h14M12 5v14"/>',
     "flame": '<path d="M13 2c4 8-7 9-5 15 1-4 4-4 4-8 8 6 10 10 5 13-6 4-15-1-12-7 0-3 3-5 3-7 0 2 1 3 1 4-1-6 6-6 4-10z"/>',
     "power": '<path d="M12 2v9M6 5a9 9 0 1 0 12 0"/>',
     "wifi": '<path d="M3 8a15 15 0 0 1 18 0M6 12a10 10 0 0 1 12 0M9 16a5 5 0 0 1 6 0"/><circle cx="12" cy="20" r=".7"/>',
@@ -51,7 +64,7 @@ def icon(name, color="#767266", size=20):
 @lru_cache(maxsize=None)
 def brand_icon(source):
     brand = {"claude-code": "claude", "deepseek-harness": "deepseek", "gemini-cli": "gemini"}.get(
-        source, source.removesuffix("-web").removesuffix("-desktop")
+        source, source.removesuffix("-web")
     )
     if brand in {
         "codex", "claude", "qoder", "gemini", "opencode", "chatgpt", "deepseek",
@@ -78,12 +91,89 @@ class ElidedLabel(QLabel):
                          self.fontMetrics().elidedText(self.text(), Qt.TextElideMode.ElideRight, self.contentsRect().width()))
 
 
-def label(text="", muted=False, role=None, *, elide=False):
-    widget = ElidedLabel(text) if elide else QLabel(text)
+class ReadableLabel(QLabel):
+    """Measure wrapped text at the same bounded width used to draw it."""
+
+    def heightForWidth(self, width):
+        return super().heightForWidth(min(width, self.maximumWidth()))
+
+
+def label(text="", muted=False, role=None, *, elide=False, readable=False):
+    widget = ElidedLabel(text) if elide else ReadableLabel(text) if readable else QLabel(text)
     widget.setTextFormat(Qt.TextFormat.PlainText)
     widget.setWordWrap(role not in ("eyebrow", "badge", "brand"))
     widget.setProperty("role", role or ("muted" if muted else "body"))
+    if readable:
+        widget.setMaximumWidth(960)
+    if role == "sectionTitle":
+        widget.setIndent(0)
     return widget
+
+
+class HelpButton(QPushButton):
+    """Native hover help, also available by mouse click or keyboard activation."""
+
+    TEXT_WIDTH = 360
+
+    def __init__(self, text, title="设置"):
+        super().__init__()
+        self.setObjectName("preferenceHelp")
+        self.setIcon(icon("help", size=16))
+        self.setFixedSize(32, 32)
+        self.setCursor(Qt.CursorShape.WhatsThisCursor)
+        self.setAccessibleName(title + "说明")
+        self.set_help(text)
+        self.clicked.connect(self.show_help)
+
+    def set_help(self, text):
+        self.setToolTip(text)
+        self.setAccessibleDescription(text)
+
+    def show_help(self):
+        self._show_at(self.mapToGlobal(QPoint(0, self.height())))
+
+    def _show_at(self, position):
+        width = min(self.TEXT_WIDTH, max(1, self.screen().availableGeometry().width() - 48))
+        body = "<p>" + escape(self.toolTip()).replace("\n", "<br>") + "</p>"
+        # Keep native rich-text help at a consistent reading width.
+        html = (f'<table width="{width}" cellspacing="0" cellpadding="0">'
+                f"<tr><td>{body}</td></tr></table>")
+        QToolTip.showText(position, html, self, self.rect(), 20000)
+
+    def event(self, event):
+        if event.type() == QEvent.Type.ToolTip:
+            self._show_at(event.globalPos())
+            event.accept()
+            return True
+        return super().event(event)
+
+
+class ValueSlider(QSlider):
+    """Keep wheel scrolling available to the page without changing a value."""
+    def wheelEvent(self, event):
+        event.ignore()
+
+
+class TemperatureSwatch(QWidget):
+    """Illustrative warm-to-cool white swatch, independent of lamp brightness."""
+    def __init__(self):
+        super().__init__()
+        self.setFixedSize(20, 20)
+        self.set_temperature(2700)
+
+    def set_temperature(self, kelvin):
+        self.kelvin = kelvin
+        from aiflame.devices.light_settings import temperature_rgb
+        self.color = QColor(*temperature_rgb(kelvin))
+        self.setToolTip(f"{kelvin}K · 色温示意")
+        self.update()
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setPen(QPen(QColor("#dedcd3"), 1))
+        painter.setBrush(self.color)
+        painter.drawRoundedRect(QRectF(.5, .5, self.width() - 1, self.height() - 1), 4, 4)
 
 
 def restyle(widget, name, value):
@@ -104,7 +194,7 @@ def card(parent_layout, title=None, subtitle=None, name="card"):
     if title:
         layout.addWidget(label(title, role="title"))
     if subtitle:
-        layout.addWidget(label(subtitle, True))
+        layout.addWidget(label(subtitle, True, readable=True))
     parent_layout.addWidget(frame)
     return layout
 
@@ -141,7 +231,7 @@ class DeviceModelCard(QPushButton):
         row.addWidget(self.thumbnail)
         content = QVBoxLayout()
         content.setSpacing(5)
-        brand = label("YEELIGHT", role="deviceBrand")
+        brand = label("米家" if model["id"].startswith("mijia-") else "Yeelight", role="deviceBrand")
         content.addWidget(brand)
         self.title = label(model["name"], role="deviceName")
         content.addWidget(self.title)
@@ -153,7 +243,8 @@ class DeviceModelCard(QPushButton):
         self.connection_count = label(role="deviceCount")
         footer.addWidget(self.connection_count)
         footer.addStretch()
-        arrow = label("→", role="deviceArrow")
+        arrow = label()
+        arrow.setPixmap(icon("chevron", "#625f57").pixmap(20, 20))
         footer.addWidget(arrow)
         content.addLayout(footer)
         row.addLayout(content, 1)
@@ -214,7 +305,8 @@ class Disclosure(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(8)
-        self.button = QPushButton("＋  " + title)
+        self.button = QPushButton(title)
+        self.button.setIcon(icon("chevron"))
         self.button.setProperty("variant", "quiet")
         self.button.setCheckable(True)
         self.button.setAccessibleName(title)
@@ -224,21 +316,133 @@ class Disclosure(QWidget):
         self.content.setSpacing(12)
         self.body.hide()
         self.button.toggled.connect(self.body.setVisible)
-        self.button.toggled.connect(
-            lambda value: self.button.setText(("−  " if value else "＋  ") + title)
-        )
+        self.button.toggled.connect(lambda value: self.button.setIcon(icon("chevron-down" if value else "chevron")))
         layout.addWidget(self.button, 0, Qt.AlignmentFlag.AlignLeft)
         layout.addWidget(self.body)
         parent_layout.addWidget(self)
 
 
+class CategoryTabs(localized_type(QTabBar)):
+    """Native tabs with the same data lookup used by the page controller."""
+
+    def __init__(self, parent=None):
+        self._captions = []
+        super().__init__(parent)
+        self.setExpanding(False)
+        self.setDrawBase(False)
+        self.setUsesScrollButtons(False)
+        # Selected-tab typography is polished after the selection changes.
+        self.currentChanged.connect(lambda _: QTimer.singleShot(0, self, self.updateGeometry))
+
+    def addItem(self, text, data):
+        self._captions.append(text)
+        index = self.addTab(t(text))
+        self.setTabData(index, data)
+
+    def itemData(self, index):
+        return self.tabData(index)
+
+    def currentData(self):
+        return self.tabData(self.currentIndex())
+
+    def findData(self, data):
+        return next((index for index in range(self.count()) if self.tabData(index) == data), -1)
+
+    def retranslate(self):
+        super().retranslate()
+        for index, caption in enumerate(self._captions):
+            self.setTabText(index, t(caption))
+
+
+class HomeSourceButton(QPushButton):
+    """Icon shortcut with a full name and official address on hover."""
+    def __init__(self, source, name, link):
+        super().__init__()
+        self.link = link
+        self.setObjectName("homeSourceButton")
+        self.setProperty("variant", "brand")
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setFixedSize(44, 44)
+        self.setIcon(brand_icon(source))
+        self.setIconSize(QSize(32, 32))
+        self.setAccessibleDescription(link)
+        self.set_name(name)
+
+    def sizeHint(self):
+        # Brand buttons have no text; retain a usable target under the shared QSS.
+        return QSize(44, 44)
+
+    def set_name(self, name):
+        self.setAccessibleName(name)
+        self.setToolTip(
+            '<p style="white-space: nowrap; margin: 0;"><b>' + escape(name) + '</b><br/>'
+            '<span style="color: ' + COLORS['secondary'] + '; font-size: 12px;">'
+            + escape(self.link) + '</span></p>'
+        )
+
+
+class DeviceInstanceRow(QPushButton):
+    """A registered device is one accessible target, with its current status."""
+
+    def __init__(self, model):
+        super().__init__()
+        self.model_name = model["name"]
+        self.setObjectName("deviceModelCard")
+        self.setProperty("instance", True)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setMinimumHeight(88)
+        row = QHBoxLayout(self)
+        row.setContentsMargins(16, 12, 16, 12)
+        row.setSpacing(16)
+        thumbnail = label()
+        asset = Path(__file__).resolve().parents[1] / "assets/devices" / (model["id"] + ".svg")
+        thumbnail.setPixmap(QIcon(str(asset)).pixmap(52, 56))
+        thumbnail.setFixedSize(56, 60)
+        thumbnail.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        row.addWidget(thumbnail)
+        copy = QVBoxLayout()
+        copy.setSpacing(4)
+        self.name = label(role="deviceName", elide=True)
+        self.name.setProperty("literalText", True)
+        self.description = label(model["card_description"], True, elide=True)
+        self.name.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignBottom)
+        self.description.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        for text in (self.name, self.description):
+            text.setContentsMargins(0, 0, 0, 0)
+            text.setIndent(0)
+        copy.addWidget(self.name)
+        copy.addWidget(self.description)
+        row.addLayout(copy, 1)
+        self.status = label(role="sourceStatus")
+        row.addWidget(self.status, 0, Qt.AlignmentFlag.AlignVCenter)
+        arrow = label()
+        arrow.setPixmap(icon("chevron").pixmap(20, 20))
+        row.addWidget(arrow)
+        for child in self.findChildren(QLabel):
+            child.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+
+    def update_device(self, device):
+        name = device.get("name") or t(self.model_name)
+        if name == self.model_name:
+            name = t(name)
+        self.name.setText(name)
+        status = "正在连接" if device.get("connecting") else "在线" if device.get("online") else "已断开" if device.get("connection_paused") else "离线"
+        self.status.setText(status)
+        restyle(self.status, "tone", "success" if device.get("online") else "neutral")
+        self.setAccessibleName(name + " · " + status + " · 查看设备")
+        self.setToolTip(name + " · " + device["device_id"])
+
+
 class FlameVisual(QWidget):
     """Blend light states from the current frame, including interrupted changes."""
 
+    return_requested = Signal()
+    silhouette_changed = Signal(QRegion)
     TRANSITION_MS = 650
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, *, show_environment=True):
         super().__init__(parent)
+        self.show_environment = show_environment
         self.state = "idle"
         self.preview = False
         self.live = False
@@ -253,6 +457,13 @@ class FlameVisual(QWidget):
         self.setMinimumSize(200, 190)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.setAccessibleName("屏幕任务状态；连接灯具后可另行检查实体发光")
+
+    def mouseDoubleClickEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.return_requested.emit()
+            event.accept()
+        else:
+            super().mouseDoubleClickEvent(event)
 
     def set_state(self, state, preview=False, reduced=False, live=False):
         if (self.state, self.preview, self.reduced, self.live) != (
@@ -308,7 +519,7 @@ class FlameVisual(QWidget):
         super().hideEvent(event)
 
     def _appearance(self):
-        active = self.state in ("working", "done", "error")
+        active = self.state in ("working", "done", "needs_input")
         animated = (self.preview or self.live) and not self.reduced
         seconds = self.clock.elapsed() / 1000 if animated else 0
         width, height, opacity, sway, halo_alpha = 1.0, 1.0, 1.0, 0.0, 16
@@ -321,15 +532,18 @@ class FlameVisual(QWidget):
             breath = (1 - math.cos(seconds * math.pi / 2)) / 2 if animated else 0.5
             width, height = 0.69 + 0.04 * breath, 0.57 + 0.06 * breath
             opacity, halo_alpha = 0.58 + 0.20 * breath, int(15 + 14 * breath)
+            if not self.show_environment:
+                # Keep the desktop flame visible at the dimmest breathing phase.
+                opacity = 0.40 + 0.60 * breath
         elif self.state == "done":
             flutter = 0.6 * math.sin(seconds * 6.7) + 0.4 * math.sin(seconds * 13.1)
             width, height = 1.0 - 0.012 * flutter, 1.0 + 0.025 * flutter
             opacity, sway, halo_alpha = 0.96 + 0.04 * flutter, 0.022 * flutter, 72
-        elif self.state == "error":
+        elif self.state in ("needs_input",):
             phase = seconds % 4
             pulse = max(0, math.sin(math.pi * phase)) ** 2 if phase < 2 else 0
             opacity, halo_alpha = (0.6 + 0.4 * pulse, 45) if animated else (0.8, 36)
-        ember = "#f58d47" if self.state != "error" else "#ed795b"
+        ember = "#ed795b" if self.state in ("needs_input",) else "#f58d47"
         if self.state == "working":
             palette = ("#efc57d", "#d79543", "#ad632c", "#734525")
         elif active:
@@ -374,40 +588,50 @@ class FlameVisual(QWidget):
 
     def paintEvent(self, event):
         frame = self._frame()
-        painter = QPainter(self)
+        surface = None
+        if not self.show_environment:
+            # Render once, using those same pixels for the desktop input mask.
+            # Keep Retina rendering sharp while the mask uses logical pixels.
+            ratio = self.devicePixelRatioF()
+            surface = QPixmap(round(self.width() * ratio), round(self.height() * ratio))
+            surface.setDevicePixelRatio(ratio)
+            surface.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(surface if surface is not None else self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         scale = min(self.width() / 380, self.height() / 245)
         painter.translate(self.width() / 2, self.height() / 2)
         painter.scale(scale, scale)
-        halo = QRadialGradient(QPointF(0, 9), 155)
-        halo.setColorAt(0, frame["halo"])
-        edge = QColor(frame["halo"])
-        edge.setAlpha(0)
-        halo.setColorAt(1, edge)
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(halo)
-        painter.drawEllipse(QRectF(-172, -141, 344, 300))
-        painter.setPen(QPen(QColor("#43453a"), 0.8))
-        painter.setBrush(Qt.BrushStyle.NoBrush)
-        painter.drawEllipse(QRectF(-144, 72, 288, 42))
-        painter.drawEllipse(QRectF(-113, 77, 226, 30))
-        if frame["ring_alpha"] > 0:
-            spread = frame["ring_spread"]
-            painter.setPen(QPen(QColor(240, 181, 109, round(frame["ring_alpha"])), 1.5))
-            painter.drawEllipse(
-                QRectF(
-                    -118 - 15 * spread,
-                    72 - 3 * spread,
-                    236 + 30 * spread,
-                    35 + 6 * spread,
+        if self.show_environment:
+            halo = QRadialGradient(QPointF(0, 9), 155)
+            halo.setColorAt(0, frame["halo"])
+            edge = QColor(frame["halo"])
+            edge.setAlpha(0)
+            halo.setColorAt(1, edge)
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(halo)
+            painter.drawEllipse(QRectF(-172, -141, 344, 300))
+            painter.setPen(QPen(QColor("#43453a"), 0.8))
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawEllipse(QRectF(-144, 72, 288, 42))
+            painter.drawEllipse(QRectF(-113, 77, 226, 30))
+            if frame["ring_alpha"] > 0:
+                spread = frame["ring_spread"]
+                painter.setPen(QPen(QColor(240, 181, 109, round(frame["ring_alpha"])), 1.5))
+                painter.drawEllipse(
+                    QRectF(
+                        -118 - 15 * spread,
+                        72 - 3 * spread,
+                        236 + 30 * spread,
+                        35 + 6 * spread,
+                    )
                 )
-            )
-        shadow = QRadialGradient(QPointF(0, 90), 88)
-        shadow.setColorAt(0, QColor(0, 0, 0, 100))
-        shadow.setColorAt(1, QColor(0, 0, 0, 0))
+            shadow = QRadialGradient(QPointF(0, 90), 88)
+            shadow.setColorAt(0, QColor(0, 0, 0, 100))
+            shadow.setColorAt(1, QColor(0, 0, 0, 0))
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(shadow)
+            painter.drawEllipse(QRectF(-96, 73, 192, 40))
         painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(shadow)
-        painter.drawEllipse(QRectF(-96, 73, 192, 40))
         base = QLinearGradient(-66, 60, 66, 90)
         base.setColorAt(0, QColor("#57574d"))
         base.setColorAt(0.5, QColor("#34362f"))
@@ -460,3 +684,14 @@ class FlameVisual(QWidget):
         painter.restore()
         painter.setBrush(frame["indicator"])
         painter.drawEllipse(QRectF(-2, 78, 4, 4))
+        painter.end()
+        if surface is not None:
+            painter = QPainter(self)
+            painter.drawPixmap(0, 0, surface)
+            painter.end()
+            pixels = surface.toImage().scaled(self.size(), Qt.AspectRatioMode.IgnoreAspectRatio,
+                                              Qt.TransformationMode.SmoothTransformation)
+            # Include even faint breathing/antialiasing pixels, excluding only
+            # fully transparent pixels (an alpha threshold would lose them).
+            mask = QBitmap.fromImage(pixels.createMaskFromColor(0, Qt.MaskMode.MaskInColor))
+            self.silhouette_changed.emit(QRegion(mask))

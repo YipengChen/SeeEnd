@@ -6,11 +6,24 @@ values, configuration snippets, protocol identifiers, or data attached to items.
 
 import weakref
 from PySide6 import QtGui, QtWidgets
-from PySide6.QtCore import QSignalBlocker, Qt
+from PySide6.QtCore import QEvent, QObject, QSignalBlocker, Qt
 from aiflame.core.i18n import translate
 
 _language = "zh-CN"
 _controls = weakref.WeakSet()
+
+
+class ArrowKeyFilter(QObject):
+    """Compatibility shim: leave native keyboard navigation to each control."""
+    def eventFilter(self, watched, event):
+        return False
+
+
+def install_arrow_key_filter():
+    app = QtWidgets.QApplication.instance()
+    if app is not None and hasattr(app, "_seeend_arrow_key_filter"):
+        app.removeEventFilter(app._seeend_arrow_key_filter)
+        del app._seeend_arrow_key_filter
 
 
 def t(text):
@@ -38,6 +51,7 @@ class Localized:
     def __init__(self, *args, **kwargs):
         self._source_text = {}
         super().__init__(*args, **kwargs)
+        install_arrow_key_filter()
         _controls.add(self)
         if isinstance(self, (QtWidgets.QLabel, QtWidgets.QAbstractButton, QtGui.QAction)):
             self.setText(self.text())
@@ -110,6 +124,11 @@ def set_headers(self, texts):
         self.horizontalHeaderItem(index).setData(Qt.ItemDataRole.UserRole + 99, text)
 
 
+def ignore_value_wheel(self, event):
+    """Let the page scroll without changing a selection or numeric value."""
+    event.ignore()
+
+
 def localized_type(base):
     methods = {}
     for method in ("setToolTip", "setAccessibleName", "setAccessibleDescription", "setPlaceholderText", "setSuffix", "setWindowTitle"):
@@ -121,6 +140,8 @@ def localized_type(base):
         methods["clear"] = clear_label
     if issubclass(base, QtWidgets.QComboBox):
         methods.update(addItem=add_item, addItems=add_items, setItemText=set_item_text)
+    if issubclass(base, (QtWidgets.QComboBox, QtWidgets.QAbstractSpinBox, QtWidgets.QSlider)):
+        methods["wheelEvent"] = ignore_value_wheel
     if issubclass(base, QtWidgets.QTableWidget):
         methods["setHorizontalHeaderLabels"] = set_headers
     return type(base.__name__, (Localized, base), methods)
@@ -128,7 +149,7 @@ def localized_type(base):
 
 for _name in (
     "QLabel", "QPushButton", "QCheckBox", "QComboBox", "QFrame", "QLineEdit",
-    "QPlainTextEdit", "QProgressBar", "QScrollArea", "QSlider", "QSpinBox",
+    "QPlainTextEdit", "QProgressBar", "QScrollArea", "QSlider", "QSpinBox", "QDoubleSpinBox",
     "QStackedWidget", "QTableWidget", "QTimeEdit", "QWidget", "QDialog", "QSystemTrayIcon",
 ):
     globals()[_name] = localized_type(getattr(QtWidgets, _name))

@@ -38,13 +38,29 @@ class ResetFixture:
 
     def seed_history(self):
         self.hub.engine.update_settings({"language": "en", "duration": 45, "brightness": 7,
-                                         "hold_until_activity": True})
+                                         "hold_until_activity": True, "desktop_flame_enabled": False})
         self.hub.engine.accept(make_event("manual", "old-task", "done"), "manual")
         self.hub.engine.db.execute("INSERT INTO self_tests VALUES (?,?)", ("old-test", 1))
         self.hub.engine.db.commit()
 
 
 class ResetTests(ResetFixture, unittest.TestCase):
+    def test_reset_removes_wechat_profile_and_restores_disabled_channel(self):
+        from aiflame.integrations.wechat.credentials import WechatCredentials
+        from test_wechat import ACCOUNT
+        old = self.hub.wechat
+        with patch.object(WechatCredentials, "_call", return_value=None):
+            old.credentials.save(ACCOUNT)
+            old.bound = True
+            old.account = dict(ACCOUNT)
+            self.hub.engine.update_settings({"wechat_notifications": True})
+            result = self.hub.reset_app()
+        self.assertTrue(old.closed)
+        self.assertFalse(result["settings"]["wechat_notifications"])
+        self.assertFalse(result["wechat"]["bound"])
+        self.assertFalse(WechatCredentials(self.runtime).has_account())
+        self.assertIn("wechat", self.hub.engine.router.outputs)
+
     def test_reset_restores_defaults_and_persists_rotated_empty_state(self):
         self.seed_history()
         before = deepcopy(self.hub.config)
@@ -54,7 +70,7 @@ class ResetTests(ResetFixture, unittest.TestCase):
                 db.execute("CREATE TABLE old_data(value TEXT)")
             for suffix in ("-wal", "-shm", "-journal"):
                 (self.runtime / (base + suffix)).write_text("owned old cache")
-        for name in ("cli-integrations.json", "live-test.txt", "desktop-adapters-live.json"):
+        for name in ("cli-integrations.json", "live-test.txt", "desktop-adapters-live.json", "desktop-flame.json"):
             (self.runtime / name).write_text("owned old state")
         for name in ("firmware-cache", "cli/deepseek-bundle"):
             directory = self.runtime / name
@@ -98,7 +114,7 @@ class ResetTests(ResetFixture, unittest.TestCase):
         self.assertEqual(saved, self.hub.config)
         self.assertNotIn("old-pairing", json.dumps(saved))
         for name in ("codex-sequences.sqlite", "cli-lifecycle.sqlite", "cli-integrations.json",
-                     "live-test.txt", "desktop-adapters-live.json", "firmware-cache", "cli/deepseek-bundle"):
+                     "live-test.txt", "desktop-adapters-live.json", "desktop-flame.json", "firmware-cache", "cli/deepseek-bundle"):
             self.assertFalse((self.runtime / name).exists(), name)
         for base in ("codex-sequences.sqlite", "cli-lifecycle.sqlite"):
             for suffix in ("-wal", "-shm", "-journal"):
@@ -111,6 +127,74 @@ class ResetTests(ResetFixture, unittest.TestCase):
             for table in ("events", "tasks", "self_tests", "deliveries"):
                 self.assertEqual(db.execute("SELECT COUNT(*) FROM " + table).fetchone()[0], 0)
         self.assertEqual(load_config(), saved)
+
+    def seed_plug_credentials(self):
+        from aiflame.devices.models import MIJIA_PLUG_MODEL
+        self.hub.config["devices"].update({
+            identity: {"hardware_model": MIJIA_PLUG_MODEL, "device_id": identity,
+                       "miio_token_ref": "owned-test-vault", "connection_paused": True}
+            for identity in ("miio:123", "miio:456")})
+
+    def test_reset_removes_only_owned_vault_tokens_and_cloud_candidates(self):
+        self.seed_plug_credentials()
+        tokens = {("owned-test-vault", "miio:123"): "secret-1",
+                  ("owned-test-vault", "miio:456"): "secret-2",
+                  ("other-app", "unrelated"): "keep"}
+        self.hub.devices.mijia.devices = {"123": {"token": "temporary-cloud-token"}}
+        old_login = self.hub.devices.mijia
+        from types import SimpleNamespace
+        def vault(runtime, service):
+            return SimpleNamespace(delete=lambda identity: tokens.pop((service, identity), None))
+        with patch("aiflame.devices.token_store.TokenStore", side_effect=vault) as cleanup:
+            self.hub.reset_app()
+        self.assertEqual(cleanup.call_count, 2)
+        self.assertEqual(tokens, {("other-app", "unrelated"): "keep"})
+        self.assertEqual(old_login.devices, {})
+        self.assertEqual(self.hub.config["devices"], {})
+        self.assertNotIn("pending_device_token_cleanup", self.hub.config)
+
+    def test_reset_removes_windows_ciphertext_files_including_orphans(self):
+        from aiflame.devices.token_store import TokenStore
+        from tests.test_mijia import TOKEN
+        self.seed_plug_credentials()
+        store = TokenStore(self.runtime, "owned-test-vault")
+        with patch.object(store, "_dpapi", return_value=b"encrypted-only"):
+            store._windows("set", "miio:123", TOKEN)
+            store._windows("set", "orphan", TOKEN)
+        self.assertNotIn(TOKEN, store._path("miio:123").read_text())
+        with patch.object(TokenStore, "delete", lambda store, account: store._windows("delete", account)), patch.object(TokenStore, "_dpapi") as decrypt:
+            self.hub.reset_app()
+            decrypt.assert_not_called()
+        self.assertFalse((self.runtime / "device-tokens").exists())
+        self.assertFalse(list(self.runtime.glob(".reset-*")))
+
+    def test_reset_removes_local_ciphertext_and_key_without_keychain(self):
+        from aiflame.devices.token_store import TokenStore
+        from tests.test_mijia import TOKEN
+        self.seed_plug_credentials()
+        store = TokenStore(self.runtime, "owned-test-vault")
+        with patch("aiflame.devices.token_store.sys.platform", "darwin"), patch.object(TokenStore, "_call", side_effect=AssertionError("keychain accessed")):
+            store.set("miio:123", TOKEN)
+            store.set("miio:456", TOKEN)
+            result = self.hub.reset_app()
+        self.assertFalse(result.get("token_cleanup_pending"))
+        self.assertFalse((self.runtime / "device-tokens").exists())
+        self.assertFalse(list(self.runtime.glob(".reset-*")))
+
+    def test_reset_preserves_failed_token_cleanup_references_for_retry(self):
+        self.seed_plug_credentials()
+        with patch("aiflame.devices.token_store.TokenStore.delete", side_effect=RuntimeError("vault denied")):
+            result = self.hub.reset_app()
+        self.assertTrue(result["token_cleanup_pending"])
+        self.assertIn("Token 未清理", result["message"])
+        expected = [{"service": "owned-test-vault", "device_id": identity} for identity in ("miio:123", "miio:456")]
+        self.assertEqual(self.hub.config["pending_device_token_cleanup"], expected)
+        self.assertEqual(json.loads((self.runtime / "credentials.json").read_text())["pending_device_token_cleanup"], expected)
+        with patch("aiflame.devices.token_store.TokenStore.delete") as cleanup:
+            result = self.hub.reset_app()
+        self.assertEqual(cleanup.call_count, 2)
+        self.assertNotIn("pending_device_token_cleanup", self.hub.config)
+        self.assertNotIn("token_cleanup_pending", result)
 
     def test_owned_cache_symlink_is_removed_without_touching_its_target(self):
         external = self.root / "external-cache"
@@ -250,7 +334,7 @@ class ResetHttpTests(ResetFixture, unittest.TestCase):
             except Exception as error:
                 errors.append(error)
 
-        with patch.object(self.hub.desktop_clients, "stop", side_effect=stop_monitor):
+        with patch.object(self.hub.transport, "stop", side_effect=stop_monitor):
             thread = threading.Thread(target=reset)
             thread.start()
             try:

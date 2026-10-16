@@ -295,20 +295,18 @@ class TestBrowserHost(unittest.TestCase):
         with tempfile.TemporaryDirectory() as runtime:
             self.assertEqual(extension_folder_path(runtime), Path(runtime) / "SeeEnd" / "BrowserExtension")
 
-    def test_offline_guide_has_real_images_and_no_console_or_script(self):
-        from aiflame.integrations.chatgpt_web.guide import offline_html, STEPS, IMAGES
+    def test_offline_guide_links_store_without_console_or_script(self):
+        from aiflame.integrations.chatgpt_web.guide import offline_html, STORE_URL
         content = offline_html()
         self.assertNotIn("<script", content)
         self.assertNotIn("<svg", content)
-        self.assertNotIn("href=", content)
         self.assertNotIn("SeeEnd 控制台", content)
-        for _, _, filename in STEPS:
-            if filename:
-                magic = b"\x89PNG" if filename.endswith(".png") else b"\xff\xd8"
-                self.assertTrue((IMAGES / filename).read_bytes().startswith(magic))
-        self.assertIn("加载未打包的扩展程序", content)
-        self.assertIn("BrowserExtension", content)
-        self.assertIn("等待安装文件夹路径显示", content)
+        self.assertIn('href="' + STORE_URL + '"', content)
+        self.assertIn("添加至 Chrome", content)
+        self.assertIn("连接并开始使用", content)
+        self.assertNotIn("验证", content)
+        self.assertNotIn("加载未打包", content)
+        self.assertNotIn("BrowserExtension", content)
 
     def test_prepare_extension_does_not_overwrite_foreign_folders_or_follow_symlinks(self):
         with tempfile.TemporaryDirectory() as root, tempfile.TemporaryDirectory() as outside:

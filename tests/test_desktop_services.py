@@ -6,7 +6,7 @@ import unittest
 import urllib.error
 import urllib.request
 from unittest.mock import patch
-from aiflame.core.paths import user_data_dir, runtime_dir, write_private
+from aiflame.core.paths import load_config, user_data_dir, runtime_dir, write_private
 from aiflame.hub.server import Hub
 from aiflame.integrations.chatgpt_web.install import manifest_path
 from aiflame.integrations.codex.install import install
@@ -19,6 +19,39 @@ class PathsAndInstallTests(unittest.TestCase):
         environment = patch.dict(os.environ, {"AIFLAME_DATA_DIR": runtime.name})
         environment.start()
         self.addCleanup(environment.stop)
+
+    def test_upgrade_removes_retired_credentials_and_enables_background_sources(self):
+        from aiflame.core.engine import Engine
+        from aiflame.core.events import make_event
+        from aiflame.integrations.registry import BACKGROUND_SOURCES, SOURCES
+
+        config = load_config()
+        local_token = config['tokens']['local-script']
+        config['tokens']['chatgpt-desktop'] = 'retired-token'
+        write_private(runtime_dir() / 'credentials.json', config)
+        engine = Engine(runtime_dir() / 'events.sqlite', sources=SOURCES)
+        settings = {**engine.settings, 'duration': 27, 'source_enabled': {
+            **engine.settings['source_enabled'], 'codex': False,
+            **dict.fromkeys(BACKGROUND_SOURCES, False), 'chatgpt-desktop': True}}
+        engine.db.execute("INSERT OR REPLACE INTO settings VALUES ('main', ?)", (json.dumps(settings),))
+        engine.db.commit()
+        engine.db.close()
+        hub = Hub(port=0)
+        try:
+            self.assertNotIn('chatgpt-desktop', hub.config['tokens'])
+            self.assertNotIn('chatgpt-desktop', hub.engine.settings['source_enabled'])
+            self.assertFalse(hasattr(hub, 'desktop_clients'))
+            self.assertEqual(hub.config['tokens']['local-script'], local_token)
+            self.assertEqual(hub.engine.settings['duration'], 27)
+            self.assertFalse(hub.engine.settings['source_enabled']['codex'])
+            for source in BACKGROUND_SOURCES:
+                self.assertTrue(hub.engine.settings['source_enabled'][source])
+                result, status = hub.engine.accept(make_event(source, source, 'working'), source)
+                self.assertEqual(status, 202)
+                self.assertNotEqual(result['result'], 'unmatched')
+                self.assertIn((source, source), hub.engine.active)
+        finally:
+            hub.stop()
 
     def test_malformed_hook_groups_are_rejected_without_rewriting_configuration(self):
         with tempfile.TemporaryDirectory() as root:
@@ -169,13 +202,13 @@ class HTTPTests(unittest.TestCase):
             self.request("/api/device", {"action": "connect", "transport": "yeelight"})
         self.assertEqual(error.exception.code, 409)
         error.exception.close()
-        with self.request("/api/settings", {"mode": "hardware"}) as response:
-            self.assertEqual(json.load(response)["settings"]["mode"], "hardware")
+        with self.request("/api/settings", {"hardware_notifications": True}) as response:
+            self.assertEqual(json.load(response)["settings"]["hardware_notifications"], True)
         for path in ("/api/status", "/api/indicator"):
             with self.request(path) as response:
-                self.assertEqual(json.load(response)["settings"]["mode"], "hardware")
-        with self.request("/api/settings", {"mode": "virtual"}) as response:
-            self.assertEqual(json.load(response)["settings"]["mode"], "virtual")
+                self.assertEqual(json.load(response)["settings"]["hardware_notifications"], True)
+        with self.request("/api/settings", {"hardware_notifications": False}) as response:
+            self.assertEqual(json.load(response)["settings"]["hardware_notifications"], False)
 
     def test_verification_requires_dashboard_and_real_source_events(self):
         from aiflame.core.events import make_event
@@ -338,6 +371,13 @@ class HTTPTests(unittest.TestCase):
             self.assertEqual(response.headers.get_content_type(), "application/json")
             self.assertEqual(json.load(response)["app_name"], "SeeEnd")
             self.assertIn("Set-Cookie", response.headers)
+
+        for path, body in (("/api/desktop-clients", None),
+                           ("/api/desktop-clients/permissions", {})):
+            with self.assertRaises(urllib.error.HTTPError) as error:
+                self.request(path, body)
+            self.assertEqual(error.exception.code, 404)
+            error.exception.close()
 
     def test_extension_download_excludes_credentials(self):
         with self.request("/api/browser-extension/download") as response:

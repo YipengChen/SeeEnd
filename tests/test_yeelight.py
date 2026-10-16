@@ -1,5 +1,6 @@
 """Yeelight wire framing, native effects, physical identity and fleet isolation."""
 import json
+import base64
 import socket
 from contextlib import nullcontext
 from pathlib import Path
@@ -13,10 +14,10 @@ from aiflame.core.engine import Engine
 from aiflame.integrations.registry import SOURCES
 from aiflame.core.events import EventError, make_event
 from aiflame.devices.fleet import FleetDeviceService
-from aiflame.devices.models import YEELIGHT_MODEL, YEELIGHT_BULB_MODEL, hardware_model
-from aiflame.devices.yeelight import YeelightClient, lan_host, parse_discovery, discover
+from aiflame.devices.models import YEELIGHT_MODEL, YEELIGHT_BULB_MODEL, YEELIGHT_BEAM_MODEL, YEELIGHT_CUBE_MODEL, hardware_model
+from aiflame.devices.yeelight import YeelightClient, BeamClient, lan_host, parse_discovery, discover
 from aiflame.transports.fleet import FleetTransportManager
-from aiflame.transports.yeelight import COLORS, light_flow, YeelightTransport
+from aiflame.transports.yeelight import COLORS, light_flow, beam_pixel, YeelightTransport
 
 HOST = '192.168.1.44'
 IDENTITY = 'yeelight:0x123456'
@@ -31,6 +32,11 @@ BULB_ID = 'yeelight:0x654321'
 BULB_INFO = {**INFO, 'device_id': BULB_ID, 'model': 'colorb', 'name': 'YLDP005',
              'support': ['get_prop', 'set_power', 'start_cf', 'set_scene']}
 BULB_REPLY = REPLY.replace(b'lamp15', b'colorb').replace(b'0x123456', b'0x654321').replace(b'bg_', b'')
+BEAM_ID = 'yeelight:744dbdb4f94c'
+BEAM_INFO = {**BULB_INFO, 'device_id': BEAM_ID, 'model': 'RaysLight', 'name': 'Beam',
+             'support': list(hardware_model(YEELIGHT_BEAM_MODEL)['required_methods'])}
+BEAM_REPLY = BULB_REPLY.replace(b'colorb', b'RaysLight').replace(b'0x654321', b'744dbdb4f94c').replace(
+    b'get_prop set_power start_cf set_scene', ' '.join(BEAM_INFO['support']).encode())
 
 
 class DiscoverySocket:
@@ -145,6 +151,144 @@ class DiscoveryRetryTests(unittest.TestCase):
 
 
 class YeelightTests(unittest.TestCase):
+    def test_front_white_flows_use_per_state_temperature_and_power_off_pulses(self):
+        from aiflame.devices.light_settings import light_settings
+        settings = light_settings({'hardware_model': YEELIGHT_MODEL, 'light_settings': {
+            'reminder_mode': 'front', 'front_state_brightness': {'working': 0, 'done': 90, 'needs_input': 65},
+            'front_state_temperature': {'working': 2700, 'done': 6500, 'needs_input': 3200}}})
+        self.assertIsNone(light_flow({'state': 'working', 'duration_ms': 0}, settings))
+        self.assertIsNone(light_flow({'state': 'idle'}, settings))
+        self.assertEqual(light_flow({'state': 'done', 'duration_ms': 10000}, settings),
+                         [2, 2, '50,2,6500,90,9950,7,0,0'])
+        self.assertEqual(light_flow({'state': 'done', 'duration_ms': 0, 'holding': True}, settings),
+                         [2, 2, '50,2,6500,90,29950,7,0,0'])
+        for duration in (50, 100, 150, 999, 1000, 10000, 10500):
+            with self.subTest(duration=duration):
+                count, action, expression = light_flow({'state': 'needs_input', 'duration_ms': duration}, settings)
+                steps = [list(map(int, expression.split(',')))[i:i + 4] for i in range(0, len(expression.split(',')), 4)]
+                self.assertGreater(count, 0)
+                self.assertEqual(action, 2)
+                self.assertEqual(sum(steps[i % len(steps)][0] for i in range(count)), min(duration, 600))
+                self.assertTrue(all(step[0] >= 50 and step[1] in (2, 7) for step in steps))
+                self.assertTrue(all(step[2] == 3200 for step in steps if step[1] == 2))
+                self.assertEqual({step[3] for step in steps if step[1] == 2}, {65})
+        for model in (YEELIGHT_MODEL, YEELIGHT_BULB_MODEL):
+            for brightness in (0, 1, 10, 100):
+                with self.subTest(model=model, brightness=brightness):
+                    values = light_settings({'hardware_model': model, 'light_settings': {
+                        'reminder_mode': 'front', 'front_state_brightness': {'needs_input': brightness}}})
+                    pulse = light_flow({'state': 'needs_input', 'duration_ms': 5000}, values)
+                    if brightness == 0:
+                        self.assertIsNone(pulse)
+                    else:
+                        self.assertEqual(pulse, [2, 2, f'50,2,2700,{brightness},550,7,0,0'])
+
+    def test_front_mode_is_persistent_independent_and_validates_model_and_ranges(self):
+        from aiflame.devices.light_settings import STATE_BRIGHTNESS_DEFAULTS
+        with tempfile.TemporaryDirectory() as directory:
+            engine = Engine(':memory:')
+            self.addCleanup(engine.db.close)
+            config = {'devices': {
+                IDENTITY: {'device_id': IDENTITY, 'hardware_model': YEELIGHT_MODEL, 'connection_paused': True},
+                BULB_ID: {'device_id': BULB_ID, 'hardware_model': YEELIGHT_BULB_MODEL, 'connection_paused': True}}}
+            fleet = FleetTransportManager(engine.flame, threading.RLock(), config)
+            service = FleetDeviceService(config, directory, fleet, fleet.lock)
+            body = {'hardware_model': YEELIGHT_MODEL, 'device_id': IDENTITY}
+            service.update_light_settings({**body, 'settings': {'reminder_mode': 'front', 'front_state_brightness': {'working': 0, 'done': 95}, 'front_state_temperature': {'done': 6500}}})
+            values = fleet.outputs[IDENTITY].settings
+            self.assertEqual(values['brightness'], 95)
+            self.assertEqual(values['state_brightness'], STATE_BRIGHTNESS_DEFAULTS)
+            self.assertEqual(values['front_state_temperature'], {'working': 2700, 'done': 6500, 'needs_input': 2700})
+            self.assertEqual(fleet.outputs[BULB_ID].settings['reminder_mode'], 'back')
+            saved = json.loads((Path(directory) / 'credentials.json').read_text())
+            restarted = FleetTransportManager(engine.flame, fleet.lock, saved)
+            self.assertEqual(restarted.outputs[IDENTITY].settings, values)
+            service.update_light_settings({**body, 'settings': {'brightness': 0}})
+            self.assertEqual(fleet.outputs[IDENTITY].settings['brightness'], 0)
+            service.update_light_settings({**body, 'settings': {'reminder_mode': 'back'}})
+            self.assertEqual(fleet.outputs[IDENTITY].settings['state_brightness'], STATE_BRIGHTNESS_DEFAULTS)
+            self.assertEqual(fleet.outputs[IDENTITY].settings['brightness'], 100)
+            service.update_light_settings({**body, 'settings': {'reminder_mode': 'front'}})
+            self.assertEqual(fleet.outputs[IDENTITY].settings['brightness'], 0)
+            for settings in ({'reminder_mode': 'both'}, {'reminder_mode': []}, {'front_state_temperature': {'done': 2699}},
+                             {'front_state_temperature': {'needs_input': 6501}}, {'front_state_temperature': {'working': True}},
+                             {'front_state_brightness': {'working': -1}}, {'front_state_brightness': {'idle': 5}}):
+                with self.subTest(settings=settings), self.assertRaises(EventError):
+                    service.update_light_settings({**body, 'settings': settings})
+            bulb = {'hardware_model': YEELIGHT_BULB_MODEL, 'device_id': BULB_ID}
+            service.update_light_settings({**bulb, 'settings': {'reminder_mode': 'front',
+                'front_state_temperature': {'done': 1700}, 'front_state_brightness': {'done': 75}}})
+            bulb_settings = fleet.outputs[BULB_ID].settings
+            self.assertEqual(bulb_settings['brightness'], 75)
+            self.assertEqual(light_flow({'state': 'done', 'duration_ms': 1000}, bulb_settings),
+                             [2, 2, '50,2,1700,75,950,7,0,0'])
+            service.update_light_settings({**bulb, 'settings': {'reminder_mode': 'back'}})
+            self.assertEqual(fleet.outputs[BULB_ID].settings['brightness'], 100)
+            self.assertEqual(fleet.outputs[BULB_ID].settings['front_state_temperature']['done'], 1700)
+            with self.assertRaises(EventError):
+                service.update_light_settings({**bulb, 'settings': {'front_state_temperature': {'done': 1699}}})
+            saved = json.loads((Path(directory) / 'credentials.json').read_text())
+            restarted = FleetTransportManager(engine.flame, fleet.lock, saved)
+            self.assertEqual(restarted.outputs[BULB_ID].settings, fleet.outputs[BULB_ID].settings)
+
+    def test_white_flash_configuration_merges_persists_and_controls_pulses(self):
+        from aiflame.devices.light_settings import FRONT_FLASH_DEFAULTS
+        from aiflame.transports.yeelight import white_flash_interval
+        with tempfile.TemporaryDirectory() as directory:
+            engine = Engine(':memory:')
+            self.addCleanup(engine.db.close)
+            config = {'devices': {identity: {'device_id': identity, 'hardware_model': model, 'connection_paused': True}
+                                  for identity, model in ((IDENTITY, YEELIGHT_MODEL), (BULB_ID, YEELIGHT_BULB_MODEL))}}
+            fleet = FleetTransportManager(engine.flame, threading.RLock(), config)
+            service = FleetDeviceService(config, directory, fleet, fleet.lock)
+            for model, identity in ((YEELIGHT_MODEL, IDENTITY), (YEELIGHT_BULB_MODEL, BULB_ID)):
+                body = {'hardware_model': model, 'device_id': identity}
+                service.update_light_settings({**body, 'settings': {'reminder_mode': 'front', 'front_flash': {'on_ms': 1500}}})
+                service.update_light_settings({**body, 'settings': {'front_flash': {'off_ms': 2500}}})
+                values = fleet.outputs[identity].settings
+                self.assertEqual(values['front_flash'], {'enabled': True, 'on_ms': 1500, 'off_ms': 2500})
+                self.assertEqual(white_flash_interval(values), 4.0)
+                self.assertEqual(light_flow({'state': 'needs_input', 'duration_ms': 5000}, values),
+                                 [2, 2, '50,2,2700,50,1450,7,0,0'])
+                service.update_light_settings({**body, 'settings': {'front_flash': {'enabled': False}}})
+                self.assertEqual(light_flow({'state': 'needs_input', 'duration_ms': 5000}, fleet.outputs[identity].settings),
+                                 [2, 2, '50,2,2700,50,4950,7,0,0'])
+                for invalid in ({'on_ms': 99}, {'on_ms': 10001}, {'off_ms': 99}, {'off_ms': 10001},
+                                {'on_ms': 100, 'off_ms': 100},
+                                {'enabled': 1}, {'on_ms': True}, {'other': 100}, {}):
+                    with self.subTest(invalid=invalid), self.assertRaises(EventError):
+                        service.update_light_settings({**body, 'settings': {'front_flash': invalid}})
+                service.update_light_settings({**body, 'settings': {'front_flash': {'on_ms': 1100, 'off_ms': 100}}})
+                self.assertEqual(white_flash_interval(fleet.outputs[identity].settings), 1.2)
+                with self.assertRaises(EventError):
+                    service.update_light_settings({**body, 'settings': {'front_flash': {'on_ms': 1000}}})
+                self.assertEqual(fleet.outputs[identity].settings['front_flash']['on_ms'], 1100)
+            saved = json.loads((Path(directory) / 'credentials.json').read_text())
+            restarted = FleetTransportManager(engine.flame, fleet.lock, saved)
+            self.assertEqual(restarted.outputs[BULB_ID].settings['front_flash'], fleet.outputs[BULB_ID].settings['front_flash'])
+            self.assertEqual(FRONT_FLASH_DEFAULTS, {'enabled': True, 'on_ms': 600, 'off_ms': 600})
+
+    def test_switching_channels_stops_previous_reminder_and_front_uses_ct(self):
+        engine = Mock(settings={'brightness': 80, 'reduced': False, 'reminder_mode': 'front'})
+        worker = YeelightTransport(engine, threading.RLock(), {})
+        worker.support = {'bg_set_scene', 'set_scene', 'set_power', 'start_cf'}
+        worker.command = Mock(return_value={'id': 1, 'result': ['ok']})
+        desired = {'state': 'done', 'key': 'done', 'duration_ms': 10000}
+        worker.display(desired, engine.settings)
+        self.assertEqual([call.args[0] for call in worker.command.call_args_list], ['bg_set_power', 'set_scene'])
+        self.assertIn('50,2,4000,50', worker.command.call_args.args[1][-1])
+        worker.command.reset_mock()
+        worker.display({'state': 'idle'}, engine.settings)
+        self.assertEqual(worker.command.call_args.args, ('set_power', ['off', 'sudden', 0]))
+        worker.command.reset_mock()
+        worker.display(desired, {**engine.settings, 'reminder_mode': 'back'})
+        self.assertEqual([call.args[0] for call in worker.command.call_args_list], ['set_power', 'bg_set_scene'])
+        worker.command.reset_mock()
+        worker.support = {'bg_set_scene'}
+        with self.assertRaisesRegex(ValueError, '白灯'):
+            worker.display(desired, engine.settings)
+        worker.command.assert_not_called()
+
     def test_discovery_uses_physical_identity_and_filters_model_support_sender(self):
         self.assertEqual(parse_discovery(REPLY, HOST)['device_id'], IDENTITY)
         for packet, sender in [(REPLY.replace(b'lamp15', b'color4'), HOST),
@@ -233,7 +377,7 @@ class YeelightTests(unittest.TestCase):
 
     def test_native_flows_end_off_respect_brightness_reduced_and_hold(self):
         settings = {'brightness': 20, 'reduced': False}
-        for state in ('working', 'done', 'error'):
+        for state in ('working', 'done', 'needs_input'):
             desired = {'key': state, 'state': state, 'duration_ms': 10000}
             count, action, expression = light_flow(desired, settings)
             self.assertEqual(action, 2)  # Official action 2 turns off; 0 restores previous state.
@@ -260,14 +404,14 @@ class YeelightTests(unittest.TestCase):
         for model in (YEELIGHT_MODEL, YEELIGHT_BULB_MODEL):
             self.assertEqual(light_settings({'hardware_model': model})['brightness'], 50)
             self.assertFalse(light_settings({'hardware_model': model, 'light_settings': {'reduced': True}})['reduced'])
-            for state in ('working', 'done', 'error'):
+            for state in ('working', 'done', 'needs_input'):
                 for brightness in (50, 100):
                     settings = {**light_settings({'hardware_model': model}), 'state_brightness': {state: brightness}}
                     flow = light_flow({'state': state, 'duration_ms': 10000}, settings)
                     self.assertEqual(int(flow[2].split(',')[3]), brightness)
 
     def test_custom_rgb_colors_reach_native_flow_for_every_state(self):
-        for state, color in (("working", "#FF72B6"), ("done", "#22D3EE"), ("error", "#A78BFA")):
+        for state, color in (("working", "#FF72B6"), ("done", "#22D3EE"), ("needs_input", "#A78BFA")):
             for reduced in (False, True):
                 with self.subTest(state=state, reduced=reduced):
                     flow = light_flow({"state": state, "duration_ms": 10000},
@@ -333,16 +477,16 @@ class YeelightTests(unittest.TestCase):
                 service.update_light_settings({**body, 'settings': {'state_brightness': {'working': 35}}})
                 service.update_light_settings({**body, 'settings': {'state_brightness': {'done': 80}}})
                 values = light_settings(fleet.records[identity])
-                self.assertEqual(values['state_brightness'], {'working': 35, 'done': 80, 'error': 50})
+                self.assertEqual(values['state_brightness'], {'working': 35, 'done': 80, 'needs_input': 100})
                 for state, brightness in values['state_brightness'].items():
                     flow = light_flow({'state': state, 'duration_ms': 5000, 'device_test': True}, values)
                     self.assertEqual(int(flow[2].split(',')[3]), brightness)
-                for patch_values in ({'working': -1}, {'done': 101}, {'error': True}, {'idle': 50}, {}):
+                for patch_values in ({'working': -1}, {'done': 101}, {'needs_input': True}, {'idle': 50}, {}):
                     with self.subTest(values=patch_values), self.assertRaises(EventError):
                         service.update_light_settings({**body, 'settings': {'state_brightness': patch_values}})
             saved = json.loads((Path(directory) / 'credentials.json').read_text())
             restarted = FleetTransportManager(engine.flame, fleet.lock, saved)
-            self.assertEqual(restarted.outputs[IDENTITY].settings['state_brightness'], {'working': 35, 'done': 80, 'error': 50})
+            self.assertEqual(restarted.outputs[IDENTITY].settings['state_brightness'], {'working': 35, 'done': 80, 'needs_input': 100})
             service.update_light_settings({'hardware_model': YEELIGHT_MODEL, 'device_id': IDENTITY,
                                           'settings': {'state_brightness': {'working': 0}}})
             values = fleet.outputs[IDENTITY].settings
@@ -384,7 +528,7 @@ class YeelightTests(unittest.TestCase):
         self.assertIsNone(response)
         worker.client.command.assert_not_called()
 
-    def _worker_applies_events(self, model_id, info, prefix):
+    def _worker_applies_events(self, model_id, info, prefix, front=False, attention=False):
         identity = info["device_id"]
         class FastTransport(YeelightTransport):
             def command(self, *args, **kwargs):
@@ -393,9 +537,11 @@ class YeelightTests(unittest.TestCase):
 
         engine = Engine(":memory:", sources=SOURCES)
         self.addCleanup(engine.db.close)
-        engine.update_settings({"mode": "hardware"})
+        engine.update_settings({"hardware_notifications": True})
         record = {"device_id": identity, "hardware_model": model_id,
                   "transport": "yeelight", "yeelight_host": HOST}
+        if front:
+            record['light_settings'] = {'reminder_mode': 'front'}
         lock = threading.RLock()
         fleet = FleetTransportManager(engine.flame, lock, {"devices": {identity: record}})
         engine.flame.transport = fleet
@@ -403,7 +549,7 @@ class YeelightTests(unittest.TestCase):
         client.open.return_value = client
         client.command.side_effect = lambda method, params: {"id": client.command.call_count, "result":
             ["off", "20", "0"] if method == "get_prop" and len(params) == 3 else
-            ["on"] if method == "get_prop" else ["ok"]}
+            ["on"] if method == "get_prop" else ["sent"] if method == 'update_leds' else ["ok"]}
 
         def wait_for(predicate):
             deadline = time.monotonic() + 2
@@ -416,6 +562,9 @@ class YeelightTests(unittest.TestCase):
 
         with patch('aiflame.transports.yeelight.discover', return_value=[info]), \
              patch('aiflame.transports.yeelight.YeelightClient', return_value=client), \
+             patch('aiflame.transports.yeelight.BeamClient', return_value=client), \
+             patch('aiflame.transports.yeelight.CubeClient', return_value=client), \
+             patch('aiflame.transports.yeelight.white_flash_interval', return_value=.1 if attention else 2.0), \
              patch('aiflame.transports.manager.YeelightTransport', FastTransport):
             fleet.start()
             try:
@@ -428,29 +577,86 @@ class YeelightTests(unittest.TestCase):
                     engine.accept(event, "manual")
                 wait_for(lambda: fleet.confirmed(event["event_id"]))
                 self.assertTrue(engine.flame.current["applied"])
-                self.assertTrue(any(call.args[0] == prefix + 'set_scene' and str(COLORS['done']) in call.args[1][-1]
-                                    for call in client.command.call_args_list))
+                if model_id in (YEELIGHT_BEAM_MODEL, YEELIGHT_CUBE_MODEL):
+                    expected_pixel = bytes([128,120,108]) if front else bytes.fromhex('52C788')
+                    self.assertTrue(any(call.args[0] == 'update_leds' and base64.b64decode(call.args[1][0]) == expected_pixel * hardware_model(model_id)["pixel_count"]
+                                        for call in client.command.call_args_list))
+                    frames_before = sum(call.args[0] == 'update_leds' for call in client.command.call_args_list)
+                    time.sleep(.25)
+                    frames_after = sum(call.args[0] == 'update_leds' for call in client.command.call_args_list)
+                    if model_id == YEELIGHT_CUBE_MODEL:
+                        self.assertGreaterEqual(frames_after, frames_before + 2)
+                    else:
+                        self.assertGreaterEqual(frames_after, frames_before + 3)
+                else:
+                    self.assertTrue(any(call.args[0] == prefix + 'set_scene' and (f'50,2,4000,{100 if model_id == YEELIGHT_MODEL else 50}' if front else str(COLORS['done'])) in call.args[1][-1]
+                                        for call in client.command.call_args_list))
+                if attention:
+                    def pulses():
+                        return [call for call in client.command.call_args_list
+                                if call.args[0] == 'set_scene' and call.args[1] == ['cf', 2, 2, '50,2,2700,50,550,7,0,0']]
+                    with lock:
+                        engine.flame.current['deadline'] = engine.flame.clock() - 1
+                        engine.desired()
+                        engine.accept(make_event('manual', 'waiting-task', 'working', 1), 'manual')
+                        waiting = make_event('manual', 'waiting-task', 'needs_input', 2)
+                        engine.accept(waiting, 'manual')
+                    wait_for(lambda: fleet.confirmed(waiting['event_id']) and len(pulses()) >= 2)
+                    with lock:
+                        completed = make_event('manual', 'waiting-task', 'done', 3)
+                        engine.accept(completed, 'manual')
+                    wait_for(lambda: fleet.confirmed(completed['event_id']))
+                    count = len(pulses())
+                    time.sleep(.3)
+                    self.assertEqual(len(pulses()), count)
                 with lock:
-                    engine.update_settings({"paused": True})
+                    engine.stop()
                 wait_for(lambda: fleet.outputs[identity].last_display_key == "muted")
             finally:
                 fleet.stop()
-        self.assertEqual(client.command.call_args.args, (prefix + 'set_power', ['off', 'sudden', 0]))
-        self.assertTrue(all(call.args[0] == 'get_prop' or call.args[0] in (prefix + 'set_power', prefix + 'set_scene', prefix + 'start_cf')
+        if model_id in (YEELIGHT_BEAM_MODEL, YEELIGHT_CUBE_MODEL):
+            self.assertEqual(client.command.call_args.args, ('update_leds', [base64.b64encode(bytes(hardware_model(model_id)["pixel_count"] * 3)).decode()]))
+        else:
+            self.assertEqual(client.command.call_args.args, (prefix + 'set_power', ['off', 'sudden', 0]))
+        allowed = ('update_leds',) if model_id in (YEELIGHT_BEAM_MODEL, YEELIGHT_CUBE_MODEL) else (prefix + 'set_power', prefix + 'set_scene', prefix + 'start_cf')
+        if model_id == YEELIGHT_CUBE_MODEL:
+            allowed += ('set_bright',)
+            self.assertNotIn('get_prop', [call.args[0] for call in client.command.call_args_list])
+        self.assertTrue(all(call.args[0] == 'get_prop' or call.args[0] in allowed
                             for call in client.command.call_args_list))
+
+    def test_cube_worker_color_and_white_events_stop_with_black_frames(self):
+        info = {**BULB_INFO, 'model': 'cubelite',
+                'support': list(hardware_model(YEELIGHT_CUBE_MODEL)['required_methods'])}
+        for front in (False, True):
+            with self.subTest(front=front):
+                self._worker_applies_events(YEELIGHT_CUBE_MODEL, info, '', front=front)
 
     def test_worker_applies_real_events_and_shutdown_turns_off_only_backlight(self):
         self._worker_applies_events(YEELIGHT_MODEL, INFO, 'bg_')
 
+    def test_front_worker_applies_events_and_shutdown_only_turns_off_front_light(self):
+        info = {**INFO, 'support': [*INFO['support'], 'set_power', 'start_cf', 'set_scene']}
+        self._worker_applies_events(YEELIGHT_MODEL, info, '', front=True)
+
     def test_bulb_worker_applies_events_and_shutdown_uses_main_channel(self):
         self._worker_applies_events(YEELIGHT_BULB_MODEL, BULB_INFO, '')
+
+    def test_bulb_white_worker_applies_ct_events_on_main_channel(self):
+        self._worker_applies_events(YEELIGHT_BULB_MODEL, BULB_INFO, '', front=True)
+
+    def test_both_white_workers_repeat_power_off_pulses_and_stop_on_completion(self):
+        lamp_info = {**INFO, 'support': [*INFO['support'], 'set_power', 'start_cf', 'set_scene']}
+        for model, info in ((YEELIGHT_MODEL, lamp_info), (YEELIGHT_BULB_MODEL, BULB_INFO)):
+            with self.subTest(model=model):
+                self._worker_applies_events(model, info, '', front=True, attention=True)
 
     def test_no_firmware_or_usb_operations_for_original_firmware_device(self):
         self.assertEqual(hardware_model(YEELIGHT_MODEL)['connection'], 'yeelight')
         with tempfile.TemporaryDirectory() as directory:
             engine = Engine(':memory:')
             self.addCleanup(engine.db.close)
-            engine.update_settings({'mode': 'hardware'})
+            engine.update_settings({"hardware_notifications": True})
             fleet = FleetTransportManager(engine.flame, threading.RLock(), {'devices': {}})
             service = FleetDeviceService(fleet.config, directory, fleet, fleet.lock)
             for action in ('install', 'flash_base', 'provision', 'probe'):
@@ -462,7 +668,7 @@ class YeelightTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             engine = Engine(':memory:')
             self.addCleanup(engine.db.close)
-            engine.update_settings({'mode': 'hardware'})
+            engine.update_settings({"hardware_notifications": True})
             config = {'devices': {'matrix': {'device_id': 'matrix', 'hardware_model': 'yeelight-yltd003', 'connection_paused': True}}}
             lock = threading.RLock()
             fleet = FleetTransportManager(engine.flame, lock, config)
@@ -502,6 +708,146 @@ class YeelightTests(unittest.TestCase):
     def test_bulb_fleet_connect_persists_identity_and_keeps_other_lamps(self):
         self._fleet_connect(YEELIGHT_BULB_MODEL, BULB_INFO)
 
+    def test_beam_fleet_connect_persists_identity_and_keeps_other_lamps(self):
+        self._fleet_connect(YEELIGHT_BEAM_MODEL, BEAM_INFO)
+
+    def test_beam_worker_applies_task_events_and_powers_off_on_pause_and_shutdown(self):
+        self._worker_applies_events(YEELIGHT_BEAM_MODEL, BEAM_INFO, '')
+
+    def test_beam_discovery_requires_real_setters_without_requiring_native_flows(self):
+        beam = parse_discovery(BEAM_REPLY, HOST, YEELIGHT_BEAM_MODEL)
+        self.assertEqual(beam['device_id'], BEAM_ID)
+        self.assertEqual(beam['model'], 'RaysLight')
+        self.assertIsNone(parse_discovery(BEAM_REPLY, HOST, YEELIGHT_BULB_MODEL))
+        self.assertIsNone(parse_discovery(BULB_REPLY, HOST, YEELIGHT_BEAM_MODEL))
+        for method in (b'update_leds', b'activate_fx_mode', b'set_power'):
+            self.assertIsNone(parse_discovery(BEAM_REPLY.replace(method, b'unsupported'), HOST))
+
+    def test_beam_frames_scale_brightness_and_use_black_without_power_animation(self):
+        settings = {'brightness': 20, 'reduced': False}
+        worker = YeelightTransport(Mock(settings=settings), threading.RLock(), {'hardware_model': YEELIGHT_BEAM_MODEL})
+        worker.command = Mock(return_value={'id': 1, 'result': ['sent']})
+        worker.support = {'set_scene', 'start_cf', *BEAM_INFO['support']}
+        desired = {'key': 'done', 'state': 'done', 'duration_ms': 3000}
+        worker.display(desired, settings)
+        worker.command.assert_called_once()
+        self.assertEqual(worker.command.call_args.args[0], 'update_leds')
+        self.assertEqual(base64.b64decode(worker.command.call_args.args[1][0]), bytes([16,40,27]) * 168)
+        worker.command.reset_mock()
+        worker.display({'key': 'idle', 'state': 'idle'}, settings)
+        self.assertEqual(base64.b64decode(worker.command.call_args.args[1][0]), bytes(168 * 3))
+        worker.command.reset_mock()
+        worker.command.side_effect = [None]
+        self.assertIsNone(worker.display(desired, settings))
+        self.assertEqual(worker.command.call_count, 1)
+
+    def test_beam_white_mode_saves_independently_and_survives_restart(self):
+        from aiflame.devices.light_settings import validate_patch, light_settings
+        validate_patch({'reminder_mode': 'front'}, YEELIGHT_BEAM_MODEL)
+        values = light_settings({'hardware_model': YEELIGHT_BEAM_MODEL, 'light_settings': {'reminder_mode': 'front'}})
+        self.assertEqual(values['reminder_mode'], 'front')
+        with tempfile.TemporaryDirectory() as directory:
+            engine = Engine(':memory:'); self.addCleanup(engine.db.close)
+            config = {'devices': {BEAM_ID: {'device_id': BEAM_ID, 'hardware_model': YEELIGHT_BEAM_MODEL, 'connection_paused': True}}}
+            fleet = FleetTransportManager(engine.flame, threading.RLock(), config)
+            service = FleetDeviceService(config, directory, fleet, fleet.lock)
+            body = {'hardware_model': YEELIGHT_BEAM_MODEL, 'device_id': BEAM_ID}
+            service.update_light_settings({**body, 'settings': {'colors': {'done': '#123456'}, 'state_brightness': {'done': 70}}})
+            service.update_light_settings({**body, 'settings': {'reminder_mode': 'front', 'front_state_temperature': {'done': 6500}, 'front_state_brightness': {'done': 40}, 'front_flash': {'on_ms': 1000, 'off_ms': 200}}})
+            saved = json.loads((Path(directory) / 'credentials.json').read_text())
+            restarted = FleetTransportManager(engine.flame, fleet.lock, saved)
+            self.assertEqual(restarted.outputs[BEAM_ID].settings, fleet.outputs[BEAM_ID].settings)
+            service.update_light_settings({**body, 'settings': {'reminder_mode': 'back'}})
+            self.assertEqual(fleet.outputs[BEAM_ID].settings['colors']['done'], '#123456')
+            self.assertEqual(fleet.outputs[BEAM_ID].settings['state_brightness']['done'], 70)
+            service.update_light_settings({**body, 'settings': {'reminder_mode': 'front'}})
+            self.assertEqual(fleet.outputs[BEAM_ID].settings['front_state_temperature']['done'], 6500)
+            with self.assertRaises(EventError):validate_patch({'front_state_temperature': {'done': 2699}}, YEELIGHT_BEAM_MODEL)
+
+    def test_beam_white_frames_follow_temperature_brightness_and_flash_boundaries(self):
+        from aiflame.devices.light_settings import light_settings
+        settings = light_settings({'hardware_model': YEELIGHT_BEAM_MODEL, 'light_settings': {'reminder_mode': 'front'}})
+        desired = {'key': 'waiting', 'state': 'needs_input', 'duration_ms': 5000}
+        warm = beam_pixel(desired, settings, 0)
+        self.assertEqual(warm, bytes([128,104,80]))
+        self.assertEqual(beam_pixel(desired, settings, .599), warm)
+        self.assertEqual(beam_pixel(desired, settings, .6), bytes(3))
+        self.assertEqual(beam_pixel(desired, settings, 1.2), warm)
+        settings['front_flash']['enabled'] = False
+        self.assertEqual(beam_pixel(desired, settings, .6), warm)
+        settings['front_state_temperature']['needs_input'] = 6500
+        cool = beam_pixel(desired, settings)
+        self.assertGreater(cool[2], warm[2])
+        settings['front_state_brightness']['needs_input'] = 0
+        self.assertEqual(beam_pixel(desired, settings), bytes(3))
+
+    def test_beam_white_worker_streams_events_without_native_flow_requirements(self):
+        self._worker_applies_events(YEELIGHT_BEAM_MODEL, BEAM_INFO, '', front=True)
+
+    def test_beam_udp_frames_do_not_require_frame_ack_and_keep_session_live(self):
+        class UDP:
+            def __init__(self):
+                self.packets = []
+                self.pending = []
+                self.closed = False
+            def connect(self, address): self.address = address
+            def settimeout(self, value): pass
+            def send(self, data):
+                packet = json.loads(data)
+                self.packets.append(packet)
+                if packet['method'] == 'udp_sess_new':
+                    response = {'id': packet['id'], 'params': {'token': 'test-session'}}
+                elif packet['method'] == 'update_leds':
+                    return  # Firmware sends no LED frame response.
+                else:
+                    response = {'id': packet['id'], 'result': ['ok']}
+                self.pending.append(json.dumps(response).encode())
+            def recv(self, size): return self.pending.pop(0)
+            def close(self): self.closed = True
+        udp = UDP()
+        client = BeamClient(HOST)
+        with patch.object(YeelightClient, 'open'), patch.object(YeelightClient, 'command', return_value={'id': 1, 'result': ['on']}), \
+             patch('aiflame.devices.yeelight.socket.socket', return_value=udp):
+            client.open()
+            frame = base64.b64encode(bytes([1,2,3]) * 168).decode()
+            self.assertEqual(client.command('update_leds', [frame])['result'], ['sent'])
+            self.assertEqual(udp.packets[-1]['method'], 'update_leds')
+            client.last_keep_alive = time.monotonic() - 6
+            client.command('update_leds', [frame])
+            self.assertEqual(udp.packets[-1]['method'], 'udp_sess_keep_alive')
+            client.command('get_prop', ['power'])
+            client.close()
+        methods = [packet['method'] for packet in udp.packets]
+        self.assertNotIn('set_power', methods)  # Already on: no startup animation.
+        self.assertEqual(methods[:4], ['udp_sess_new', 'udp_sess_keep_alive', 'activate_fx_mode', 'update_leds'])
+        self.assertEqual(methods[-3:], ['update_leds', 'udp_sess_keep_alive', 'udp_sess_keep_alive'])
+        self.assertEqual(udp.address, (HOST, 55444))
+        self.assertTrue(udp.closed)
+        self.assertIsNone(client.token)
+
+    def test_beam_frames_bypass_tcp_quota_without_consuming_it(self):
+        worker = YeelightTransport(Mock(settings={}), threading.RLock(), {'hardware_model': YEELIGHT_BEAM_MODEL})
+        worker.client = Mock()
+        worker.client.command.return_value = {'id': 1, 'result': ['sent']}
+        worker.stopping = Mock()
+        worker.stopping.wait.return_value = False
+        worker.next_command = 101.1
+        with patch('aiflame.transports.yeelight.time.monotonic', return_value=100):
+            for _ in range(3):worker.command('update_leds', ['AAAA'])
+        self.assertEqual(worker.next_command, 101.1)
+        self.assertTrue(all(call.args == (0,) for call in worker.stopping.wait.call_args_list))
+
+    def test_beam_invalid_session_closes_udp_socket(self):
+        udp = Mock()
+        udp.recv.return_value = b'{"id":1,"params":{"token":""}}'
+        client = BeamClient(HOST)
+        with patch.object(YeelightClient, 'open'), patch.object(YeelightClient, 'command', return_value={'id': 1, 'result': ['on']}), \
+             patch('aiflame.devices.yeelight.socket.socket', return_value=udp):
+            with self.assertRaisesRegex(ValueError, 'token'):
+                client.open()
+        udp.close.assert_called_once()
+        self.assertIsNone(client.udp)
+
     def test_bulb_discovery_is_filtered_by_model_and_native_capabilities(self):
         bulb = parse_discovery(BULB_REPLY, HOST)
         self.assertEqual(bulb['model'], 'colorb')
@@ -516,7 +862,7 @@ class YeelightTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             engine = Engine(':memory:')
             self.addCleanup(engine.db.close)
-            engine.update_settings({'mode': 'hardware'})
+            engine.update_settings({"hardware_notifications": True})
             config = {'devices': {}}
             fleet = FleetTransportManager(engine.flame, threading.RLock(), config)
             service = FleetDeviceService(config, directory, fleet, fleet.lock)

@@ -53,6 +53,49 @@ class ConsumerTests(unittest.TestCase):
         self.consumer.received({'notifications': [self.message]})
         self.assertEqual(len(self.calls), before)
 
+    def test_unavailable_permission_acknowledges_without_posting_or_prompting(self):
+        self.dashboard.notification_status = 'not_determined'
+        self.consumer.received({'notifications': [self.message]})
+        self.app.processEvents()
+        self.assertEqual(self.sent, [])
+        self.assertEqual(self.calls[-1][1]['body']['status'], 'denied')
+
+    def test_old_permission_response_cannot_override_a_newer_check(self):
+        callbacks, statuses = [], []
+        self.backend.status = callbacks.append
+        self.consumer.permission_status.connect(statuses.append)
+        self.consumer.check_status()
+        self.consumer.check_status()
+        callbacks[1]('denied')
+        callbacks[0]('authorized')
+        self.assertEqual(statuses, ['denied'])
+
+    def test_permission_request_does_not_submit_a_notification(self):
+        callbacks, statuses = [], []
+        self.backend.authorize = callbacks.append
+        self.backend.status = lambda callback: self.fail('Do not recheck while authorization is pending')
+        self.consumer.permission_status.connect(statuses.append)
+        self.consumer.authorize_notifications()
+        self.consumer.check_status()
+        self.assertEqual(self.sent, [])
+        callbacks[0]('authorized')
+        self.assertEqual(statuses, ['authorized'])
+        self.assertFalse(self.consumer.authorizing)
+
+    @unittest.skipUnless(__import__('sys').platform == 'darwin', 'macOS native backend')
+    def test_macos_status_reads_current_app_permission_each_time_without_submitting(self):
+        from aiflame.desktop.notifications import SystemNotifications
+        codes, statuses = iter((0, 2, 1)), []
+        class Center:
+            def getNotificationSettingsWithCompletionHandler_(self, callback):
+                code = next(codes)
+                callback(SimpleNamespace(authorizationStatus=lambda: code))
+        backend = SystemNotifications.__new__(SystemNotifications)
+        backend.center = Center()
+        for _ in range(3):
+            backend.status(statuses.append)
+        self.assertEqual(statuses, ['not_determined', 'authorized', 'denied'])
+
     @unittest.skipUnless(__import__('sys').platform == 'darwin', 'macOS native backend')
     def test_macos_native_request_and_delegate_without_posting_notification(self):
         from unittest.mock import patch
@@ -77,3 +120,45 @@ class ConsumerTests(unittest.TestCase):
         presentation = []
         center.delegate.userNotificationCenter_willPresentNotification_withCompletionHandler_(None, None, presentation.append)
         self.assertTrue(presentation[0] & UN.UNNotificationPresentationOptionBanner)
+        activated, completions = [], []
+        backend.activated.connect(activated.append)
+        response = SimpleNamespace(notification=lambda: SimpleNamespace(request=lambda: requests[0]))
+        center.delegate.userNotificationCenter_didReceiveNotificationResponse_withCompletionHandler_(
+            None, response, lambda: completions.append(True))
+        self.assertEqual(activated, ['test'])
+        self.assertEqual(completions, [True])
+
+    def test_click_returns_its_own_event_only_and_never_returns_test_notification(self):
+        returned = []
+        self.dashboard.return_task = returned.append
+        self.consumer.return_task('event-a')
+        self.consumer.return_task('seeend-notification-test')
+        self.consumer.shutdown()
+        self.consumer.return_task('event-b')
+        self.assertEqual(returned, ['event-a'])
+
+    @unittest.skipUnless(__import__('sys').platform == 'darwin', 'macOS native backend')
+    def test_macos_completion_accepts_signal_result_across_native_void_boundary(self):
+        import Foundation
+        from aiflame.desktop.notifications import SystemNotifications
+        callbacks, statuses = [], []
+        class Center:
+            def requestAuthorizationWithOptions_completionHandler_(self, options, callback):
+                callback(True, None)
+            def addNotificationRequest_withCompletionHandler_(self, request, callback):
+                callbacks.append(callback)
+        backend = SystemNotifications.__new__(SystemNotifications)
+        backend.center = Center()
+        self.consumer.test_result.connect(statuses.append)
+        backend.submit({'event_id': 'void-test', 'title': 'Title', 'body': 'Source'},
+                       self.consumer.test_result.emit)
+        self.assertEqual(len(callbacks), 1)
+        self.assertEqual(statuses, [])  # Completion happens after submit returns.
+        error = Foundation.NSError.errorWithDomain_code_userInfo_('SeeEndTest', 1, None)
+        for outcome in (None, error):
+            def native_completion():
+                return callbacks[0](outcome)
+            # A real Objective-C void block rejects an accidental bool return.
+            Foundation.NSBlockOperation.blockOperationWithBlock_(native_completion).start()
+            self.app.processEvents()
+        self.assertEqual(statuses, ['submitted', 'failed'])

@@ -11,6 +11,7 @@ from aiflame.outputs.router import OutputRouter
 from aiflame.outputs.desktop import DesktopOutput
 from aiflame.core.verification import verification_summary
 from aiflame.core.delivery import delivery_summary
+from aiflame.core.task_origins import TaskOrigins, validate_origin, validate_context
 
 class Engine:
     def __init__(self, path, clock=time.monotonic, wall=time.time, *, sources=()):
@@ -29,13 +30,16 @@ class Engine:
         CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY,value TEXT);
         DROP TABLE IF EXISTS codex_submissions;
         CREATE INDEX IF NOT EXISTS events_created ON events(created);
+        CREATE INDEX IF NOT EXISTS events_task ON events(source,task);
         CREATE INDEX IF NOT EXISTS tasks_updated ON tasks(updated);
         CREATE TABLE IF NOT EXISTS self_tests(event TEXT PRIMARY KEY, created REAL);
         """)
         self.settings = {
             **FlameOutput.DEFAULTS,
             "language": "zh-CN",
-            "desktop_notifications": True,
+            "desktop_notifications": False,
+            "wechat_notifications": False,
+            "desktop_flame_enabled": True,
             "source_enabled": {
                 source.id: source.default_enabled for source in self.sources.values()
             },
@@ -45,6 +49,12 @@ class Engine:
         ).fetchone()
         if saved:
             previous = json.loads(saved["value"])
+            # Removed controls must not keep suppressing reminders after an upgrade.
+            for key in ("paused", "quiet_enabled", "quiet_start", "quiet_end"):
+                previous.pop(key, None)
+            legacy_mode = previous.pop("mode", None)
+            if legacy_mode is not None:
+                previous.setdefault("hardware_notifications", legacy_mode == "hardware")
             self.settings = {**self.settings, **previous}
             self.settings["source_enabled"] = {
                 source.id: previous.get("source_enabled", {}).get(
@@ -56,6 +66,10 @@ class Engine:
                 "UPDATE settings SET value=? WHERE key='main'",
                 (json.dumps(self.settings),),
             )
+        # Legacy task failures are historical unknown outcomes, not input requests.
+        self.db.execute("UPDATE events SET state='unknown', reason=COALESCE(reason,'failed') WHERE state='error'")
+        self.db.execute("UPDATE tasks SET state='unknown' WHERE state='error'")
+        self.origins = TaskOrigins(self.db)
         self.db.execute("UPDATE tasks SET state='unknown' WHERE state IN ('working','needs_input')")
         self.db.execute(
             "UPDATE events SET status='expired' WHERE status IN ('queued','matched','received')"
@@ -90,6 +104,7 @@ class Engine:
         self.db.execute(
             "DELETE FROM self_tests WHERE event NOT IN (SELECT id FROM events)"
         )
+        self.origins.cleanup()
         self.db.commit()
         if hasattr(self, "router"):
             self.db.execute("DELETE FROM deliveries WHERE event NOT IN (SELECT id FROM events)")
@@ -108,6 +123,10 @@ class Engine:
         self.flame.validate_settings(data)
         if type(data["desktop_notifications"]) is not bool:
             raise EventError("桌面通知设置格式错误")
+        if type(data["wechat_notifications"]) is not bool:
+            raise EventError("微信通知设置格式错误")
+        if type(data["desktop_flame_enabled"]) is not bool:
+            raise EventError("桌面火焰设置格式错误")
         enabled = data["source_enabled"]
         if (
             not isinstance(enabled, dict)
@@ -168,6 +187,8 @@ class Engine:
             raise EventError("task_id 格式错误")
         if type(event["seq"]) is not int or not 0 <= event["seq"] <= 2147483647:
             raise EventError("seq 必须为递增整数")
+        if event["state"] == "error":
+            event = {**event, "state": "unknown", "reason": event.get("reason") or "failed"}
         if event["state"] not in STATES:
             raise EventError("任务状态不受支持")
         if type(event["ttl_ms"]) is not int or not 1000 <= event["ttl_ms"] <= 300000:
@@ -180,6 +201,8 @@ class Engine:
         ):
             raise EventError("取消或超时不能映射成功")
         self.router.validate_target(event)
+        origin = validate_origin(event["return_target"], source) if "return_target" in event else None
+        context = validate_context(event["return_context"], source) if "return_context" in event else None
         try:
             occurred = dt.datetime.fromisoformat(
                 event["occurred_at"].replace("Z", "+00:00")
@@ -222,7 +245,7 @@ class Engine:
         )
         if previous and (
             event["seq"] <= previous["seq"]
-            or (previous["state"] in ("done", "error", "cancelled", "timeout") and not cancelling)
+            or (previous["state"] in ("done", "cancelled", "timeout") and not cancelling)
         ):
             raise EventError(
                 "旧序号或已结束的任务不能覆盖现有状态，请使用新的 task_id", 409
@@ -256,9 +279,15 @@ class Engine:
                 result,
             ),
         )
-        self.db.execute(
+        if submission and origin:
+            self.origins.remember(source, key[1], origin)
+        if submission and context:
+            self.origins.remember_context(source, key[1], context)
+        removed = self.db.execute(
             "DELETE FROM events WHERE id IN (SELECT id FROM events ORDER BY created DESC LIMIT -1 OFFSET 10000)"
-        )
+        ).rowcount
+        if removed:
+            self.origins.cleanup()
         self.db.commit()
         self.cleanup()
         self.source_last[source] = self.wall()
@@ -279,22 +308,77 @@ class Engine:
         return {"event_id": eid, "result": deliveries.get("flame", result),
                 "phase": phase, "deliveries": deliveries}, 202
 
-    def snapshot(self):
+    def latest_task(self):
+        latest = self.db.execute("""SELECT id, source, task FROM events
+            WHERE source NOT IN ('manual','demo')
+            AND NOT EXISTS (SELECT 1 FROM self_tests WHERE event=events.id)
+            ORDER BY created DESC, rowid DESC LIMIT 1""").fetchone()
+        return ({"id": latest["id"],
+                        "return_to": self.origins.summary(latest["source"], latest["task"])}
+                       if latest else None)
+
+    def snapshot(self, *, include_history=True):
         self.tick()
         display = self.display_status()
         verification = verification_summary(self)
-        receipts = self.router.snapshot()
-        events = [dict(row) for row in self.db.execute(
-            "SELECT events.*, (source IN ('manual','demo') OR EXISTS(SELECT 1 FROM self_tests WHERE event=events.id)) AS simulated FROM events ORDER BY created DESC, rowid DESC LIMIT 50")]
-        for event in events:
-            event["delivery_summary"] = delivery_summary(self.flame, event, receipts)
+        events, task_events, receipts = [], [], []
+        # Reuse each task destination across history and task rows in this poll.
+        origins = {}
+
+        def origin_summary(source, task):
+            key = (source, task)
+            if key not in origins:
+                origins[key] = self.origins.summary(source, task)
+            return origins[key]
+
+        if include_history:
+            events = [dict(row) for row in self.db.execute(
+                "SELECT events.*, (source IN ('manual','demo') OR EXISTS(SELECT 1 FROM self_tests WHERE event=events.id)) AS simulated FROM events ORDER BY created DESC, rowid DESC LIMIT 50")]
+            # Select task identities first, so a busy task cannot consume the
+            # history limit or lose its earlier events at the display boundary.
+            task_events = [dict(row) for row in self.db.execute("""
+                WITH annotated AS (
+                    SELECT events.*, rowid AS event_order,
+                        (source IN ('manual','demo') OR EXISTS(
+                            SELECT 1 FROM self_tests WHERE event=events.id)) AS simulated,
+                        CASE WHEN task IS NULL OR task='' THEN id ELSE task END AS task_key,
+                        (task IS NULL OR task='') AS missing_task
+                    FROM events
+                ), recent_tasks AS (
+                    SELECT source, task_key, missing_task, simulated
+                    FROM annotated
+                    GROUP BY source, task_key, missing_task, simulated
+                    ORDER BY MAX(created) DESC, MAX(event_order) DESC
+                    LIMIT 50
+                )
+                SELECT a.id, a.source, a.task, a.seq, a.state, a.reason,
+                       a.created, a.status, a.simulated
+                FROM annotated a JOIN recent_tasks r
+                    ON a.source=r.source AND a.task_key=r.task_key
+                    AND a.missing_task=r.missing_task AND a.simulated=r.simulated
+                ORDER BY a.created DESC, a.event_order DESC
+            """)]
+            receipts = self.router.snapshot({event["id"] for event in events + task_events})
+            # Snapshot runs under the same lock as device frame generation. Index
+            # receipts once, rather than scanning the entire history for each event.
+            receipts_by_event = {}
+            for receipt in receipts:
+                receipts_by_event.setdefault(receipt["event"], []).append(receipt)
+            for event in events + task_events:
+                event["delivery_summary"] = delivery_summary(self.flame, event, receipts_by_event.get(event["id"], ()))
+                # Cache only within this snapshot: terminal availability and task
+                # destinations must be refreshed on the next UI poll.
+                event["return_to"] = None if event["simulated"] else origin_summary(event["source"], event["task"])
         return {
             "display": display,
+            "latest_task": self.latest_task(),
             "active_count": len(self.active),
+            "unfinished_count": self.unfinished_task_count(),
             "queue_count": len(self.queue),
             "dropped": self.dropped,
             "settings": self.settings,
             "brightness_off": self.flame.brightness_off(),
+            "muted": self.muted(),
             "emergency": self.emergency,
             "device": self.device,
             "last_ack": self.last_command,
@@ -310,15 +394,32 @@ class Engine:
                 }
                 for source in self.sources.values()
             ],
-            "deliveries": receipts,
-            "events": events,
+            **({"deliveries": receipts, "events": events, "task_events": task_events}
+               if include_history else {}),
             "tasks": [
-                dict(r)
+                {**dict(r), "return_to": origin_summary(r["source"], r["task"])}
                 for r in self.db.execute(
                     "SELECT * FROM tasks ORDER BY updated DESC LIMIT 30"
                 )
             ],
         }
+
+    def return_target(self, event_id):
+        event = self.db.execute("""SELECT * FROM events WHERE id=? AND source NOT IN ('manual','demo')
+            AND NOT EXISTS (SELECT 1 FROM self_tests WHERE event=events.id)""", (event_id,)).fetchone()
+        destination = self.origins.get(event["source"], event["task"]) if event else None
+        if destination is None:
+            context = self.origins.context(event["source"], event["task"]) if event else None
+            if context:
+                return {"kind": "codex-session", **context}, event["source"]
+            raise EventError("此任务没有返回位置。请更新接入后发起一条新任务。", 404)
+        if not self.origins.current(destination):
+            raise EventError("原终端已切换到其他会话，请在编程工具中恢复原会话。", 409)
+        return destination, event["source"]
+
+    def unfinished_task_count(self):
+        return sum(bool(self.settings["source_enabled"].get(row["source"])) for row in
+                   self.db.execute("SELECT source FROM tasks WHERE state IN ('working','needs_input')"))
 
     def tick(self):
         for key, item in list(self.active.items()):
@@ -367,8 +468,27 @@ class Engine:
         return self.flame.session_changed(*args, **kwargs)
 
     def display_status(self, *args, **kwargs):
-        """Compatibility entry point for the existing HTTP/UI clients."""
-        return self.flame.display_status(*args, **kwargs)
+        """Expose the exact task behind the shared desktop indicator."""
+        display = self.flame.display_status(*args, **kwargs)
+        display["return_task"] = None
+        if display.get("simulated") or display.get("preview"):
+            return display
+        event_id = display["key"]
+        if event_id == "working" and self.active:
+            ids = [item["id"] for item in self.active.values()]
+            latest = self.db.execute(
+                "SELECT id FROM events WHERE id IN (" + ",".join("?" for _ in ids)
+                + ") ORDER BY created DESC, rowid DESC LIMIT 1", ids,
+            ).fetchone()
+            event_id = latest["id"] if latest else None
+        event = self.db.execute("""SELECT id, source, task FROM events WHERE id=?
+            AND source NOT IN ('manual','demo')
+            AND NOT EXISTS (SELECT 1 FROM self_tests WHERE event=events.id)""", (event_id,)).fetchone()
+        if event:
+            display["return_task"] = {
+                "id": event["id"], "return_to": self.origins.summary(event["source"], event["task"]),
+            }
+        return display
 
     @property
     def queue(self):

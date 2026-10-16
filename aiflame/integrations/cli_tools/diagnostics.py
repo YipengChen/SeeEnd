@@ -17,7 +17,7 @@ SIGNALS = {
     "complete": ("state='done'", "回复完成"),
     "needs_input": ("state='needs_input'", "等待输入"),
     "interrupt": ("state='idle' AND reason='cancelled'", "主动中断"),
-    "error": ("state='error'", "任务失败"),
+    "ended": ("state='unknown' AND reason='failed'", "任务未正常结束"),
 }
 
 

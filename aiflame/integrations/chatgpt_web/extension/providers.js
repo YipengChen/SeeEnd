@@ -1,7 +1,7 @@
 /* Site-specific control adapters. Never inspect message text, editor values or account data. */
 (function (root) {
   'use strict';
-  const VERSION = '0.2.10';
+  const VERSION = '0.2.12';
   function labels(values) {
     return values.flatMap(value => ['aria-label', 'title', 'data-tooltip'].map(
       attr => `button[${attr}="${value}"],[role="button"][${attr}="${value}"],a[${attr}="${value}"],div[${attr}="${value}"]`
@@ -14,7 +14,7 @@
   const feedback = labels(['Good response','Bad response','回复不错','回复不好','点赞','点踩','喜欢','不喜欢']);
   const join = (...values) => values.filter(Boolean).join(',');
   const SITES = [
-    {id:'chatgpt-web', name:'ChatGPT', origins:['https://chatgpt.com'],
+    {id:'chatgpt-web', name:'ChatGPT 网页版', origins:['https://chatgpt.com'],
       composer:'#prompt-textarea,textarea[name="prompt-textarea"],main [contenteditable="true"][role="textbox"],main [contenteditable="true"]',
       stop:join('button[data-testid="stop-button"]',stop), send:join('button[data-testid="send-button"]',send),
       retry:join('button[data-testid="regenerate-response-button"]',retry),
@@ -27,7 +27,7 @@
       error:'[data-testid="conversation-turn-error"]',
       newRoute:/^\/$|^\/g\/[^/]+(?:\/project)?\/?$/, conversationRoute:/^\/(?:g\/[^/]+\/)?c\//,
       temporaryRoute:/^\/(?:g\/[^/]+\/)?c\/local-chatgpt(?::|%3a)/i},
-    {id:'deepseek-web', name:'DeepSeek', origins:['https://chat.deepseek.com'],
+    {id:'deepseek-web', name:'DeepSeek 网页版', origins:['https://chat.deepseek.com'],
       composer:'#chat-input,textarea[placeholder*="DeepSeek"]',
       // DeepSeek's icon-only button exposes no label until hovered. Match its published stop SVG.
       stop:join('._52c986b:has(path[d^="M2 4.88C2 3.68009"])',stop),
@@ -38,7 +38,7 @@
       actionRow:'._965abe9', actionControls:'.ds-button', minimumControls:3,
       error:'[data-status="error"],[data-status="failed"],.ds-message-error',
       newRoute:/^\/$/, conversationRoute:/^\/(?:a\/chat\/s\/|chat\/|c\/)/},
-    {id:'qianwen-web', name:'千问', backgroundFrames:true, origins:['https://www.qianwen.com','https://qianwen.com','https://tongyi.aliyun.com'],
+    {id:'qianwen-web', name:'千问 网页版', backgroundFrames:true, origins:['https://www.qianwen.com','https://qianwen.com','https://tongyi.aliyun.com'],
       composer:'.text-area-slot-container textarea,.text-area-slot-container [contenteditable="true"],.text-area-slot-container [contenteditable="plaintext-only"],[data-chat-input-shell="true"] [data-slate-editor="true"],textarea[placeholder*="千问"],textarea[placeholder*="通义"]',
       stop, send:join('[data-session-switch-target="send-query"]',send), retry:join('[data-answer-feedback-toolbar] div:has(> svg path[d^="M14.949 9.059"])','button:has([data-icon-type="qwpcicon-regenerate"]),[role="button"]:has([data-icon-type="qwpcicon-regenerate"])',retry),
       turn:'.chat-answers-card-wrap,[class*="message-select-wrapper-answer-"],.answerItem',
@@ -46,7 +46,7 @@
       final:join('[data-answer-feedback-toolbar] svg:has(path[d^="M2.5 14.049"]),[data-answer-feedback-toolbar] svg:has(path[d^="M2.5 2h8.77"]),[data-answer-feedback-toolbar] svg:has(path[d^="M14.949 9.059"])','[data-icon-type^="qwpcicon-thumbs"],[data-icon-type^="tongyi-thumbs"],[data-icon-type="qwpcicon-regenerate"]',feedback,retry),
       error:'[data-status="error"],[data-status="failed"],[data-session-switch-error]',
       newRoute:/^\/(?:qianwen\/?)?$/, conversationRoute:/^\/(?:chat\/|qianwen)/},
-    {id:'doubao-web', name:'豆包', origins:['https://www.doubao.com'],
+    {id:'doubao-web', name:'豆包 网页版', origins:['https://www.doubao.com'],
       composer:'[data-testid="chat_input_input"],[data-testid="chat_input"] textarea,[data-testid="chat_input"] [contenteditable="true"]',
       stop:join('[data-testid="chat_input_local_break_button"]',stop),
       send:join('[data-testid="chat_input_send_button"]',send), retry:join('[data-testid="message_action_regenerate"]',retry),
@@ -62,7 +62,7 @@
       error:'[data-testid="message_error"],[data-status="failed"]',
       newRoute:/^\/chat\/?$/, conversationRoute:/^\/chat\/[^/]+/,
       temporaryRoute:/^\/chat\/local_[0-9]+\/?$/},
-    {id:'yuanbao-web', name:'元宝', origins:['https://yuanbao.tencent.com'],
+    {id:'yuanbao-web', name:'腾讯元宝 网页版', origins:['https://yuanbao.tencent.com'],
       composer:'.chat-input-editor [contenteditable="true"],.chat-input-editor[contenteditable="true"],.yb-input-box-textarea [contenteditable="true"],.hyc-input-box [contenteditable="true"],#searchbar-editor [contenteditable="true"],#searchbar-editor[contenteditable="true"]',
       stop:join('#yuanbao-send-btn[aria-label="停止回答"],#yuanbao-send-btn:has(img[src*="stop-chat-icon"]),.style__send-btn___RwTm5:has(.icon-stop),.style__send-btn___RwTm5:has(.icon-yb-ic_stop_fill_16),.style__send-btn___RwTm5:has([class*="stopIcon"])',stop),
       send:join('#yuanbao-send-btn:not([aria-label="停止回答"]):not(:has(img[src*="stop-chat-icon"]))',send), retry,
@@ -71,7 +71,7 @@
       final:join('.agent-chat__toolbar .icon-like,.agent-chat__toolbar .icon-dislike,[class*="toolbar"] [class*="likeButton"],[class*="toolbar"] [class*="unlikeButton"]',feedback,retry),
       error:'[data-status="error"],[data-status="failed"],.agent-chat__error',
       newRoute:/^\/(?:chat(?:\/[^/]+)?\/?)?$/, conversationRoute:/^\/(?:chat\/[^/]+\/[^/]+|conversation\/)/},
-    {id:'kimi-web', name:'Kimi', origins:['https://www.kimi.com','https://kimi.com','https://kimi.moonshot.cn'],
+    {id:'kimi-web', name:'Kimi 网页版', origins:['https://www.kimi.com','https://kimi.com','https://kimi.moonshot.cn'],
       composer:'.chat-input-editor [contenteditable="true"],.chat-input-editor[contenteditable="true"],.chat-editor [contenteditable="true"]',
       stop:join('.send-button-container.stop',stop), busy:'.send-button-container.loading,.segment-assistant .segment-pending-loading',
       send:join('.send-button-container:not(.stop):not(.loading)',send),
@@ -80,7 +80,7 @@
       error:'.segment-error',
       newRoute:/^\/(?:chat\/new)?\/?$/, conversationRoute:/^\/chat\/[^/]+/,
       temporaryRoute:/^\/chat\/p[0-9a-f]{7}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/},
-    {id:'zhipu-web', name:'智谱清言', backgroundFrames:true, origins:['https://chatglm.cn'],
+    {id:'zhipu-web', name:'智谱清言 网页版', backgroundFrames:true, origins:['https://chatglm.cn'],
       composer:'.search textarea,.prosemirror-editor [contenteditable="true"],.prosemirror-editor[contenteditable="true"]',
       stop:join('button[ga-data="stop"],.enter.is-main-chat.searching',stop),
       send:join('.search-operation .enter_icon,.enter.is-main-chat:not(.searching)',send),
@@ -95,7 +95,7 @@
       completedControls:'.interact-operate .thumbs-up.canuse,.interact-operate .thumbs-down.canuse',
       error:'.answer-error-icon,[data-status="error"]',
       newRoute:/^\/(?:main\/(?:alltoolsdetail|detail|gdetail\/[^/?]+))?$/, conversationRoute:/^\/main\/(?:detail|gdetail\/|alltoolsdetail\?cid=)/},
-    {id:'claude-web', name:'Claude', origins:['https://claude.ai'],
+    {id:'claude-web', name:'Claude 网页版', origins:['https://claude.ai'],
       composer:'.ProseMirror[contenteditable="true"],[contenteditable="true"][role="textbox"]',
       stop:join(labels(['Stop response','停止响应']),stop), send:join(labels(['Send message']),send), retry,
       // Current Claude renders actions beside the streaming node in the message row.
@@ -106,7 +106,7 @@
       final:join('button[data-testid="action-bar-thumbs-up"],button[data-testid="action-bar-thumbs-down"],button[data-testid="action-bar-retry"]',labels(['Retry','Good response','Bad response','回答不错','回复不佳']),feedback,retry),
       error:'[data-testid="message-error"],[data-status="error"]',
       newRoute:/^\/(?:new|project\/[^/]+)?\/?$/, conversationRoute:/^\/chat\/[^/]+/},
-    {id:'gemini-web', name:'Gemini', origins:['https://gemini.google.com'],
+    {id:'gemini-web', name:'Gemini 网页版', origins:['https://gemini.google.com'],
       composer:'.ql-editor[contenteditable="true"],rich-textarea [contenteditable="true"]',
       stop:join('button.stop-button',labels(['Stop response','停止回答']),stop), send:join('button.send-button',send), retry,
       turn:'model-response', copy:join('copy-button button,button[data-test-id="copy-button"]',copy),

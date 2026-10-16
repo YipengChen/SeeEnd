@@ -78,7 +78,7 @@ class CliToolsTests(unittest.TestCase):
     def test_failed_tool_is_activity_failed_turn_is_error(self):
         self.event("UserPromptSubmit")
         self.assertEqual(self.event("PostToolUseFailure")["state"], "working")
-        self.assertEqual(self.event("StopFailure")["state"], "error")
+        self.assertEqual(self.event("StopFailure")["state"], "unknown")
         self.assertIsNone(self.event("PreToolUse"))
 
     def test_cancel_does_not_become_success(self):
@@ -110,7 +110,7 @@ class CliToolsTests(unittest.TestCase):
     def test_deepseek_end_reasons(self):
         for reason in ("error", "blocked", "max-tokens", "unknown"):
             self.event("TurnStart", "deepseek-harness", turn_id=reason)
-            self.assertEqual(self.event("TurnEnd", "deepseek-harness", turn_id=reason, reason=reason)["state"], "error")
+            self.assertEqual(self.event("TurnEnd", "deepseek-harness", turn_id=reason, reason=reason)["state"], "unknown")
         self.event("TurnStart", "deepseek-harness", turn_id="abort")
         self.assertEqual(self.event("TurnEnd", "deepseek-harness", turn_id="abort", reason="aborted")["state"], "idle")
 

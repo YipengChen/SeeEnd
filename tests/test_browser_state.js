@@ -76,7 +76,7 @@ test('timeout and explicit errors are not success', () => {
   const f = fixture(); f.start(); f.advance(1800001); f.state.update(f.view({busy: true}));
   assert.equal(f.events.at(-1).reason, 'timeout');
   const g = fixture(); g.start(); g.state.update(g.view({error: true}));
-  assert.equal(g.events.at(-1).state, 'error');
+  assert.equal(g.events.at(-1).state, 'unknown');
 });
 test('parallel tabs use independent tasks', () => {
   const a = fixture(), b = fixture(); a.start(); b.start(); a.state.cancel();

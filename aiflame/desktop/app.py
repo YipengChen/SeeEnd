@@ -24,7 +24,7 @@ def existing_hub():
 
 
 def main():
-    from aiflame.desktop.localization import t
+    from aiflame.desktop.localization import install_arrow_key_filter, t
     from PySide6.QtCore import QEvent
     from PySide6.QtWidgets import (
         QApplication,
@@ -34,21 +34,24 @@ def main():
 
     class FlameApplication(QApplication):
         hub = None
+        prepare_quit = None
 
         def event(self, event):
-            if (
-                event.type() == QEvent.Type.Quit
-                and self.hub
-                and self.hub.devices.busy()
-            ):
-                QMessageBox.information(
-                    None, t("设备维护中"), t("设备连接操作正在进行，请等待完成后退出。")
-                )
-                event.ignore()
-                return True
+            if event.type() == QEvent.Type.Quit:
+                if self.hub and self.hub.devices.busy():
+                    QMessageBox.information(
+                        None, t("设备维护中"), t("设备连接操作正在进行，请等待完成后退出。")
+                    )
+                    event.ignore()
+                    return True
+                if self.prepare_quit:
+                    self.prepare_quit()
             return super().event(event)
 
     app = FlameApplication(sys.argv)
+    from aiflame.desktop.macos_accessibility import install_selection_guard
+    install_selection_guard()
+    install_arrow_key_filter()
     app.setApplicationName("SeeEnd")
     app.setOrganizationName("SeeEnd")
     instance = DesktopInstance(app)
@@ -76,6 +79,7 @@ def _run_primary(app, instance, resources):
     from PySide6.QtGui import QIcon
     from PySide6.QtWidgets import QMenu, QMessageBox
     from aiflame.desktop.widgets import Dashboard
+    from aiflame.desktop.theme import TOOLTIP_STYLE
     from aiflame.desktop.tray import TrayIndicator
     from aiflame.desktop.window import DesktopWindow, WindowRestorer
     from aiflame.hub.server import Hub
@@ -83,6 +87,7 @@ def _run_primary(app, instance, resources):
     icon = QIcon(str(PACKAGE / "assets/icon.svg"))
     app.setWindowIcon(icon)
     app.setStyle("Fusion")
+    app.setStyleSheet(TOOLTIP_STYLE)
     hub = None
     if not existing_hub():
         try:
@@ -120,17 +125,52 @@ def _run_primary(app, instance, resources):
     notifications = NotificationConsumer(dashboard, SystemNotifications(tray), app)
     resources.callback(notifications.shutdown)
     restorer = WindowRestorer(app, window, activate)
+    if hasattr(dashboard, "return_failed"):
+        dashboard.return_failed.connect(restorer.request)
     resources.callback(restorer.close)
     instance.activation_requested.connect(restorer.request)
-    tray.setToolTip("SeeEnd · 本地灯光助手")
+    tray.setToolTip("SeeEnd · 任务提醒助手")
     menu = QMenu()
     status_action = QAction("灯光 · 正在连接", menu)
     status_action.setEnabled(False)
     indicator = TrayIndicator(tray, dashboard, status_action, app)
     resources.callback(indicator.shutdown)
+    from aiflame.desktop.floating_flame import DesktopFlame
+    desktop_flame = DesktopFlame()
+    restorer.activation_guard = desktop_flame.pointer_interaction_active
+    resources.callback(desktop_flame.shutdown)
+    indicator.state_changed.connect(desktop_flame.update_status)
+    dashboard.state_changed.connect(desktop_flame.update_status)
+    desktop_flame.open_requested.connect(restorer.request)
+    desktop_flame.return_requested.connect(dashboard.return_task)
+    desktop_flame.menu_visible_changed.connect(restorer.set_activation_suppressed)
+    desktop_flame.disable_requested.connect(
+        lambda: dashboard.act("/api/settings", {"desktop_flame_enabled": False},
+                              failed=restorer.request)
+    )
+    tray_available = tray.isSystemTrayAvailable()
+
+    def sync_background(_visible=None):
+        available = tray_available or desktop_flame.isVisible()
+        window.background_available = available
+        app.setQuitOnLastWindowClosed(not available)
+        if not available and window.isHidden() and not window.quitting:
+            restorer.request()
+
+    desktop_flame.visibility_changed.connect(sync_background)
 
     def show():
         restorer.request()
+
+    def prepare_quit():
+        # Dock quit also reaches QEvent.Quit, before Qt closes any windows.
+        # Stop background restoration and the flame's preference-only close path.
+        window.quitting = True
+        restorer.close()
+        desktop_flame.shutdown()
+
+    app.prepare_quit = prepare_quit
+    resources.callback(setattr, app, "prepare_quit", None)
 
     def quit_app():
         if hub and hub.devices.busy():
@@ -145,10 +185,7 @@ def _run_primary(app, instance, resources):
     exit_action = QAction("退出 SeeEnd", menu)
     exit_action.setMenuRole(QAction.MenuRole.QuitRole)
     exit_action.triggered.connect(quit_app)
-    pause_action = QAction("暂停灯光提醒", menu)
-    pause_action.setCheckable(True)
-    pause_action.triggered.connect(indicator.set_paused)
-    help_action = QAction("帮助与诊断", menu)
+    help_action = QAction("设置与帮助", menu)
 
     def open_help():
         dashboard.navigate(5)
@@ -171,20 +208,10 @@ def _run_primary(app, instance, resources):
 
     license_action.triggered.connect(open_licenses)
 
-    def sync_tray(data):
-        pause_action.setEnabled(data is not None)
-        if data is None:
-            return
-        pause_action.setChecked(data["settings"]["paused"])
-
-    sync_tray(None)
-    indicator.state_changed.connect(sync_tray)
     menu.aboutToShow.connect(indicator.poll)
     menu.addAction(status_action)
     menu.addSeparator()
     menu.addAction(show_action)
-    menu.addSeparator()
-    menu.addAction(pause_action)
     menu.addSeparator()
     menu.addAction(help_action)
     menu.addAction(license_action)
@@ -196,14 +223,12 @@ def _run_primary(app, instance, resources):
                 show() if reason == QSystemTrayIcon.ActivationReason.Trigger else None
             )
         )
-    if tray.isSystemTrayAvailable():
+    if tray_available:
         tray.show()
-        indicator.start()
-        window.background_available = True
-        app.setQuitOnLastWindowClosed(False)
+    sync_background()
+    indicator.start()
     menu_bar = window.menuBar().addMenu("SeeEnd")
     menu_bar.addAction(show_action)
-    menu_bar.addAction(pause_action)
     menu_bar.addAction(help_action)
     menu_bar.addAction(license_action)
     menu_bar.addAction(exit_action)

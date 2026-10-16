@@ -19,11 +19,17 @@ END = {"Stop", "TurnEnd", "Interrupt", "Error", "StopFailure", "SessionEnd", "Af
 WAIT = {"NeedsInput", "Notification"}
 
 
+def session_key(payload):
+    session = payload.get("session_id")
+    instance = payload.get("instance_id")
+    return session + ":instance:" + instance if isinstance(session, str) and isinstance(instance, str) and instance else session
+
+
 def from_hook(source, payload, runtime=None):
     if not isinstance(source, str) or source not in PROVIDERS or not isinstance(payload, dict):
         return None
     kind = payload.get("hook_event_name")
-    session = payload.get("session_id")
+    session = session_key(payload)
     if not isinstance(kind, str) or kind not in START | ACTIVITY | END | WAIT or not isinstance(session, str) or not session:
         return None
     if kind == "Notification" and payload.get("notification_type") != "ToolPermission":
@@ -77,7 +83,7 @@ def from_hook(source, payload, runtime=None):
             elif kind in ("Interrupt", "SessionEnd") or reason in ("cancelled", "canceled", "interrupt", "interrupted", "abort", "aborted"):
                 seq, state, reason, suffix = TERMINAL_SEQ + 1, "idle", "cancelled", "cancel"
             elif kind in ("Error", "StopFailure") or reason in ("failed", "error", "timeout", "blocked", "max-tokens") or (kind == "TurnEnd" and reason != "completed"):
-                seq, state, reason, suffix = TERMINAL_SEQ, "error", "timeout" if reason == "timeout" else "failed", "error"
+                seq, state, reason, suffix = TERMINAL_SEQ, "unknown", "timeout" if reason == "timeout" else "failed", "ended"
             else:
                 seq, state, reason, suffix = TERMINAL_SEQ, "done", "completed", "complete"
         if not row or seq > row[0]:
@@ -102,9 +108,9 @@ def from_hooks(source, payload, runtime=None):
         path = root / "cli-lifecycle.sqlite"
         if path.exists() and isinstance(payload.get("session_id"), str):
             with closing(sqlite3.connect(path, timeout=0.5)) as db:
-                row = db.execute("SELECT sessions.turn FROM sessions JOIN turns USING(source,session,turn) WHERE source=? AND session=? AND terminal=0", (source, payload["session_id"])).fetchone()
+                row = db.execute("SELECT sessions.turn FROM sessions JOIN turns USING(source,session,turn) WHERE source=? AND session=? AND terminal=0", (source, session_key(payload))).fetchone()
             if row:
-                cancel = from_hook(source, {"hook_event_name": "Interrupt", "session_id": payload["session_id"], "turn_id": row[0]}, runtime)
+                cancel = from_hook(source, {"hook_event_name": "Interrupt", "session_id": payload["session_id"], "turn_id": row[0], "instance_id": payload.get("instance_id")}, runtime)
                 if cancel:
                     events.append(cancel)
     event = from_hook(source, payload, runtime)

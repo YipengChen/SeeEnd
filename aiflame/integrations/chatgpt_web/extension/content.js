@@ -5,9 +5,10 @@
   const adapter = FlameProviders.createAdapter(site, document, location, () => navigator.onLine);
   let queue = Promise.resolve(), disabled = false;
   function deliver(event) {
+    const return_url = location.origin + (machine.active?.route || FlameProviders.routeFor(location));
     queue = queue.then(async () => {
       if (disabled) return;
-      const result = await chrome.runtime.sendMessage({kind: 'event', event});
+      const result = await chrome.runtime.sendMessage({kind: 'event', event, return_url});
       if (!result?.ok) {
         // Do not replay stale success when Hub is unavailable. Suppress this document's run.
         disabled = true; cancel('bridge_failed');
@@ -77,6 +78,10 @@
         'data-message-id','data-turn-id','data-message-author-role','data-chat-answers-wrap','data-virtual-list-item-key',...(site.identityAttrs || [])]});
   setInterval(check, 1000);
   chrome.runtime.onMessage.addListener((message, sender, reply) => {
+    if (message.kind === 'return-probe') {
+      reply({source_id:site.id, url:location.origin + FlameProviders.routeFor(location)});
+      return;
+    }
     // Navigation liveness must not depend on optional DOM diagnostics. A layout
     // inspection failure does not mean the originating document has unloaded.
     if (message.kind === 'tick') {

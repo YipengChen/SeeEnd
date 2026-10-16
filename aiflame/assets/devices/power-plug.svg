@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="20" height="16" viewBox="0 0 20 16">
+  <title>电源插头</title>
+  <path d="M2 5 H7 M2 11 H7" fill="none" stroke="#9b8b77" stroke-width="2" stroke-linecap="round"/>
+  <path d="M7 3 H13 Q17 3 17 7 V9 Q17 13 13 13 H7 Z" fill="#f6f1e7" stroke="#c7bba8" stroke-width="1.5" stroke-linejoin="round"/>
+  <path d="M17 8 H20" stroke="#9b8b77" stroke-width="2"/>
+</svg>
