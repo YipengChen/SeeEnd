@@ -131,14 +131,16 @@ import ast, errno, inspect, os, socket, tempfile, textwrap
 import importlib, importlib.machinery, sys, unittest
 from pathlib import Path
 """ + support + """
+stage_root = Path.cwd().resolve()
 for name in sys.argv[2:]:
     module = importlib.import_module(name)
     if not isinstance(module.__loader__, importlib.machinery.ExtensionFileLoader):
         raise RuntimeError('Python fallback loaded: ' + name)
     if module.__loader__.get_code(name) is not None:
         raise RuntimeError('Python bytecode available: ' + name)
-    if not Path(module.__file__).resolve().is_relative_to(Path.cwd()):
-        raise RuntimeError('Module loaded outside isolated checkout: ' + name)
+    library = Path(module.__file__).resolve()
+    if not library.is_relative_to(stage_root):
+        raise RuntimeError(f'Module loaded outside isolated checkout: {name}: {library} (root {stage_root})')
 print(f'{len(sys.argv[2:])} native core imports passed without Python fallback.', flush=True)
 if sys.argv[1] == 'regression':
     restricted = probe_socket_restrictions()
