@@ -103,17 +103,21 @@ class FleetTests(unittest.TestCase):
         second_start = targeted("working", "second", 1, "two")
         self.wait(lambda: self.fleet.outputs["two"].desired()["state"] == "working")
         self.wait(lambda: self.fleet.confirmed('working'))
-        self.assertEqual(self.fleet.outputs["one"].desired()["state"], "idle")
+        with self.lock:
+            self.assertEqual(self.fleet.outputs["one"].desired()["state"], "idle")
         first_start = targeted("working", "first", 1, "one")
         self.wait(lambda: all(self.fleet.outputs[key].desired()["state"] == "working" for key in ("one", "two")))
         completion = targeted("done", "first", 2, "one")
         self.wait(lambda: self.fleet.outputs["one"].last_display_key == completion)
-        self.assertEqual(self.fleet.outputs["two"].desired()["state"], "working")
-        rows = self.engine.router.snapshot()
+        with self.lock:
+            second_state = self.fleet.outputs["two"].desired()["state"]
+            rows = self.engine.router.snapshot()
+            snapshot = self.engine.snapshot()
+        self.assertEqual(second_state, "working")
         for event_id, target in ((first_start, "one"), (second_start, "two"), (completion, "one")):
             self.assertEqual({row["output"] for row in rows if row["event"] == event_id and row["output"].startswith("flame:")}, {"flame:" + target})
-        self.assertEqual(self.engine.snapshot()["active_count"], 1)
-        self.assertTrue(self.engine.snapshot()["display"]["device_confirmed"])
+        self.assertEqual(snapshot["active_count"], 1)
+        self.assertTrue(snapshot["display"]["device_confirmed"])
         with self.lock:
             self.engine.clear_prompts("superseded")
         broadcast = self.emit("done", "broadcast")
