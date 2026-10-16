@@ -66,7 +66,7 @@ def main(download=False):
     prefix = Path(sys.base_prefix)
     conda = prefix / 'conda-meta'
     for p in sorted(conda.glob('*.json')):
-        d = json.loads(p.read_text())
+        d = json.loads(p.read_text(encoding='utf-8'))
         if d['name'] not in CONDA_LIBRARIES | CONDA_NOTICES:
             continue
         info = prefix / 'pkgs' / (d['name'] + '-' + d['version'] + '-' + d['build']) / 'info'
@@ -82,7 +82,7 @@ def main(download=False):
         if d['name'] in CONDA_LIBRARIES:
             recipe = info / 'recipe'
             shutil.copytree(recipe, SOURCES / (name + '-recipe'), dirs_exist_ok=True)
-            spec = yaml.safe_load((recipe / 'meta.yaml').read_text())
+            spec = yaml.safe_load((recipe / 'meta.yaml').read_text(encoding='utf-8'))
             sources = spec['source'] if isinstance(spec['source'], list) else [spec['source']]
             record['sources'] = []
             for source in sources:
@@ -98,7 +98,7 @@ def main(download=False):
         # Official pip wheels use upstream Qt; conda builds above retain patches.
         if metadata.version('PySide6') != '6.11.0':
             raise RuntimeError('Register exact Qt source hashes for this PySide version before release')
-        for source in json.loads((ROOT / 'packaging/qt_sources.json').read_text()):
+        for source in json.loads((ROOT / 'packaging/qt_sources.json').read_text(encoding='utf-8')):
             fetch(source['url'], SOURCES / source['archive'], source['sha256'], download)
             with tarfile.open(SOURCES / source['archive']) as archive:
                 for member in archive.getmembers():
@@ -126,14 +126,14 @@ def main(download=False):
                     target = dest / str(f)
                     target.parent.mkdir(parents=True, exist_ok=True)
                     shutil.copy2(src, target)
-        (dest / 'METADATA.txt').write_text(dist.read_text('METADATA') or dist.read_text('PKG-INFO') or '')
+        (dest / 'METADATA.txt').write_text(dist.read_text('METADATA') or dist.read_text('PKG-INFO') or '', encoding='utf-8')
         if name in {'pyobjc-framework-UserNotifications', 'Cython'}:
             index = SOURCES / (name + '-pypi.json')
             if download:
                 subprocess.run(['curl', '--fail', '--location', '--silent', '--show-error',
                                 'https://pypi.org/pypi/' + name + '/' + dist.version + '/json',
                                 '-o', str(index)], check=True)
-            data = json.loads(index.read_text())
+            data = json.loads(index.read_text(encoding='utf-8'))
             source = next(x for x in data['urls'] if x['packagetype'] == 'sdist')
             archive = SOURCES / source['filename']
             fetch(source['url'], archive, source['digests']['sha256'], download)
@@ -148,8 +148,8 @@ def main(download=False):
         records.append({'name': dist.metadata['Name'], 'version': dist.version,
                         'license': dist.metadata.get('License-Expression') or dist.metadata.get('License'),
                         'home_page': dist.metadata.get('Home-page')})
-    (SOURCES / 'MANIFEST.json').write_text(json.dumps(records, ensure_ascii=False, indent=2) + '\n')
-    (NOTICES / 'MANIFEST.json').write_text(json.dumps(records, ensure_ascii=False, indent=2) + '\n')
+    (SOURCES / 'MANIFEST.json').write_text(json.dumps(records, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+    (NOTICES / 'MANIFEST.json').write_text(json.dumps(records, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
     shutil.copy2(ROOT / 'THIRD_PARTY_NOTICES.md', NOTICES / 'README.md')
     shutil.copy2(ROOT / 'LIBRARY_REPLACEMENT.md', NOTICES / 'LIBRARY_REPLACEMENT.md')
     print('Third-party materials ready; original SeeEnd source excluded.', flush=True)

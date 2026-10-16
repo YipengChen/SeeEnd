@@ -2,10 +2,13 @@
 import os
 os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
 import unittest
+import io
+from pathlib import Path
+from unittest.mock import patch
 from PySide6.QtCore import Qt, QSignalBlocker
 from PySide6.QtTest import QTest, QSignalSpy
 from PySide6.QtWidgets import QApplication
-from aiflame.desktop.light_controls import LightModePicker, LightPreviewPanel
+from aiflame.desktop.light_controls import LightModePicker, LightPreviewPanel, device_svg
 from aiflame.devices.models import SUPPORTED_MODELS, MIJIA_PLUG_MODELS, YEELIGHT_CUBE_MODEL
 from aiflame.devices.light_settings import light_settings
 from aiflame.devices.cube_effects import frame
@@ -19,6 +22,24 @@ class LightControlsTests(unittest.TestCase):
 
     def tearDown(self):
         set_language('zh-CN')
+
+    def test_device_art_preserves_utf8_with_ansi_default(self):
+        original_open = io.open
+
+        def ansi_open(file, mode='r', buffering=-1, encoding=None, *args, **kwargs):
+            encoding = 'cp1252' if encoding in (None, 'locale') else encoding
+            return original_open(file, mode, buffering, encoding, *args, **kwargs)
+
+        assets = Path(__file__).resolve().parents[1] / 'aiflame/assets/devices'
+        expected = {path.stem: path.read_text(encoding='utf-8')
+                    for path in assets.glob('*.svg')}
+        self.assertTrue(any(not text.isascii() for text in expected.values()))
+        device_svg.cache_clear()
+        self.addCleanup(device_svg.cache_clear)
+        with patch('pathlib.io.open', side_effect=ansi_open):
+            for model, text in expected.items():
+                with self.subTest(model=model):
+                    self.assertEqual(device_svg(model), text)
 
     def test_visible_choices_save_one_value_and_keyboard_works(self):
         picker = LightModePicker(columns=2)

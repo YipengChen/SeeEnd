@@ -105,7 +105,7 @@ class LightModePicker(QWidget):
 
 @lru_cache(maxsize=8)
 def device_svg(model):
-    return (Path(__file__).resolve().parents[1] / 'assets/devices' / (model + '.svg')).read_text()
+    return (Path(__file__).resolve().parents[1] / 'assets/devices' / (model + '.svg')).read_text(encoding='utf-8')
 
 
 def screenbar_glow(rgb, front):
