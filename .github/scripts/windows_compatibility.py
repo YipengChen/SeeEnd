@@ -76,10 +76,13 @@ class Result(unittest.TextTestResult):
             self.capture(test, error)
 
 
-suite = unittest.defaultTestLoader.loadTestsFromNames([
+names = [
     'test_responsive_ui', 'test_task_return_ui',
     'test_ui_recovery.RecoveryTests.test_minimum_english_device_detail_has_no_horizontal_overflow',
     'test_ui_recovery.RecoveryTests.test_activity_english_filters_fit_minimum_width_and_results_keep_channel_scope',
-])
+]
+if '--native-smoke' in sys.argv:
+    names = names[-2:]
+suite = unittest.defaultTestLoader.loadTestsFromNames(names)
 result = unittest.TextTestRunner(verbosity=2, resultclass=Result).run(suite)
 raise SystemExit(not result.wasSuccessful())
