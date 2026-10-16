@@ -62,7 +62,7 @@ class PathsAndInstallTests(unittest.TestCase):
                 write_private(path, original)
                 with self.assertRaises(ValueError):
                     install(home)
-                self.assertEqual(json.loads(path.read_text()), original)
+                self.assertEqual(json.loads(path.read_text(encoding="utf-8")), original)
 
     def test_hook_path_migration_and_uninstall_preserve_unrelated_handlers(self):
         with tempfile.TemporaryDirectory() as root:
@@ -78,7 +78,7 @@ class PathsAndInstallTests(unittest.TestCase):
             with patch("aiflame.integrations.codex.install.command", return_value=old):
                 install(home)
             path = home / "hooks.json"
-            data = json.loads(path.read_text())
+            data = json.loads(path.read_text(encoding="utf-8"))
             # Migrate an earlier unmarked command in a mixed group as well.
             data["hooks"]["Stop"][0]["hooks"][0].pop("statusMessage")
             unrelated = {"type": "command", "command": "other-app", "enabled": False}
@@ -88,7 +88,7 @@ class PathsAndInstallTests(unittest.TestCase):
             with patch("aiflame.integrations.codex.install.command", return_value=new):
                 install(home)
                 install(home)
-                migrated = json.loads(path.read_text())["hooks"]
+                migrated = json.loads(path.read_text(encoding="utf-8"))["hooks"]
                 for event, groups in migrated.items():
                     handlers = [h for group in groups for h in group["hooks"]]
                     self.assertEqual(
@@ -102,7 +102,7 @@ class PathsAndInstallTests(unittest.TestCase):
                 self.assertIn(new[0], owned["command"])
                 install(home, uninstall=True)
             self.assertEqual(
-                json.loads(path.read_text())["hooks"],
+                json.loads(path.read_text(encoding="utf-8"))["hooks"],
                 {
                     "Stop": [{"hooks": [unrelated], "matcher": "keep-me"}],
                 },
@@ -186,10 +186,10 @@ class PathsAndInstallTests(unittest.TestCase):
             write_private(home / "hooks.json", original)
             install(home)
             install(home)
-            data = json.loads((home / "hooks.json").read_text())
+            data = json.loads((home / "hooks.json").read_text(encoding="utf-8"))
             self.assertEqual(len(data["hooks"]["Stop"]), 2)
             install(home, uninstall=True)
-            self.assertEqual(json.loads((home / "hooks.json").read_text()), original)
+            self.assertEqual(json.loads((home / "hooks.json").read_text(encoding="utf-8")), original)
 
 
 

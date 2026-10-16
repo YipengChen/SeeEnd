@@ -25,7 +25,7 @@ class CodingSkillTests(unittest.TestCase):
 
     def test_english_instruction_translates_target_and_preserves_url_and_scope(self):
         path = Path(__file__).resolve().parents[1] / 'aiflame/assets/locales/en.json'
-        translations = json.loads(path.read_text())
+        translations = json.loads(path.read_text(encoding="utf-8"))
         prompt = installation_prompt(parameters={'config_dir': '/custom folder'},
                                      translate=lambda value: translations.get(value, value))
         self.assertNotRegex(prompt, r'[\u4e00-\u9fff]')
