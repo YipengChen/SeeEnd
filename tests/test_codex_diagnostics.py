@@ -19,6 +19,7 @@ from aiflame.integrations.codex.diagnostics import (
 class TestDiagnostics(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name) / "带空格的项目 root"
         self.home = Path(self.temp.name) / "codex"
         self.root.mkdir()
@@ -40,10 +41,7 @@ class TestDiagnostics(unittest.TestCase):
                 for kind in EVENTS
             }
         }
-        (self.home / "hooks.json").write_text(json.dumps(self.hooks))
-
-    def tearDown(self):
-        self.temp.cleanup()
+        (self.home / "hooks.json").write_text(json.dumps(self.hooks), encoding="utf-8")
 
     def test_configuration_does_not_claim_trust(self):
         result = inspect_configuration(self.home)
@@ -53,7 +51,7 @@ class TestDiagnostics(unittest.TestCase):
 
     def test_missing_hook_detected(self):
         del self.hooks["hooks"]["Interrupt"]
-        (self.home / "hooks.json").write_text(json.dumps(self.hooks))
+        (self.home / "hooks.json").write_text(json.dumps(self.hooks), encoding="utf-8")
         result = inspect_configuration(self.home)
         self.assertFalse(result["configuration_ready"])
         self.assertTrue(any("Interrupt" in issue for issue in result["issues"]))
@@ -62,7 +60,7 @@ class TestDiagnostics(unittest.TestCase):
         for hook in self.hooks["hooks"]["Stop"][0]["hooks"]:
             hook["enabled"] = False
         self.hooks["hooks"]["Interrupt"][0]["hooks"][0]["command"] = "PRIVATE"
-        (self.home / "hooks.json").write_text(json.dumps(self.hooks))
+        (self.home / "hooks.json").write_text(json.dumps(self.hooks), encoding="utf-8")
         result = inspect_configuration(self.home)
         self.assertFalse(result["configuration_ready"])
         self.assertNotIn("Stop", result["hooks_configured"])

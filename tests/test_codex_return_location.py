@@ -1,6 +1,6 @@
 """On-demand Codex metadata resolution, ambiguity and process identity guards."""
 
-from contextlib import redirect_stdout
+from contextlib import closing, redirect_stdout
 import io
 import json
 import os
@@ -41,6 +41,16 @@ class ContextTests(unittest.TestCase):
                 validate_context(bad, "codex")
         with self.assertRaises(EventError):
             validate_context(value, "claude-code")
+
+    def test_windows_absolute_context_accepts_drive_and_unc_but_not_relative_paths(self):
+        for cwd in (r"C:\Projects\SeeEnd", "C:/Projects/SeeEnd", r"\\server\share\SeeEnd"):
+            value = context(cwd=cwd)
+            with self.subTest(cwd=cwd):
+                self.assertEqual(validate_context(value, "codex"), value)
+                self.assertEqual(return_context(value), value)
+        for cwd in ("C:relative", "C:", r"\root", r"\\server"):
+            with self.subTest(cwd=cwd), self.assertRaises(EventError):
+                validate_context(context(cwd=cwd), "codex")
 
     def test_daemon_hook_forwards_metadata_without_changing_task_identity_or_stdout(self):
         from aiflame.integrations.codex.events import from_hook
@@ -103,7 +113,7 @@ class ScriptCompilationTests(unittest.TestCase):
                 # has registered a newly installed app; compile without executing.
                 source = Path(root) / f"script-{index}.applescript"
                 bundle = "com.apple.Terminal" if "Terminal.app" in app else "com.googlecode.iterm2"
-                source.write_text(script.replace(f'application id "{bundle}"', f'application "{app}"'))
+                source.write_text(script.replace(f'application id "{bundle}"', f'application "{app}"'), encoding="utf-8")
                 result = subprocess.run(["/usr/bin/osacompile", "-o", str(source.with_suffix(".scpt")), str(source)],
                                         capture_output=True, text=True, timeout=10)
                 self.assertEqual(result.returncode, 0, result.stderr)
@@ -126,7 +136,7 @@ class ResolverTests(unittest.TestCase):
         self.cwd.mkdir()
         self.value = context(str(self.cwd))
         self.database = self.root / "state_5.sqlite"
-        with sqlite3.connect(self.database) as db:
+        with closing(sqlite3.connect(self.database)) as db, db:
             # No body/preview/title columns: resolving must not need them.
             db.execute("CREATE TABLE threads(id TEXT PRIMARY KEY,name TEXT,cwd TEXT,archived INTEGER)")
             db.execute("INSERT INTO threads VALUES (?,?,?,0)", (self.value["session_id"], "回复234", str(self.cwd)))
@@ -145,7 +155,7 @@ class ResolverTests(unittest.TestCase):
 
     def add_thread(self, name="回复234", cwd=None, archived=0):
         sid = str(uuid.uuid4())
-        with sqlite3.connect(self.database) as db:
+        with closing(sqlite3.connect(self.database)) as db, db:
             db.execute("INSERT INTO threads VALUES (?,?,?,?)", (sid, name, str(cwd or self.cwd), archived))
         return sid
 
@@ -234,7 +244,7 @@ class ResolverTests(unittest.TestCase):
         first = self.resolve()
         self.value["turn_id"] = str(uuid.uuid4())
         self.assertEqual(self.resolve(), first)
-        with sqlite3.connect(self.database) as db:
+        with closing(sqlite3.connect(self.database)) as db, db:
             db.execute("UPDATE threads SET name='新的名字'")
         with self.assertRaisesRegex(EventError, "未找到对应终端"):
             self.resolve()
@@ -242,15 +252,15 @@ class ResolverTests(unittest.TestCase):
         self.assertEqual(changed.destination["session_id"], first.destination["session_id"])
 
     def test_no_name_changed_directory_and_unsupported_latest_schema_are_actionable(self):
-        with sqlite3.connect(self.database) as db:
+        with closing(sqlite3.connect(self.database)) as db, db:
             db.execute("UPDATE threads SET name=NULL")
         with self.assertRaisesRegex(EventError, "尚未生成名称"):
             self.resolve()
-        with sqlite3.connect(self.database) as db:
+        with closing(sqlite3.connect(self.database)) as db, db:
             db.execute("UPDATE threads SET name='回复234',cwd=?", (str(self.root),))
         with self.assertRaisesRegex(EventError, "目录已变化"):
             self.resolve()
-        with sqlite3.connect(self.root / "state_6.sqlite") as db:
+        with closing(sqlite3.connect(self.root / "state_6.sqlite")) as db, db:
             db.execute("CREATE TABLE future_schema(id TEXT)")
         with self.assertRaisesRegex(EventError, "无法读取 Codex"):
             self.resolve()
@@ -260,7 +270,7 @@ class ResolverTests(unittest.TestCase):
         child = self.cwd / "subdirectory"
         child.mkdir()
         self.value["cwd"] = str(child)
-        with sqlite3.connect(self.database) as db:
+        with closing(sqlite3.connect(self.database)) as db, db:
             db.execute("UPDATE threads SET cwd=?", (str(child),))
         self.assertEqual(self.resolve(cwds={700: str(child)}).destination["project"], "project")
         with self.assertRaisesRegex(EventError, "未找到对应终端"):

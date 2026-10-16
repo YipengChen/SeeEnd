@@ -119,33 +119,33 @@ class CliToolsTests(unittest.TestCase):
         home.mkdir()
         path = home / "settings.json"
         third = {"type": "command", "command": "third-party"}
-        path.write_text(json.dumps({"env": {"EXAMPLE": "keep"}, "hooks": {"Stop": [{"matcher": "keep", "hooks": [third]}]}}))
+        path.write_text(json.dumps({"env": {"EXAMPLE": "keep"}, "hooks": {"Stop": [{"matcher": "keep", "hooks": [third]}]}}), encoding="utf-8")
         install("claude-code", config_dir=home)
         install("claude-code")
-        data = json.loads(path.read_text())
+        data = json.loads(path.read_text(encoding="utf-8"))
         self.assertEqual(data["env"], {"EXAMPLE": "keep"})
         self.assertEqual(len(data["hooks"]["Stop"]), 2)
         result = diagnostics(self.engine.db)["integrations"][0]
         self.assertTrue(result["configuration_ready"])
         install("claude-code", uninstall=True)
-        self.assertEqual(json.loads(path.read_text())["hooks"], {"Stop": [{"matcher": "keep", "hooks": [third]}]})
+        self.assertEqual(json.loads(path.read_text(encoding="utf-8"))["hooks"], {"Stop": [{"matcher": "keep", "hooks": [third]}]})
 
     def test_malformed_configuration_not_written(self):
         home = self.root / "qoder"
         home.mkdir()
         path = home / "settings.json"
         original = '{"hooks":{"Stop":"wrong"}}'
-        path.write_text(original)
+        path.write_text(original, encoding="utf-8")
         with self.assertRaises(ValueError):
             install("qoder", config_dir=home)
-        self.assertEqual(path.read_text(), original)
+        self.assertEqual(path.read_text(encoding="utf-8"), original)
 
     def test_shared_directory_does_not_remove_other_cli(self):
         home = self.root / "shared"
         install("claude-code", config_dir=home)
         install("qoder", config_dir=home)
         install("claude-code", config_dir=home, uninstall=True)
-        hooks = json.loads((home / "settings.json").read_text())["hooks"]
+        hooks = json.loads((home / "settings.json").read_text(encoding="utf-8"))["hooks"]
         self.assertEqual(len(hooks["Stop"]), 1)
         self.assertIn("qoder", hooks["Stop"][0]["hooks"][0]["command"])
 
@@ -155,25 +155,25 @@ class CliToolsTests(unittest.TestCase):
         profile_root = self.root / "dsh"
         (profile_root / "profiles" / "default").mkdir(parents=True)
         manifest = profile_root / "profiles" / "default" / "package.json"
-        manifest.write_text(json.dumps({"dependencies": {"keep": "1"}, "dsh": {"profile": {"bundles": ["keep"]}}}))
+        manifest.write_text(json.dumps({"dependencies": {"keep": "1"}, "dsh": {"profile": {"bundles": ["keep"]}}}), encoding="utf-8")
         with patch.dict(os.environ, {"DSH_HOME": str(profile_root)}), patch("aiflame.integrations.cli_tools.install.subprocess.run") as run:
             run.return_value.returncode = 0
             def added(arguments, **kwargs):
-                package = json.loads(manifest.read_text())
+                package = json.loads(manifest.read_text(encoding="utf-8"))
                 package["dependencies"]["aiflame-deepseek-harness"] = arguments[-1]
                 package["dsh"]["profile"]["bundles"].append("aiflame-deepseek-harness")
-                manifest.write_text(json.dumps(package))
+                manifest.write_text(json.dumps(package), encoding="utf-8")
                 return run.return_value
             run.side_effect = added
             bundle = install("deepseek-harness", profile="default")
             self.assertEqual(run.call_args.args[0][1:5], ["plugin", "--profile", "default", "add"])
-            bridge = json.loads((bundle / "bridge.json").read_text())
+            bridge = json.loads((bundle / "bridge.json").read_text(encoding="utf-8"))
             self.assertEqual(bridge["helperArgv"][-2:], ["--cli-hook", "deepseek-harness"])
             row = next(row for row in diagnostics(self.engine.db)["integrations"] if row["source_id"] == "deepseek-harness")
             self.assertTrue(row["configuration_ready"])
             self.assertEqual(row["profiles"], ["default"])
             self.assertEqual(row["installed_profiles"], ["default"])
-            manifest.write_text(json.dumps({"dependencies": {}, "dsh": {"profile": {"bundles": []}}}))
+            manifest.write_text(json.dumps({"dependencies": {}, "dsh": {"profile": {"bundles": []}}}), encoding="utf-8")
             row = next(row for row in diagnostics(self.engine.db)["integrations"] if row["source_id"] == "deepseek-harness")
             self.assertFalse(row["configuration_ready"])
             self.assertEqual(row["installed_profiles"], [])
@@ -202,16 +202,16 @@ class NewAdapterTests(unittest.TestCase):
         directory.mkdir()
         path = directory / 'settings.json'
         original = {'model': {'name': 'keep'}, 'hooks': {'AfterAgent': [{'hooks': [{'type': 'command', 'command': 'other'}]}]}}
-        path.write_text(json.dumps(original))
+        path.write_text(json.dumps(original), encoding="utf-8")
         install('gemini-cli', config_dir=directory)
         install('gemini-cli', config_dir=directory)
-        data = json.loads(path.read_text())
+        data = json.loads(path.read_text(encoding="utf-8"))
         self.assertEqual(len(data['hooks']['AfterAgent']), 2)
         handler = data['hooks']['AfterAgent'][-1]['hooks'][0]
         self.assertEqual(handler['timeout'], 5000)
         self.assertNotIn('statusMessage', handler)
         install('gemini-cli', config_dir=directory, uninstall=True)
-        self.assertEqual(json.loads(path.read_text()), original)
+        self.assertEqual(json.loads(path.read_text(encoding="utf-8")), original)
 
     def test_gemini_permission_is_nonterminal_and_content_not_retained(self):
         def event(kind, **extra):
@@ -232,14 +232,14 @@ class NewAdapterTests(unittest.TestCase):
         install('opencode', config_dir=directory)
         self.assertTrue(plugin_ready(directory))
         other = path.with_name('other.js')
-        other.write_text('// keep')
+        other.write_text('// keep', encoding="utf-8")
         install('opencode', config_dir=directory, uninstall=True)
         self.assertFalse(path.exists())
-        self.assertEqual(other.read_text(), '// keep')
-        path.write_text('// foreign')
+        self.assertEqual(other.read_text(encoding="utf-8"), '// keep')
+        path.write_text('// foreign', encoding="utf-8")
         with self.assertRaises(ValueError):
             install('opencode', config_dir=directory)
-        self.assertEqual(path.read_text(), '// foreign')
+        self.assertEqual(path.read_text(encoding="utf-8"), '// foreign')
 
 
 if __name__ == "__main__":

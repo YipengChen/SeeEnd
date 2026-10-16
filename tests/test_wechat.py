@@ -157,8 +157,9 @@ class ProtocolTests(unittest.TestCase):
                 else: raise RuntimeError("denied")
             store._call = call
             store.save(ACCOUNT)
-            self.assertEqual(store.reference.stat().st_mode & 0o777, 0o600)
-            self.assertNotIn(ACCOUNT["token"], store.reference.read_text())
+            if os.name != "nt":
+                self.assertEqual(store.reference.stat().st_mode & 0o777, 0o600)
+            self.assertNotIn(ACCOUNT["token"], store.reference.read_text(encoding="utf-8"))
             self.assertEqual(store.load(), ACCOUNT)
             with self.assertRaises(RuntimeError): store.clear()
             fresh = WechatCredentials(Path(root))
@@ -170,7 +171,7 @@ class ProtocolTests(unittest.TestCase):
             store = WechatCredentials(root)
             store.reference.parent.mkdir()
             for value in ("broken JSON", "[]", '{"account":null}'):
-                store.reference.write_text(value)
+                store.reference.write_text(value, encoding="utf-8")
                 store.clear()
                 self.assertFalse(store.has_account())
             store.save(ACCOUNT)
@@ -194,14 +195,14 @@ class ProtocolTests(unittest.TestCase):
             fresh = WechatCredentials(root)
             fresh._call = lambda *args: None
             fresh.save(dict(ACCOUNT, token="fresh"))
-            marker = fresh.reference.read_text()
+            marker = fresh.reference.read_text(encoding="utf-8")
             release.set()
             thread.join(1)
             self.assertFalse(thread.is_alive())
-            self.assertEqual(fresh.reference.read_text(), marker)
+            self.assertEqual(fresh.reference.read_text(encoding="utf-8"), marker)
             self.assertEqual(writes[-1][0], "delete")
             old.clear()
-            self.assertEqual(fresh.reference.read_text(), marker)
+            self.assertEqual(fresh.reference.read_text(encoding="utf-8"), marker)
 
     def test_quit_retains_existing_keychain_binding_when_save_finishes_late(self):
         with tempfile.TemporaryDirectory() as root, patch("aiflame.integrations.wechat.credentials.sys.platform", "darwin"):

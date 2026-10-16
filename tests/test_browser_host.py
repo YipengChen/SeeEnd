@@ -1,3 +1,4 @@
+from contextlib import closing
 import io
 import json
 from pathlib import Path
@@ -43,26 +44,26 @@ class TestBrowserHost(unittest.TestCase):
     def test_all_web_sources_have_independent_lifecycles(self):
         with tempfile.TemporaryDirectory() as t:
             engine = Engine(Path(t) / "db", sources=SOURCES)
-            self.addCleanup(engine.db.close)
-            for source in WEB_SOURCES:
-                with self.subTest(source=source):
-                    task = "00000000-0000-4000-8000-000000000001"
-                    event = make_event(source, task, "working")
-                    self.assertEqual(sanitize(event), event)
-                    with self.assertRaises(EventError):
+            with closing(engine.db):
+                for source in WEB_SOURCES:
+                    with self.subTest(source=source):
+                        task = "00000000-0000-4000-8000-000000000001"
+                        event = make_event(source, task, "working")
+                        self.assertEqual(sanitize(event), event)
+                        with self.assertRaises(EventError):
+                            engine.accept(make_event(source, task, "done", 2), source)
+                        engine.accept(event, source)
                         engine.accept(make_event(source, task, "done", 2), source)
-                    engine.accept(event, source)
-                    engine.accept(make_event(source, task, "done", 2), source)
-                    self.assertEqual(engine.sources[source].requires_start, True)
-            self.assertEqual(
-                engine.db.execute("SELECT COUNT(*) FROM tasks").fetchone()[0], len(WEB_SOURCES)
-            )
+                        self.assertEqual(engine.sources[source].requires_start, True)
+                self.assertEqual(
+                    engine.db.execute("SELECT COUNT(*) FROM tasks").fetchone()[0], len(WEB_SOURCES)
+                )
 
     def test_bridge_uses_only_matching_source_token_for_events_and_ping(self):
         with tempfile.TemporaryDirectory() as t:
             root = Path(t)
             tokens = {source: "test-" + source for source in WEB_SOURCES}
-            (root / "bridge-config.json").write_text(json.dumps({"tokens": tokens}))
+            (root / "bridge-config.json").write_text(json.dumps({"tokens": tokens}), encoding="utf-8")
             requests = []
 
             class Opener:
@@ -115,7 +116,8 @@ class TestBrowserHost(unittest.TestCase):
         with tempfile.TemporaryDirectory() as t:
             root = Path(t)
             (root / "bridge-config.json").write_text(
-                json.dumps({"token": "old-web-token"})
+                json.dumps({"token": "old-web-token"}),
+                encoding="utf-8",
             )
             with (
                 patch("aiflame.integrations.chatgpt_web.host.ROOT", root),
@@ -164,28 +166,28 @@ class TestBrowserHost(unittest.TestCase):
                 ),
             ):
                 install()
-                manifest = json.loads((root / "native.json").read_text())
+                manifest = json.loads((root / "native.json").read_text(encoding="utf-8"))
                 manifest["allowed_origins"] = ["chrome-extension://" + LEGACY_EXTENSION_ID + "/"]
-                (root / "native.json").write_text(json.dumps(manifest))
+                (root / "native.json").write_text(json.dumps(manifest), encoding="utf-8")
                 install()
-                manifest = json.loads((root / "native.json").read_text())
+                manifest = json.loads((root / "native.json").read_text(encoding="utf-8"))
                 manifest["allowed_origins"].append("chrome-extension://" + "a" * 32 + "/")
-                (root / "native.json").write_text(json.dumps(manifest))
+                (root / "native.json").write_text(json.dumps(manifest), encoding="utf-8")
                 with self.assertRaisesRegex(RuntimeError, "属于其他配置"):
                     install()
                 manifest["allowed_origins"] = list(extension_origins())
-                (root / "native.json").write_text(json.dumps(manifest))
+                (root / "native.json").write_text(json.dumps(manifest), encoding="utf-8")
             copied = root / "BrowserBridge/chrome"
             self.assertEqual(
-                json.loads((copied / "bridge-config.json").read_text())["tokens"],
+                json.loads((copied / "bridge-config.json").read_text(encoding="utf-8"))["tokens"],
                 {source: tokens[source] for source in WEB_SOURCES},
             )
-            self.assertIn("deepseek-web", (copied / "host.py").read_text())
+            self.assertIn("deepseek-web", (copied / "host.py").read_text(encoding="utf-8"))
             self.assertNotIn(
-                "private-codex", (copied / "bridge-config.json").read_text()
+                "private-codex", (copied / "bridge-config.json").read_text(encoding="utf-8")
             )
             self.assertEqual(
-                json.loads((root / "native.json").read_text())["allowed_origins"],
+                json.loads((root / "native.json").read_text(encoding="utf-8"))["allowed_origins"],
                 list(extension_origins()),
             )
 
@@ -203,7 +205,8 @@ class TestBrowserHost(unittest.TestCase):
                         "hub_id": "old",
                         "tokens": {"codex": "keep", "chatgpt-web": "keep-web"},
                     }
-                )
+                ),
+                encoding="utf-8",
             )
             config = load_config()
             self.assertEqual(config["tokens"]["codex"], "keep")
@@ -271,17 +274,17 @@ class TestBrowserHost(unittest.TestCase):
             result = prepare_extension_folder(root)
             folder = Path(result["path"])
             self.assertTrue(result["prepared"])
-            manifest = json.loads((folder / "manifest.json").read_text())
+            manifest = json.loads((folder / "manifest.json").read_text(encoding="utf-8"))
             for content in manifest["content_scripts"]:
                 for script in content["js"]:
                     self.assertTrue((folder / script).is_file())
             self.assertTrue((folder / manifest["background"]["service_worker"]).is_file())
             self.assertTrue((folder / manifest["action"]["default_popup"]).is_file())
             self.assertFalse(any(path.suffix == ".zip" for path in folder.iterdir()))
-            (folder / "providers.js").write_text("outdated")
+            (folder / "providers.js").write_text("outdated", encoding="utf-8")
             self.assertFalse(extension_folder_info(root)["prepared"])
             self.assertEqual(prepare_extension_folder(root)["path"], str(folder))
-            self.assertNotEqual((folder / "providers.js").read_text(), "outdated")
+            self.assertNotEqual((folder / "providers.js").read_text(encoding="utf-8"), "outdated")
             self.assertNotIn("credentials.json", [p.name for p in folder.iterdir()])
             (folder / "providers.js").unlink()
             self.assertFalse(extension_folder_info(root)["prepared"])
@@ -289,7 +292,7 @@ class TestBrowserHost(unittest.TestCase):
 
     def test_visible_extension_path_uses_seeend_and_custom_runtimes_stay_isolated(self):
         for old, new in (("AI Flame", "SeeEnd"), ("ai-flame", "seeend")):
-            runtime = Path("/tmp/platform-data") / old
+            runtime = Path(tempfile.gettempdir()).resolve() / "platform-data" / old
             with patch("aiflame.integrations.chatgpt_web.downloads.user_data_dir", return_value=runtime):
                 self.assertEqual(extension_folder_path(runtime), runtime.parent / new / "BrowserExtension")
         with tempfile.TemporaryDirectory() as runtime:
@@ -313,10 +316,10 @@ class TestBrowserHost(unittest.TestCase):
             folder = Path(root) / "SeeEnd" / "BrowserExtension"
             folder.mkdir(parents=True)
             personal = folder / "manifest.json"
-            personal.write_text("unrelated")
+            personal.write_text("unrelated", encoding="utf-8")
             with self.assertRaises(EventError):
                 prepare_extension_folder(root)
-            self.assertEqual(personal.read_text(), "unrelated")
+            self.assertEqual(personal.read_text(encoding="utf-8"), "unrelated")
             personal.unlink()
             folder.rmdir()
             folder.symlink_to(outside, target_is_directory=True)

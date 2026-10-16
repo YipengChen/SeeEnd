@@ -23,20 +23,21 @@ class LocalDeviceTokensTests(unittest.TestCase):
             self.store.set('one', TOKEN)
             self.assertEqual(TokenStore(self.temp.name).get('one'), TOKEN)
             for path in Path(self.temp.name).rglob('*.json'):
-                self.assertNotIn(TOKEN, path.read_text())
-                self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+                self.assertNotIn(TOKEN, path.read_text(encoding="utf-8"))
+                if os.name != "nt":
+                    self.assertEqual(path.stat().st_mode & 0o777, 0o600)
             self.store.delete('one')
             self.assertFalse(self.store._path('one').exists())
 
     def test_tamper_and_account_swap_rejected(self):
         self.store.set('one', TOKEN)
-        original = self.store._path('one').read_text()
-        self.store._path('two').write_text(original)
+        original = self.store._path('one').read_text(encoding="utf-8")
+        self.store._path('two').write_text(original, encoding="utf-8")
         with self.assertRaises(RuntimeError):
             self.store.get('two')
         saved = json.loads(original)
         saved['ciphertext'] = saved['ciphertext'][4:] + 'AAAA'
-        self.store._path('one').write_text(json.dumps(saved))
+        self.store._path('one').write_text(json.dumps(saved), encoding="utf-8")
         with self.assertRaises(RuntimeError):
             self.store.get('one')
 
@@ -66,7 +67,7 @@ class LocalDeviceTokensTests(unittest.TestCase):
     def test_failed_legacy_cleanup_keeps_working_local_copy_and_retry(self):
         with patch.object(self.store, '_call', side_effect=[TOKEN, RuntimeError('denied')]):
             self.assertEqual(self.store.get('one'), TOKEN)
-        self.assertTrue(json.loads(self.store._path('one').read_text())['legacy_cleanup'])
+        self.assertTrue(json.loads(self.store._path('one').read_text(encoding="utf-8"))['legacy_cleanup'])
         with patch.object(self.store, '_call', return_value=None) as legacy:
             self.assertEqual(self.store.get('one'), TOKEN)
             legacy.assert_not_called()

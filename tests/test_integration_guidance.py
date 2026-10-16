@@ -128,7 +128,7 @@ class IntegrationGuidanceTests(unittest.TestCase):
         install('opencode', config_dir=directory)
         manifest = directory / 'aiflame/.seeend-owned.json'
         original = manifest.read_bytes()
-        manifest.write_text(json.dumps({'owner': 'another-owner', 'files': {}}))
+        manifest.write_text(json.dumps({'owner': 'another-owner', 'files': {}}), encoding="utf-8")
         result = diagnostics(self.engine.db, source='opencode')['integrations'][0]
         self.assertFalse(result['configuration_ready'])
         self.assertTrue(any('归属' in issue for issue in result['issues']))
@@ -219,10 +219,10 @@ class IntegrationGuidanceTests(unittest.TestCase):
             directory.mkdir(exist_ok=True)
             path = directory / ('hooks.json' if source == 'codex' else 'settings.json')
             original = {'model': {'keep': True}, 'hooks': {'OtherEvent': [{'hooks': [{'command': 'keep'}]}]}}
-            path.write_text(json.dumps(original))
+            path.write_text(json.dumps(original), encoding="utf-8")
             guide = integration_guide(source, str(directory))
             install_codex(directory) if source == 'codex' else install(source, config_dir=directory)
-            data = json.loads(path.read_text())
+            data = json.loads(path.read_text(encoding="utf-8"))
             for event, groups in json.loads(guide['snippet'])['hooks'].items():
                 self.assertEqual(data['hooks'][event], groups)
             self.assertEqual(data['model'], original['model'])
@@ -240,28 +240,28 @@ class IntegrationGuidanceTests(unittest.TestCase):
         self.assertIn('SeeEnd Skill', report['next_action'])
         directory.mkdir()
         path = directory / 'settings.json'
-        path.write_text('{\n BAD PRIVATE-TOKEN')
+        path.write_text('{\n BAD PRIVATE-TOKEN', encoding="utf-8")
         report = diagnostics(self.engine.db, source='qoder', config_dirs={'qoder': directory})['integrations'][0]
         self.assertIn('第 2 行', report['summary'])
         self.assertNotIn('PRIVATE-TOKEN', str(report))
-        self.assertEqual(path.read_text(), '{\n BAD PRIVATE-TOKEN')
+        self.assertEqual(path.read_text(encoding="utf-8"), '{\n BAD PRIVATE-TOKEN')
 
     def test_disabled_hooks_and_stale_helper_are_explicit(self):
         directory = self.root / 'gemini'
         install('gemini-cli', config_dir=directory)
         path = directory / 'settings.json'
-        data = json.loads(path.read_text())
+        data = json.loads(path.read_text(encoding="utf-8"))
         data['hooksConfig'] = {'enabled': False}
-        path.write_text(json.dumps(data))
+        path.write_text(json.dumps(data), encoding="utf-8")
         report = diagnostics(self.engine.db, source='gemini-cli')['integrations'][0]
         self.assertFalse(report['configuration_ready'])
         self.assertIn('hooksConfig.enabled=false', str(report['issues']))
         self.assertIn('在 Gemini CLI 中', str(report['issues']))
         self.assertIn('Gemini CLI', report['next_action'])
-        self.assertFalse(json.loads(path.read_text())['hooksConfig']['enabled'])
+        self.assertFalse(json.loads(path.read_text(encoding="utf-8"))['hooksConfig']['enabled'])
         data.pop('hooksConfig')
         data['hooks']['AfterAgent'][0]['hooks'][0]['command'] = '/Applications/Old/SeeEnd.app/Contents/MacOS/SeeEnd --cli-hook gemini-cli'
-        path.write_text(json.dumps(data))
+        path.write_text(json.dumps(data), encoding="utf-8")
         report = diagnostics(self.engine.db, source='gemini-cli')['integrations'][0]
         self.assertTrue(any('旧版' in issue and 'AfterAgent' in issue for issue in report['issues']))
 
@@ -308,7 +308,7 @@ class IntegrationGuidanceTests(unittest.TestCase):
         profile_root = self.root / 'dsh/profiles'
         for name in ('one', 'two'):
             (profile_root / name).mkdir(parents=True)
-            (profile_root / name / 'package.json').write_text('{}')
+            (profile_root / name / 'package.json').write_text('{}', encoding="utf-8")
         report = diagnostics(self.engine.db, source='deepseek-harness', profiles={'deepseek-harness': 'two'})['integrations'][0]
         self.assertIn(str(profile_root / 'two/package.json'), report['summary'])
         self.assertIn('所选 Profile', report['summary'])
@@ -344,10 +344,10 @@ class IntegrationGuidanceTests(unittest.TestCase):
         directory = self.root / 'opencode'
         path = directory / 'aiflame/index.mjs'
         path.parent.mkdir(parents=True)
-        path.write_text('third-party-plugin')
+        path.write_text('third-party-plugin', encoding="utf-8")
         code, result = self.request('/api/integrations/install', {'source': 'opencode', 'config_dir': str(directory)})
         self.assertEqual(code, 409)
         self.assertIn('同名', result['error'])
         self.assertIn(str(path), result['error'])
-        self.assertEqual(path.read_text(), 'third-party-plugin')
+        self.assertEqual(path.read_text(encoding="utf-8"), 'third-party-plugin')
         self.assertFalse((directory / 'plugins').exists())
