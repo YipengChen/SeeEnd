@@ -11,12 +11,23 @@ sys.path[:0] = [str(ROOT), str(ROOT / 'tests')]
 OUTPUT = ROOT / 'validation/windows-compatibility'
 OUTPUT.mkdir(parents=True, exist_ok=True)
 
+from PySide6.QtGui import QFontDatabase, QFontInfo, QFontMetrics
+from PySide6.QtWidgets import QApplication
+
+app = QApplication.instance() or QApplication([])
+metrics = QFontMetrics(app.font())
+print(json.dumps({'platform': app.platformName(), 'font_families': len(QFontDatabase.families()),
+                  'resolved_font': QFontInfo(app.font()).family(),
+                  'narrow_text': metrics.horizontalAdvance('iiii'),
+                  'wide_text': metrics.horizontalAdvance('WWWW')}), flush=True)
+
 
 class Result(unittest.TextTestResult):
     captures = 0
 
     def capture(self, test, error):
-        traceback.print_exception(*error)
+        if error:
+            traceback.print_exception(*error)
         widget = getattr(test, 'widget', None)
         if widget is None:
             return
@@ -46,6 +57,14 @@ class Result(unittest.TextTestResult):
     def addFailure(self, test, error):
         super().addFailure(test, error)
         self.capture(test, error)
+
+    def addSuccess(self, test):
+        super().addSuccess(test)
+        if test._testMethodName in (
+            'test_activity_english_filters_fit_minimum_width_and_results_keep_channel_scope',
+            'test_preference_channels_fit_when_wechat_connection_state_changes',
+        ):
+            self.capture(test, None)
 
     def addError(self, test, error):
         super().addError(test, error)
