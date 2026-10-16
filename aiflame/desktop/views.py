@@ -1301,7 +1301,7 @@ class DashboardViews:
         self.preference_help[key].set_help("\n\n".join(text for text in
             (self.channel_save_feedback(key), *details, self.preference_help_texts[key]) if text))
 
-    def preference_toggle(self, layout, key, title, *, help_text=""):
+    def preference_toggle(self, layout, key, title, *, help_text="", actions_below=False):
         section = QVBoxLayout()
         section.setSpacing(5)
         row = QHBoxLayout()
@@ -1324,7 +1324,8 @@ class DashboardViews:
         actions.setContentsMargins(0, 0, 0, 0)
         actions.setSpacing(4)
         actions.setAlignment(Qt.AlignmentFlag.AlignVCenter)
-        row.addWidget(actions_box, 0, Qt.AlignmentFlag.AlignVCenter)
+        if not actions_below:
+            row.addWidget(actions_box, 0, Qt.AlignmentFlag.AlignVCenter)
         row.addStretch()
         toggle = Toggle()
         toggle.setAccessibleName(title)
@@ -1332,6 +1333,8 @@ class DashboardViews:
         self.checks[key] = toggle
         row.addWidget(toggle, 0, Qt.AlignmentFlag.AlignVCenter)
         section.addLayout(row)
+        if actions_below:
+            section.addWidget(actions_box, 0, Qt.AlignmentFlag.AlignLeft)
         if key not in self.home_channel_checks:
             self.save_feedback_row(section, key)
         layout.addLayout(section)

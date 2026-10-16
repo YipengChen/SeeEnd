@@ -41,10 +41,12 @@ class RetiredTaskErrorTests(unittest.TestCase):
             engine.db.commit()
             engine.db.close()
             engine = Engine(path, sources=SOURCES)
-            self.addCleanup(engine.db.close)
-            self.assertEqual(tuple(engine.db.execute('SELECT state, reason FROM events').fetchone()), ('unknown', 'failed'))
-            self.assertEqual(engine.db.execute('SELECT state FROM tasks').fetchone()[0], 'unknown')
-            self.assertEqual(engine.desired()['state'], 'idle')
+            try:
+                self.assertEqual(tuple(engine.db.execute('SELECT state, reason FROM events').fetchone()), ('unknown', 'failed'))
+                self.assertEqual(engine.db.execute('SELECT state FROM tasks').fetchone()[0], 'unknown')
+                self.assertEqual(engine.desired()['state'], 'idle')
+            finally:
+                engine.db.close()
 
     def test_legacy_attention_preferences_migrate_and_new_input_value_wins(self):
         fields = {'colors': '#123456', 'state_brightness': 37, 'front_state_brightness': 29,
