@@ -49,11 +49,14 @@ jobs:
       - name: Verify Windows sound restart fixture cleanup
         if: ${{ !inputs.probe_only && runner.os == 'Windows' }}
         run: python -m unittest tests.test_sounds.SoundOutputTests.test_preferences_persist_but_pending_audio_does_not_replay_after_restart -v
+      - name: Verify frozen startup port guard
+        if: ${{ !inputs.probe_only && runner.os == 'Windows' }}
+        run: python .github/scripts/test_windows_frozen_startup.py -v
       - if: ${{ !inputs.probe_only && runner.os != 'Windows' }}
         run: python -m unittest discover -s tests -v
       - name: Verify Windows source integration regressions
         if: ${{ !inputs.probe_only && runner.os == 'Windows' }}
-        # The build step runs the complete suite against the compiled core.
+        # The unchanged compiled core was covered by the prior full audit below.
         run: python -m unittest discover -s tests -p test_desktop_services.py -v
       - name: Verify Windows source fleet regressions
         if: ${{ !inputs.probe_only && runner.os == 'Windows' }}
@@ -72,6 +75,13 @@ jobs:
         run: python packaging/archive.py
       - if: ${{ !inputs.probe_only }}
         run: python packaging/extension_release.py
+      - name: Preserve built archives before GUI acceptance
+        uses: actions/upload-artifact@v4
+        if: always() && !inputs.probe_only && hashFiles('dist/SeeEnd-*.zip') != ''
+        with:
+          name: seeend-${{ matrix.os }}
+          path: dist/SeeEnd-*
+          if-no-files-found: error
       - name: Verify native Windows widgets
         if: runner.os == 'Windows'
         env:
@@ -91,7 +101,7 @@ jobs:
 
           Prior full compiled regression: [run 39028892983](https://github.com/YipengChen/SeeEnd/actions/runs/39028892983), 840 tests: 823 passed, 16 skipped, 0 assertion failures, 1 Windows temporary SQLite fixture cleanup error.
 
-          This follow-up fixes only that test fixture and runs its source preflight before building. It retains the 36 compiled native import checks, frozen/helper verification, archive checks, and actual frozen Windows GUI startup checks. The full 840-test compiled regression is not repeated; consult individual step outcomes for checks reached and passed in this run.
+          This follow-up fixes that test fixture and a CI-only startup port probe (run 39030419466 stopped before launching the GUI). Both have targeted preflight checks. It retains the 36 compiled native import checks, frozen/helper verification, archive checks, and actual frozen Windows GUI startup checks. The full 840-test compiled regression is not repeated; consult individual step outcomes for checks reached and passed in this run.
           SUMMARY
       - uses: actions/upload-artifact@v4
         if: always() && runner.os == 'Windows' && !inputs.probe_only
@@ -106,8 +116,3 @@ jobs:
         with:
           name: windows-compatibility
           path: validation/windows-compatibility
-      - uses: actions/upload-artifact@v4
-        if: ${{ !inputs.probe_only }}
-        with:
-          name: seeend-${{ matrix.os }}
-          path: dist/SeeEnd-*

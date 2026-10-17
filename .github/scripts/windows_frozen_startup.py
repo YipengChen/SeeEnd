@@ -17,6 +17,18 @@ OUTPUT = ROOT / "validation/windows-frozen-startup"
 sys.path.insert(0, str(ROOT))
 
 
+def verify_port_available(port=8765):
+    # Windows may time out rather than refuse a connection to an unopened port.
+    # Bind locally instead: no request is sent to an existing port owner.
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+            if hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
+                probe.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+            probe.bind(("127.0.0.1", port))
+    except OSError as error:
+        raise RuntimeError(f"Port {port} is unavailable before this isolated test") from error
+
+
 def child_windows(pid):
     user = ctypes.WinDLL("user32", use_last_error=True)
     callback_type = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
@@ -84,12 +96,7 @@ def main():
         profile = Path(temporary) / "profile"
         profile.mkdir()
         try:
-            # Never terminate or query another process that already owns the port.
-            try:
-                with socket.create_connection(("127.0.0.1", 8765), timeout=.3):
-                    raise RuntimeError("Port 8765 is occupied before this isolated test")
-            except ConnectionRefusedError:
-                pass
+            verify_port_available()
             environment = {**os.environ, "AIFLAME_DATA_DIR": str(profile), "QT_QPA_PLATFORM": "windows"}
             process = subprocess.Popen([str(executable)], env=environment, stdout=bootstrap,
                                        stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL)
