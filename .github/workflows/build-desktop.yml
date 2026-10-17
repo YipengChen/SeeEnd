@@ -72,6 +72,19 @@ jobs:
         env:
           QT_QPA_PLATFORM: windows
         run: python .github/scripts/windows_compatibility.py --native-smoke
+      - name: Verify frozen Windows GUI startup
+        if: runner.os == 'Windows' && !inputs.probe_only
+        env:
+          QT_QPA_PLATFORM: windows
+        run: python .github/scripts/windows_frozen_startup.py
+      - uses: actions/upload-artifact@v4
+        if: always() && runner.os == 'Windows' && !inputs.probe_only
+        with:
+          name: seeend-windows-diagnostics
+          path: |
+            validation/windows-frozen-startup
+            validation/windows-compatibility
+          if-no-files-found: warn
       - uses: actions/upload-artifact@v4
         if: always() && inputs.probe_only
         with:
