@@ -23,7 +23,9 @@ class API(QObject):
     def __init__(self, *args):
         super().__init__()
         self.calls = []
-    def request(self, path, callback=None, **kwargs):
+    def request(self, path, callback=None, body=None, **kwargs):
+        if body is not None:
+            kwargs['body'] = body
         self.calls.append((path, callback, kwargs))
     def close(self):
         pass
@@ -56,6 +58,27 @@ class ReturnUITests(unittest.TestCase):
         for _ in range(4):
             self.app.processEvents()
         self.widget.render_recent()
+
+    def test_single_task_recovery_is_bound_to_current_cli_event_and_translates(self):
+        event = make_event('codex', 'residual', 'working')
+        self.engine.accept(event, 'codex')
+        self.render()
+        self.widget.navigate(4)
+        self.widget.history.selectRow(0)
+        self.widget.show_event_detail()
+        self.assertTrue(self.widget.mark_unknown_button.isVisible())
+        set_language('en')
+        self.assertEqual(self.widget.mark_unknown_button.text(), 'Mark as unknown')
+        self.widget.mark_unknown_button.click()
+        path, callback, options = self.widget.api.calls[-1]
+        self.assertEqual(path, '/api/tasks/mark-unknown')
+        self.assertEqual(options['body'], {'event_id': event['event_id']})
+        self.assertFalse(self.widget.mark_unknown_button.isEnabled())
+        callback(self.engine.mark_task_unknown(event['event_id']))
+        self.render()
+        self.widget.history.selectRow(0)
+        self.widget.show_event_detail()
+        self.assertFalse(self.widget.mark_unknown_button.isVisible())
 
     def test_recent_action_binds_exact_task_disables_double_click_and_completes(self):
         import uuid

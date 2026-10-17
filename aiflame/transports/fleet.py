@@ -1,6 +1,8 @@
 """Independent device sessions consuming one shared AI display schedule."""
 import threading
 import uuid
+import hashlib
+import json
 
 from aiflame.core.events import EventError
 from aiflame.devices.models import YEELIGHT_CUBE_MODEL
@@ -25,12 +27,30 @@ class DeviceState(dict):
         self.changed()
 
 
+class DisplayRequest(dict):
+    """Display values plus immutable, transport-local receipt provenance."""
+    def __init__(self, values, context, event_ids):
+        super().__init__(values)
+        self.delivery_context, self.event_ids = context, event_ids
+
+    def copy(self):
+        return DisplayRequest(self, self.delivery_context, self.event_ids)
+
+
 class DeviceOutput:
     """Transport-facing state; connection changes never reset another lamp."""
     def __init__(self, fleet, record):
         self.fleet, self.record = fleet, record
         self.last_command = None
         self.last_display_key = None
+        self.last_delivery_context = None
+        self.appearance = None
+        self.appearance_version = 0
+        self.connection_version = 0
+        self.admission_id = None
+        self.idle_cache_key = None
+        self.idle_recipients = ()
+        self.idle_deadline = 0
         self.light_test = None
         self.cube_slots = [None] * 4
         self._device = DeviceState({"online": False, "connecting": False,
@@ -48,6 +68,7 @@ class DeviceOutput:
     def device(self, value):
         self._device = DeviceState(value, self.fleet.refresh)
         self.last_display_key = None
+        self.last_delivery_context = None
         self.fleet.refresh()
 
     @property
@@ -58,8 +79,48 @@ class DeviceOutput:
         result = self._desired()
         if (self.record.get("hardware_model") == YEELIGHT_CUBE_MODEL
                 and self.settings.get("reminder_mode") in CUBE_MODES):
-            return self.cube_display(result)
-        return result
+            result = self.cube_display(result)
+        return self.request(result)
+
+    def request(self, result):
+        flame, device_id = self.fleet.engine, self.record.get("device_id")
+        event_ids, revision = (), None
+        if not any(result.get(field) for field in ("preview", "device_test", "device_muted")):
+            if flame.current and flame.current["id"] == result["key"]:
+                event_ids = (flame.current["id"],)
+                revision = event_ids
+            elif result["state"] == "working":
+                event_ids = tuple(sorted(item["id"] for item in flame.active.values()
+                                         if item.get("device_id") in (None, device_id)))
+                revision = event_ids
+            elif result["state"] == "idle":
+                # The newest admitted event remains the display revision after its
+                # receipt is recorded, while the captured recipients stay exact.
+                revision = self.admission_id
+                cache_key = (self.connection_version, self.token, revision)
+                if cache_key != self.idle_cache_key or flame.wall() >= self.idle_deadline:
+                    rows = flame.db.execute("""SELECT e.id, json_extract(d.detail,'$.expires') AS expires FROM deliveries d
+                        JOIN events e ON e.id=d.event JOIN tasks t ON t.source=e.source AND t.task=e.task AND t.seq=e.seq
+                        WHERE d.output=? AND d.status IN ('queued','sent')
+                        AND e.state IN ('idle','cancelled','timeout','unknown')
+                        AND t.state IN ('idle','cancelled','timeout','unknown')
+                        AND json_extract(d.detail,'$.session[0]') IS ?
+                        AND json_extract(d.detail,'$.session[1]') IS ?
+                        AND json_extract(d.detail,'$.expires')>?""",
+                        ("flame:" + device_id, *self.token, flame.wall())).fetchall() if device_id else []
+                    self.idle_recipients = tuple(row["id"] for row in rows)
+                    self.idle_deadline = min((row["expires"] for row in rows), default=float("inf"))
+                    self.idle_cache_key = cache_key
+                event_ids = self.idle_recipients
+        appearance = json.dumps((light_settings(self.record), flame.settings["hardware_notifications"]),
+                                sort_keys=True, separators=(",", ":"))
+        if appearance != self.appearance:
+            self.appearance, self.appearance_version = appearance, self.appearance_version + 1
+        display = {field: result.get(field) for field in
+                   ("key", "state", "cube_state", "cube_tasks", "holding", "preview", "device_test", "device_muted")}
+        fingerprint = hashlib.sha256(json.dumps(display, sort_keys=True).encode()).hexdigest()
+        context = (self.connection_version, self.token, self.appearance_version, fingerprint, revision)
+        return DisplayRequest(result, context, event_ids)
 
     def _desired(self):
         if self.settings["brightness"] == 0:
@@ -137,24 +198,30 @@ class DeviceOutput:
         return {"key": "working" if working else "idle", "state": "working" if working else "idle", "duration_ms": 0}
 
     def applied(self, desired, ack):
-        if self.desired()["key"] != desired["key"]:
+        context = getattr(desired, "delivery_context", None)
+        current = self.desired()
+        if (context is None or context != current.delivery_context
+                or not set(desired.event_ids).issubset(current.event_ids)):
             return
         self.last_command, self.last_display_key = ack, desired["key"]
+        self.last_delivery_context = context
         if desired.get("device_test") or desired.get("device_muted"):
             return
         flame = self.fleet.engine
         flame.applied(desired, ack, self.record["device_id"])
-        event_ids = [flame.current["id"]] if flame.current and flame.current["id"] == desired["key"] else (
-            [item["id"] for item in flame.active.values() if item.get("device_id") in (None, self.record["device_id"])] if desired["state"] == "working" else
-            [row["event"] for row in flame.db.execute("SELECT deliveries.event FROM deliveries JOIN events ON events.id=deliveries.event WHERE output=? AND deliveries.status='queued' AND events.state IN ('idle','cancelled','timeout','unknown')", ("flame:" + self.record["device_id"],)).fetchall()] if desired["state"] == "idle" else [])
-        for event_id in event_ids:
+        for event_id in desired.event_ids:
             output = "flame:" + self.record["device_id"]
             previous = flame.db.execute("SELECT detail FROM deliveries WHERE event=? AND output=?", (event_id, output)).fetchone()
-            flame.core.router.record(event_id, output, "applied", previous["detail"] if previous else None)
+            status = "applied" if ack.get("result") == "applied" else "sent"
+            saved = flame.db.execute("SELECT status FROM deliveries WHERE event=? AND output=?", (event_id, output)).fetchone()
+            if not (saved and saved["status"] == "applied" and status == "sent"):
+                flame.core.router.record(event_id, output, status, previous["detail"] if previous else None)
         self.fleet.refresh()
 
     def session_changed(self):
         self.last_command = self.last_display_key = None
+        self.last_delivery_context = None
+        self.connection_version += 1
 
 
 class FleetTransportManager:
@@ -263,6 +330,12 @@ class FleetTransportManager:
                                                    "test_continuous": bool(desired.get("continuous"))}))
             return rows
 
+    def output_confirmed(self, output, key):
+        return (output.record.get("device_id") in self.records and output.device.get("online", False)
+                and output.settings["brightness"] > 0 and output.last_display_key == key
+                and (output.last_command or {}).get("result") == "applied"
+                and output.last_delivery_context == output.desired().delivery_context)
+
     def confirmed(self, key):
         with self.lock:
             current = self.engine.current
@@ -271,7 +344,7 @@ class FleetTransportManager:
                       if device_id in self.records and output.device.get("online") and output.settings["brightness"] > 0
                       and (recipients is None or recipients.get(device_id) == output.token)
                       and (key != "working" or output.task_display()["state"] == "working")]
-            return bool(online) and all(output.last_display_key == key for output in online)
+            return bool(online) and all(self.output_confirmed(output, key) for output in online)
 
     def start(self):
         # Each lamp owns an independent LAN connection.

@@ -575,7 +575,13 @@ class YeelightTests(unittest.TestCase):
                 with lock:
                     event = make_event("manual", "task", "done", 2)
                     engine.accept(event, "manual")
-                wait_for(lambda: fleet.confirmed(event["event_id"]))
+                wait_for(lambda: fleet.outputs[identity].last_display_key == event["event_id"])
+                pixel_stream = model_id in (YEELIGHT_BEAM_MODEL, YEELIGHT_CUBE_MODEL)
+                with lock:
+                    self.assertEqual(fleet.confirmed(event["event_id"]), not pixel_stream)
+                    receipt = engine.db.execute("SELECT status FROM deliveries WHERE event=? AND output=?",
+                                                (event["event_id"], "flame:" + identity)).fetchone()
+                    self.assertEqual(receipt["status"], "sent" if pixel_stream else "applied")
                 self.assertTrue(engine.flame.current["applied"])
                 if model_id in (YEELIGHT_BEAM_MODEL, YEELIGHT_CUBE_MODEL):
                     expected_pixel = bytes([128,120,108]) if front else bytes.fromhex('52C788')
@@ -614,13 +620,15 @@ class YeelightTests(unittest.TestCase):
                 wait_for(lambda: fleet.outputs[identity].last_display_key == "muted")
             finally:
                 fleet.stop()
-        if model_id in (YEELIGHT_BEAM_MODEL, YEELIGHT_CUBE_MODEL):
+        if model_id == YEELIGHT_CUBE_MODEL:
+            self.assertEqual(client.command.call_args.args, ('set_power', ['off', 'sudden', 0]))
+        elif model_id == YEELIGHT_BEAM_MODEL:
             self.assertEqual(client.command.call_args.args, ('update_leds', [base64.b64encode(bytes(hardware_model(model_id)["pixel_count"] * 3)).decode()]))
         else:
             self.assertEqual(client.command.call_args.args, (prefix + 'set_power', ['off', 'sudden', 0]))
         allowed = ('update_leds',) if model_id in (YEELIGHT_BEAM_MODEL, YEELIGHT_CUBE_MODEL) else (prefix + 'set_power', prefix + 'set_scene', prefix + 'start_cf')
         if model_id == YEELIGHT_CUBE_MODEL:
-            allowed += ('set_bright',)
+            allowed += ('set_bright', 'set_power')
             self.assertNotIn('get_prop', [call.args[0] for call in client.command.call_args_list])
         self.assertTrue(all(call.args[0] == 'get_prop' or call.args[0] in allowed
                             for call in client.command.call_args_list))

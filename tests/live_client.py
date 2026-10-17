@@ -1,10 +1,11 @@
 """Shared authenticated dashboard client for opt-in hardware verification."""
 
-import http.cookiejar
 import argparse
 import json
 import urllib.error
 import urllib.request
+from aiflame.core.paths import dashboard_token as current_dashboard_token
+from aiflame.core.management_auth import SignedOpener, NoRedirect
 
 
 def requested_devices():
@@ -52,12 +53,11 @@ def hardware_applied(snapshot, targets, event_id):
 
 
 class DashboardClient:
-    def __init__(self, base="http://127.0.0.1:8765"):
+    def __init__(self, base="http://127.0.0.1:8765", dashboard_token=None):
         self.base = base
-        self.opener = urllib.request.build_opener(
-            urllib.request.ProxyHandler({}),
-            urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()),
-        )
+        self.raw_opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
+        reader = (lambda: dashboard_token) if dashboard_token is not None else current_dashboard_token
+        self.opener = SignedOpener(base, reader, opener=self.raw_opener)
         with self.opener.open(base + "/api/session", timeout=3):
             pass
 
@@ -69,8 +69,8 @@ class DashboardClient:
         )
         opener = (
             self.opener
-            if authenticated
-            else urllib.request.build_opener(urllib.request.ProxyHandler({}))
+            if authenticated and not any(key.lower() in ("authorization", "cookie") for key in (headers or {}))
+            else self.raw_opener
         )
         try:
             response = opener.open(request, timeout=5)

@@ -40,10 +40,14 @@ class TrayTests(unittest.TestCase):
             },
         )
         self.hub.start(hardware=False)
+        credential = patch("aiflame.desktop.network.dashboard_token",
+                           side_effect=lambda: self.hub.config["dashboard"])
+        credential.start()
+        self.addCleanup(credential.stop)
         self.widget = Dashboard(port=self.hub.port)
         self.widget.show()
         self.wait(lambda: self.widget.model is not None and not self.widget.api.pending)
-        self.client = DashboardClient(f"http://127.0.0.1:{self.hub.port}")
+        self.client = DashboardClient(f"http://127.0.0.1:{self.hub.port}", dashboard_token=self.hub.config["dashboard"])
         self.tray = QSystemTrayIcon(self.widget)
         self.status_action = QAction(self.widget)
         self.indicator = TrayIndicator(

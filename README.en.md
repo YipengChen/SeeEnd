@@ -4,13 +4,13 @@
 
 Turn AI task status into a candle flame.
 
-SeeEnd is a local AI task notification app. It receives lifecycle events from coding tools, web conversations, and local APIs, then signals work, requests for input, and completion through a desktop flame, system notifications, WeChat, or physical devices. No hardware or model API key for SeeEnd is required.
+SeeEnd is a local AI task notification app. It receives lifecycle events from coding tools, web conversations, and local APIs, then signals work, requests for input, and completion through a desktop flame, system notifications, sounds, WeChat, or physical devices. No hardware or model API key for SeeEnd is required.
 
-Source baseline: **App 0.8.56** · browser extension **0.2.13** · Python **3.11+** · [Proprietary license](LICENSE). Source versions and local builds do not imply public availability. See [repositories and releases](docs/REPOSITORIES.md) and [extension submission status](docs/chrome-web-store/APPLICATION_STATUS.md).
+Source baseline: **App 0.8.67** · browser extension **0.2.14** · Python **3.11+** · [Proprietary license](LICENSE). Source versions and local builds do not imply public availability. See [repositories and releases](docs/REPOSITORIES.md) and [extension submission status](docs/chrome-web-store/APPLICATION_STATUS.md).
 
 ## Product and support scope
 
-- Four independently controlled notification channels can run together. Only the desktop flame starts on after first launch or reset. System notifications need OS permission; WeChat needs account linking and a prepared connection; devices need a separate connection.
+- Five independently controlled notification channels can run together. Only the desktop flame starts on after first launch or reset. Sounds default to off and follow system volume; system notifications need OS permission; WeChat needs account linking and a prepared connection; devices need a separate connection.
 - Return to a task from Overview, activity details, or its macOS system notification. Double-click the overview or desktop flame to return to the currently indicated task. See [task return](docs/quick-start.md#返回对应任务) for supported terminals, permissions, and limits.
 - Save each device's state colors, brightness, white-light settings, or power rules independently. Export activity as CSV. The interface supports Chinese and English.
 - The Hub defaults to `127.0.0.1:8765` with credential authentication. It stores lifecycle metadata without saving prompts or answers. Enabled WeChat alerts send source, status, and time to Tencent's service.

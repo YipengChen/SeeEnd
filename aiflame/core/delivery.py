@@ -3,7 +3,8 @@ import json
 
 
 REASONS = {
-    "applied": "设备已确认接收指令",
+    "applied": "设备已接收指令",
+    "sent": "指令已发送",
     "queued": "等待设备确认",
     "screen": "本地灯光状态已更新，未发送到实体设备",
     "offline": "事件到达时设备离线，未收到设备回执",

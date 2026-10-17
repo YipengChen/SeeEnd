@@ -32,8 +32,15 @@ class TaskReturns:
             old = self.clients.pop(client_id, None)
             if old:
                 old["wake"].set()
+            # Only commands not yet handed to a poll can be delivered safely.
+            # A polled request may already have opened its page before reconnect.
+            queue = deque(identifier for identifier in old["queue"]
+                          if (item := self.requests.get(identifier))
+                          and item["status"] == "pending" and item["expires"] > self.clock()) if old else deque()
             self.clients[client_id] = {"connection_id": secrets.token_urlsafe(32),
-                "seen": self.clock(), "queue": deque(), "wake": threading.Event()}
+                "seen": self.clock(), "queue": queue, "wake": threading.Event()}
+            if queue:
+                self.clients[client_id]["wake"].set()
             return {"connection_id": self.clients[client_id]["connection_id"]}
 
     def connection(self, client_id, connection_id):

@@ -32,6 +32,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Verify exact 0.8.67 source snapshot
+        run: python .github/scripts/verify_snapshot.py
       - name: Install Qt runtime libraries
         if: runner.os == 'Linux'
         run: |

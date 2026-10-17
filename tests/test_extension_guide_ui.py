@@ -1,4 +1,4 @@
-"""Regression checks for installation handoffs, reminder settings and recovery."""
+"""Regression checks for the two-action extension setup and failure recovery."""
 import os
 os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
 import copy
@@ -6,9 +6,9 @@ import subprocess
 import unittest
 from unittest.mock import patch, Mock
 from PySide6.QtCore import QCoreApplication, QEvent, QPoint
-from PySide6.QtWidgets import QApplication, QWidget, QLabel, QLineEdit, QPushButton
+from PySide6.QtWidgets import QApplication, QWidget, QLabel, QPushButton
 from aiflame.desktop.extension_guide import ExtensionGuide
-from aiflame.desktop.localization import set_language
+from aiflame.desktop.localization import set_language, QLabel as LocalizedLabel
 from aiflame.desktop.theme import STYLE
 from aiflame.desktop.browser_launch import open_in_chrome
 from aiflame.integrations.chatgpt_web.host import WEB_SOURCES
@@ -42,7 +42,7 @@ class MemoryParent(QWidget):
         self.actions = []
         self.fail_action = False
         self.message_error = False
-        self.message = QLabel('')
+        self.message = LocalizedLabel('')
 
     def act(self, path, body, received, failed):
         self.actions.append((path, body))
@@ -89,166 +89,122 @@ class ExtensionGuideUITests(unittest.TestCase):
         QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
         self.app.processEvents()
 
-    def final_stage(self):
-        self.guide.checkpoint.setChecked(True)
-        self.guide.go(1)
-        self.flush()
+    def test_only_two_actions_and_no_site_selection_or_test(self):
+        from PySide6.QtWidgets import QCheckBox, QComboBox
+        self.assertEqual([title.text() for title in self.guide.titles], ['1. 安装扩展', '2. 允许连接'])
+        visible = [button.text() for button in self.guide.findChildren(QPushButton) if button.isVisible()]
+        self.assertEqual(visible, ['前往应用商店', '允许连接'])
+        self.assertEqual(self.guide.findChildren(QCheckBox), [])
+        self.assertEqual(self.guide.findChildren(QComboBox), [])
+        self.assertFalse(self.guide.status.isVisible())
+        self.assertFalse(self.guide.store_status.isVisible())
 
-    def evidence(self, status, started=101):
-        self.parent.model['verification']['chatgpt-web'] = {'since': 100, 'status': status, 'started_at': started, 'last_seen': 110}
-        self.guide.check_events()
-
-    def test_store_launch_does_not_confirm_installation_or_prepare_local_files(self):
-        self.guide.go(1)
-        self.assertEqual(self.guide.step, 0)
+    def test_store_launch_does_not_claim_installation_or_prepare_local_files(self):
         with patch('aiflame.desktop.extension_guide.open_in_chrome', return_value=True) as launch:
-            self.guide.primary.click()
+            self.guide.store_button.click()
         launch.assert_called_once_with(STORE_URL)
-        self.assertFalse(self.guide.installed)
         self.assertFalse(self.guide.configured)
         self.assertEqual(self.parent.actions, [])
-        self.guide.go(1)
-        self.assertEqual(self.guide.step, 0)
-        self.guide.checkpoint.setChecked(True)
-        self.guide.primary.click()
-        self.assertEqual(self.guide.step, 1)
-        self.assertFalse(self.guide.configured)
+        self.assertFalse(self.guide.store_status.isVisible())
+        self.assertEqual(self.guide.primary.text(), '允许连接')
 
-    def test_store_launch_failure_has_copy_link_and_retry(self):
+    def test_source_entry_points_reuse_the_generic_guide(self):
+        from aiflame.desktop.widgets import Dashboard
+        self.parent.extension_guide = self.guide
+        for source in WEB_SOURCES:
+            self.guide.close()
+            Dashboard.open_browser_extension_guide(self.parent, source)
+            self.assertIs(self.parent.extension_guide, self.guide)
+            self.assertTrue(self.guide.isVisible())
+            self.assertEqual(self.guide.primary.text(), '允许连接')
+
+    def test_store_failure_exposes_copy_link_and_retry(self):
         with patch('aiflame.desktop.extension_guide.open_in_chrome', return_value=False):
-            self.guide.primary.click()
-        self.assertTrue(self.guide.primary.isEnabled())
-        self.assertIn('未能打开 Chrome', self.guide.status.text())
-        copy_link = next(button for button in self.guide.scroll.findChildren(QPushButton) if button.text() == '复制商店链接')
-        copy_link.click()
+            self.guide.store_button.click()
+        self.assertTrue(self.guide.copy_button.isVisible())
+        self.assertIn('未能打开 Chrome', self.guide.store_status.text())
+        self.guide.copy_button.click()
         self.assertEqual(QApplication.clipboard().text(), STORE_URL)
         with patch('aiflame.desktop.extension_guide.open_in_chrome', return_value=True):
+            self.guide.store_button.click()
+        self.assertFalse(self.guide.copy_button.isVisible())
+        self.assertFalse(self.guide.store_status.isVisible())
+
+    def test_connection_is_generic_preserves_source_switches_and_needs_no_task(self):
+        self.parent.model['sources'][0]['enabled'] = False
+        sources = copy.deepcopy(self.parent.model['sources'])
+        with patch.object(self.parent.api, 'request') as request:
             self.guide.primary.click()
-        self.assertFalse(self.guide.store_error)
-        self.assertFalse(self.guide.installed)
-        self.assertIn('添加至 Chrome', self.guide.status.text())
-
-    def test_site_selection_precedes_configuration_and_disabled_source_can_be_enabled(self):
-        self.final_stage()
-        self.guide.site_choice.setCurrentIndex(self.guide.site_choice.findData('gemini-web'))
-        self.assertEqual(self.guide.primary.text(), '允许连接')
-        self.guide.primary.click()
-        self.assertEqual(self.guide.primary.text(), '开启此网站提醒')
-        self.guide.primary.click()
-        self.assertEqual(self.parent.actions[-1], ('/api/settings', {'source_enabled': {'gemini-web': True}}))
-        self.assertTrue(next(row['enabled'] for row in self.parent.model['sources'] if row['id'] == 'chatgpt-web'))
-        self.assertEqual(self.guide.primary.text(), '完成设置')
-
-    def test_setup_completes_without_task_evidence_or_a_verification_request(self):
-        self.final_stage()
-        self.guide.connect()
-        ready = self.guide.status.text()
-        for status, started in [('waiting', 90), ('working', 101), ('verified', 101), ('unknown', 101)]:
-            self.evidence(status, started)
-            self.assertEqual(self.guide.status.text(), ready)
-            self.assertEqual(self.guide.primary.text(), '完成设置')
-            self.assertTrue(self.guide.primary.isEnabled())
-        with patch('aiflame.desktop.extension_guide.open_in_chrome', return_value=True) as launch:
-            self.guide.open_site()
-        launch.assert_called_once_with('https://chatgpt.com/')
+            self.assertTrue(self.guide.configured)
+            self.assertEqual(self.guide.primary.text(), '完成')
+            self.assertEqual(self.guide.status.text(), '已允许扩展连接 SeeEnd。')
+            request.assert_not_called()
         self.assertEqual(self.parent.actions, [('/api/integrations/install', {'source': 'chatgpt-web'})])
+        self.assertEqual(self.parent.model['sources'], sources)
         self.guide.primary.click()
         self.assertFalse(self.guide.isVisible())
+        self.assertEqual(len(self.parent.actions), 1)
 
-    def test_read_error_and_optional_chrome_launch_failure_have_recovery(self):
-        self.final_stage()
-        self.guide.connect()
-        with patch('aiflame.desktop.extension_guide.open_in_chrome', return_value=False):
-            self.guide.open_site()
-        self.assertIn('未能打开 Chrome', self.guide.status.text())
-        copy_link = next(button for button in self.guide.scroll.findChildren(QPushButton) if button.text() == '复制网站地址')
-        copy_link.click()
-        self.assertEqual(QApplication.clipboard().text(), 'https://chatgpt.com/')
-        self.assertEqual(self.guide.primary.text(), '完成设置')
-        self.parent.api.failed = True
-        self.guide.check_events()
-        self.assertTrue(self.guide.configured)
-        self.assertEqual(self.guide.primary.text(), '重新读取状态')
-        self.parent.api.failed = False
+    def test_connection_failure_shows_reason_and_can_retry(self):
+        self.parent.fail_action = self.parent.message_error = True
+        self.parent.message.setText('Permission denied')
         self.guide.primary.click()
-        self.assertEqual(self.guide.primary.text(), '完成设置')
-        self.assertTrue(self.guide.primary.isEnabled())
-
-    def test_site_switch_ignores_old_inflight_setting_response(self):
-        self.final_stage()
-        self.guide.configured = True
-        self.parent.api.defer = True
-        self.guide.check_events()
-        old_received, _, old_data = self.parent.api.waiting.pop(0)
-        self.guide.site_choice.setCurrentIndex(self.guide.site_choice.findData('gemini-web'))
-        old_received(old_data)
-        self.assertEqual(self.guide.selected_source, 'gemini-web')
-        self.assertFalse(self.guide.source_enabled())
-        self.assertTrue(self.guide.pending_status)
-        self.parent.api.defer = False
-        self.guide.connect()
-        self.assertTrue(self.guide.configured)
-        self.assertEqual(self.guide.primary.text(), '开启此网站提醒')
-
-    def test_external_source_toggle_updates_reminder_action(self):
-        self.final_stage()
-        self.guide.configured = True
-        self.parent.model['sources'][0]['enabled'] = False
-        self.guide.check_events()
-        self.assertTrue(self.guide.configured)
-        self.assertEqual(self.guide.primary.text(), '开启此网站提醒')
-        self.guide.primary.click()
-        self.assertEqual(self.guide.primary.text(), '完成设置')
-
-    def test_reopen_keeps_store_installation_without_reading_local_folder(self):
-        self.final_stage()
-        self.guide.close()
-        with patch.object(self.parent.api, 'request', wraps=self.parent.api.request) as request:
-            self.guide.show()
-        self.assertEqual(self.guide.step, 1)
-        self.assertTrue(self.guide.installed)
-        self.assertNotIn('/api/browser-extension', [call.args[0] for call in request.call_args_list])
-        self.guide.go(0)
-        self.guide.checkpoint.setChecked(False)
-        self.assertFalse(self.guide.installed)
         self.assertFalse(self.guide.configured)
+        self.assertTrue(self.guide.primary.isEnabled())
+        self.assertEqual(self.guide.primary.text(), '允许连接')
+        self.assertIn('请重试', self.guide.status.text())
+        self.assertIn('Permission denied', self.guide.status.text())
+        self.parent.fail_action = self.parent.message_error = False
+        self.guide.primary.click()
+        self.assertTrue(self.guide.configured)
+        self.assertNotIn('Permission denied', self.guide.status.text())
 
-    def test_language_switch_updates_title_progress_and_keeps_primary_visible_at_minimum(self):
-        self.final_stage()
-        self.guide.connect()
-        self.guide.resize(620, 500)
+    def test_pending_connection_disables_controls_and_rejects_duplicate_requests(self):
+        with patch.object(self.parent, 'act') as act:
+            self.guide.primary.click()
+            self.assertEqual(self.guide.primary.text(), '正在允许连接…')
+            self.assertFalse(self.guide.primary.isEnabled())
+            self.assertFalse(self.guide.store_button.isEnabled())
+            self.guide.connect()
+            act.assert_called_once()
+            act.call_args.args[2]({'message': 'configured'})
+        self.assertTrue(self.guide.primary.isEnabled())
+        self.assertTrue(self.guide.store_button.isEnabled())
+        self.assertTrue(self.guide.configured)
+
+    def test_language_switch_and_minimum_size_keep_controls_visible(self):
+        self.guide.resize(480, 340)
+        for language in ('zh-CN', 'en'):
+            set_language(language)
+            self.flush()
+            if language == 'en':
+                self.assertEqual(self.guide.titles[1].text(), '2. Allow connection')
+                self.assertNotRegex(self.guide.windowTitle(), '[\u4e00-\u9fff]')
+                for label in self.guide.findChildren(QLabel):
+                    if label.isVisible():
+                        self.assertNotRegex(label.text(), '[\u4e00-\u9fff]')
+            for control in (*self.guide.titles, self.guide.store_button, self.guide.primary):
+                origin = control.mapTo(self.guide, QPoint(0, 0))
+                self.assertGreaterEqual(origin.y(), 0)
+                self.assertLessEqual(origin.y() + control.height(), self.guide.height())
+                self.assertLessEqual(origin.x() + control.width(), self.guide.width())
+        self.guide.primary.click()
+        self.assertNotRegex(self.guide.status.text(), '[\u4e00-\u9fff]')
+        self.assertEqual(self.guide.primary.text(), 'Done')
+
+    def test_error_content_remains_visible_at_minimum_size(self):
+        self.guide.resize(480, 340)
         set_language('en')
+        with patch('aiflame.desktop.extension_guide.open_in_chrome', return_value=False):
+            self.guide.store_button.click()
+        self.parent.fail_action = True
+        self.guide.primary.click()
         self.flush()
-        self.assertEqual(self.guide.progress.text(), 'Step 2 of 2')
-        self.assertNotRegex(self.guide.windowTitle(), '[\u4e00-\u9fff]')
-        self.assertNotRegex(self.guide.title.text() + self.guide.status.text(), '[\u4e00-\u9fff]')
-        for control in (self.guide.site_panel, self.guide.primary, self.guide.status):
+        for control in (self.guide.store_status, self.guide.copy_button, self.guide.primary, self.guide.status):
+            self.assertTrue(control.isVisible())
             origin = control.mapTo(self.guide, QPoint(0, 0))
-            self.assertGreaterEqual(origin.y(), 0)
             self.assertLessEqual(origin.y() + control.height(), self.guide.height())
             self.assertLessEqual(origin.x() + control.width(), self.guide.width())
-        self.guide.close()
-        self.assertFalse(self.guide.timer.isActive())
-        self.guide.show()
-        self.assertEqual(self.guide.step, 1)
-        self.assertTrue(self.guide.timer.isActive())
-
-    def test_store_step_is_translated_and_has_readonly_exact_url(self):
-        self.guide.resize(620, 500)
-        set_language('en')
-        self.flush()
-        self.assertEqual(self.guide.progress.text(), 'Step 1 of 2')
-        for label in self.guide.findChildren(QLabel):
-            if label.isVisible():
-                self.assertNotRegex(label.text(), '[\u4e00-\u9fff]')
-        self.assertEqual(self.guide.primary.text(), 'Install in Chrome')
-        address = self.guide.scroll.findChild(QLineEdit)
-        self.assertTrue(address.isReadOnly())
-        self.assertEqual(address.text(), STORE_URL)
-        for control in (self.guide.checkpoint, self.guide.primary):
-            origin = control.mapTo(self.guide, QPoint(0, 0))
-            self.assertLessEqual(origin.x() + control.width(), self.guide.width())
-            self.assertLessEqual(origin.y() + control.height(), self.guide.height())
 
 
 class ChromeLaunchTests(unittest.TestCase):

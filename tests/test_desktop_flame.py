@@ -147,10 +147,14 @@ class DesktopFlameTests(unittest.TestCase):
             "dashboard": "test-cookie", "tokens": {"local-script": "test-token"},
         })
         self.hub.start(hardware=False)
+        credential = patch("aiflame.desktop.network.dashboard_token",
+                           side_effect=lambda: self.hub.config["dashboard"])
+        credential.start()
+        self.addCleanup(credential.stop)
         self.dashboard = Dashboard(port=self.hub.port)
         self.dashboard.show()
         self.wait(lambda: self.dashboard.model is not None and not self.dashboard.api.pending)
-        self.client = DashboardClient(f"http://127.0.0.1:{self.hub.port}")
+        self.client = DashboardClient(f"http://127.0.0.1:{self.hub.port}", dashboard_token=self.hub.config["dashboard"])
         self.tray = QSystemTrayIcon(self.dashboard)
         self.indicator = TrayIndicator(self.tray, self.dashboard, QAction(self.dashboard), self.dashboard)
         self.pet = DesktopFlame(self.root / "desktop-flame.json")

@@ -97,6 +97,7 @@ class ContextTests(unittest.TestCase):
             engine = Engine(path, sources=SOURCES)
             self.assertEqual(engine.origins.context("codex", "task"), value)
             engine.db.execute("UPDATE events SET created=0")
+            engine.db.execute("UPDATE tasks SET updated=0")
             engine.cleanup(force=True)
             self.assertEqual(engine.db.execute("SELECT count(*) FROM task_return_contexts").fetchone()[0], 0)
             engine.db.close()

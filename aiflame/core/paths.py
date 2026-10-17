@@ -87,3 +87,12 @@ def load_config():
     if changed:
         write_private(path, config)
     return config
+
+
+def dashboard_token():
+    """Read the current private desktop credential without creating a profile."""
+    config = json.loads((runtime_dir() / "credentials.json").read_text(encoding="utf-8"))
+    token = config.get("dashboard") if isinstance(config, dict) else None
+    if not isinstance(token, str) or not token:
+        raise ValueError("桌面凭据不可用")
+    return token

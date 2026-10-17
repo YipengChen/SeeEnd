@@ -135,7 +135,9 @@ class ILinkClient:
             result = self.call(account, "getupdates", {"get_updates_buf": cursor}, timeout=35)
         except WechatError as error:
             if error.code == "timeout":
-                return {"msgs": []}
+                # A transport timeout may precede any server response. Keep it
+                # distinct from a successful, empty long-poll response.
+                return None
             raise
         # iLink omits optional default-valued fields in successful responses.
         # request() already rejects explicit nonzero/invalid business codes.

@@ -277,8 +277,10 @@ class DashboardViews:
         self.home_channel_checks = {}
         self.home_channel_items = []
         self.home_channels_inline = None
+        self.home_channels_columns = None
         for key, title, glyph in (
             ("desktop_notifications", "系统通知", "bell"),
+            ("sound_notifications", "音效提醒", "speaker"),
             ("wechat_notifications", "微信通知", "message"),
             ("desktop_flame_enabled", "桌面火焰", "flame"),
             ("hardware_notifications", "设备提醒", "device"),
@@ -547,8 +549,20 @@ class DashboardViews:
         for index, model in enumerate(MODELS):
             button = DeviceModelCard(model)
             button.clicked.connect(lambda checked=False, model_id=model["id"]: self.choose_device_model(model_id))
+            button.purchase_requested.connect(self.open_app_link)
             self.device_cards_layout.addWidget(button, index // 2, index % 2)
             self.device_model_buttons[model["id"]] = button
+        purchase_notice = QHBoxLayout()
+        purchase_notice.setSpacing(6)
+        notice_icon = label()
+        notice_icon.setPixmap(icon("info", "#75736b", size=14).pixmap(14, 14))
+        notice_icon.setFixedSize(14, 14)
+        purchase_notice.addWidget(notice_icon, 0, Qt.AlignmentFlag.AlignVCenter)
+        notice_text = label("购买前请在商品页核对型号", True)
+        notice_text.setWordWrap(False)
+        purchase_notice.addWidget(notice_text)
+        purchase_notice.addStretch()
+        catalog.addLayout(purchase_notice)
         self.device_details = QWidget()
         details = QVBoxLayout(self.device_details)
         self.device_details_layout = details
@@ -590,21 +604,22 @@ class DashboardViews:
         self.rendered_mijia_login = None
         self.mijia_step = 0
         self.mijia_discovered = []
+        self.mijia_scan_pending = self.mijia_scan_complete = False
+        self.mijia_scan_job_id = self.mijia_scan_context = None
+        self.mijia_auto_scan_session = None
+        self.mijia_scan_error = ""
+        self.rendered_mijia_matches = None
         self.mijia_panel = QWidget()
         flow = QVBoxLayout(self.mijia_panel)
         flow.setContentsMargins(0, 8, 0, 0)
         flow.setSpacing(16)
         rail = QHBoxLayout()
         self.mijia_step_labels = []
-        for index, title in enumerate(("1  确认设备", "2  扫码登录", "3  核对连接")):
+        for index, title in enumerate(("1  扫码登录", "2  选择插座")):
             marker = label(title, role="title" if index == 0 else "muted")
             rail.addWidget(marker, 1)
             self.mijia_step_labels.append(marker)
         flow.addLayout(rail)
-        self.mijia_target_summary = label("", True)
-        self.mijia_target_summary.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        self.mijia_target_summary.hide()
-        flow.addWidget(self.mijia_target_summary)
         self.mijia_steps = []
 
         def step(title):
@@ -618,56 +633,9 @@ class DashboardViews:
             panel.setVisible(len(self.mijia_steps) == 1)
             return body
 
-        target = step("先确认你要控制的插座")
-        lookup = Disclosure("在哪里查看 IP 和设备 ID？", target)
-        self.mijia_app_hint = label("米家 App：打开目标插座 → 右上角「…」/ 设置 → 更多设置 → 网络信息，查看 IP；在网络信息或设备信息中核对设备 ID（DID）。", True)
-        lookup.content.addWidget(self.mijia_app_hint)
-        lookup.content.addWidget(label("入口随米家版本不同。也可在米家给插座改一个易识别的名字，扫码后按名称核对。", True))
-        fields = QHBoxLayout()
-        fields.setSpacing(16)
-        self.mijia_target_ip = QLineEdit()
-        self.mijia_target_did = QLineEdit()
-        for control, title, placeholder in ((self.mijia_target_ip, "目标 IP（选填）", "例如 192.168.1.100"),
-                                             (self.mijia_target_did, "设备 ID / DID（选填）", "米家显示的纯数字 ID")):
-            column = QVBoxLayout()
-            column.setSpacing(6)
-            column.addWidget(label(title))
-            control.setPlaceholderText(placeholder)
-            control.setAccessibleName(title)
-            control.setMinimumWidth(0)
-            column.addWidget(control)
-            fields.addLayout(column, 1)
-        target.addLayout(fields)
-        self.mijia_target_note = label("有多台插座时，建议填写其中一项；留空则在扫码后选择。", True)
-        target.addWidget(self.mijia_target_note)
-        self.mijia_scan_button = self.button(target, "扫描局域网设备", self.scan_mijia_devices, self.maintenance_buttons)
-        self.mijia_scan_choices = QComboBox()
-        self.mijia_scan_choices.setAccessibleName("按 IP 和设备 ID 选择扫描到的设备")
-        self.mijia_scan_choices.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
-        self.mijia_scan_choices.setMinimumContentsLength(15)
-        self.mijia_scan_choices.addItem("选择扫描到的设备…", None)
-        self.mijia_scan_choices.currentIndexChanged.connect(self.choose_mijia_discovery)
-        self.mijia_scan_choices.hide()
-        target.addWidget(self.mijia_scan_choices)
-        self.mijia_scan_status = label("扫描只读取 IP 和设备 ID；型号将在扫码后核对。", True)
-        target.addWidget(self.mijia_scan_status)
-        self.mijia_next_button = self.button(target, "下一步：扫码登录", self.continue_mijia_login, self.maintenance_buttons, "primary")
-        self.mijia_target_ip.textChanged.connect(self.mijia_target_changed)
-        self.mijia_target_did.textChanged.connect(self.mijia_target_changed)
-
         login = step("登录插座所属的小米账号")
-        login.addWidget(label("选择与米家一致的地区，再获取二维码。用米家 App 的扫一扫登录，也可在浏览器打开小米登录页。", True))
-        row = QHBoxLayout()
-        row.addWidget(label("账号地区"))
-        self.mijia_region = QComboBox()
-        self.mijia_region.setAccessibleName("米家账号地区")
-        for name, region in (("中国大陆", "cn"), ("欧洲", "de"), ("美国", "us"), ("台湾", "tw"),
-                             ("新加坡", "sg"), ("俄罗斯", "ru"), ("印度", "in"), ("印度（i2）", "i2")):
-            self.mijia_region.addItem(name, region)
-        row.addWidget(self.mijia_region)
-        row.addStretch()
-        login.addLayout(row)
-        login.addWidget(label("扫码期间会读取米家账号下的设备凭据。SeeEnd 只保存选中插座的 Token；完成或取消后结束本地云会话。", True))
+        login.addWidget(label("获取二维码后，用米家 App 的扫一扫完成登录。", True))
+        login.addWidget(label("扫码期间会读取米家账号下的设备凭据。SeeEnd 只保存选中插座的 Token；完成信息获取或取消后即刻结束本地云会话。", True))
         self.mijia_login_status = label("", True)
         login.addWidget(self.mijia_login_status)
         self.mijia_qr = label()
@@ -679,15 +647,15 @@ class DashboardViews:
         self.mijia_login_button = self.button(login, "获取登录二维码", self.start_mijia_login, self.maintenance_buttons, "primary")
         login_actions = QHBoxLayout()
         login.addLayout(login_actions)
-        self.mijia_login_link_button = self.button(login_actions, "浏览器登录", self.open_mijia_login, variant="quiet")
-        self.mijia_login_link_button.setToolTip("在浏览器打开小米登录页")
-        self.mijia_login_link_button.hide()
-        self.mijia_cancel_button = self.button(login_actions, "取消并返回", self.return_mijia_target, variant="quiet")
-        self.mijia_cancel_button.setToolTip("取消登录，返回确认设备")
+        self.mijia_cancel_button = self.button(login_actions, "取消登录", self.return_mijia_target, variant="quiet")
+        self.mijia_cancel_button.setToolTip("取消本次登录")
+        self.mijia_cancel_button.hide()
 
-        connect = step("核对名称、IP 和设备 ID 后连接")
-        self.mijia_selection_status = label("", True)
-        connect.addWidget(self.mijia_selection_status)
+        connect = step("扫描并选择插座")
+        connect.addWidget(label("电脑与插座需在同一局域网。将按设备身份自动匹配账号中的名称和型号。", True))
+        self.mijia_scan_button = self.button(connect, "重新扫描局域网", self.scan_mijia_devices, self.maintenance_buttons)
+        self.mijia_scan_status = label("", True)
+        connect.addWidget(self.mijia_scan_status)
         self.mijia_choices = QComboBox()
         self.mijia_choices.setAccessibleName("选择已登录账号中的米家智能插座 3 / 4")
         self.mijia_choices.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
@@ -695,22 +663,10 @@ class DashboardViews:
         self.mijia_choices.addItem("请选择要连接的插座…", None)
         self.mijia_choices.currentIndexChanged.connect(self.choose_mijia_plug)
         connect.addWidget(self.mijia_choices)
-        self.mijia_selected_info = label("", True)
-        self.mijia_selected_info.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        connect.addWidget(self.mijia_selected_info)
-        connect.addWidget(label("连接 IP（可按米家当前信息修改；留空自动查找）"))
-        self.mijia_connect_ip = QLineEdit()
-        self.mijia_connect_ip.setPlaceholderText("插座当前局域网 IP，可留空")
-        self.mijia_connect_ip.setAccessibleName("用于连接目标插座的 IP 地址")
-        self.mijia_connect_ip.textChanged.connect(lambda _: self.update_busy())
-        connect.addWidget(self.mijia_connect_ip)
-        self.mijia_match_hint = label("请选择插座后核对设备信息。", True)
-        connect.addWidget(self.mijia_match_hint)
-        connect.addWidget(label("连接前请核对名称、IP 和设备 ID。身份与型号验证成功后，才保存所选插座凭据并控制通断电。", True))
         self.mijia_import_button = self.button(connect, "连接这只插座", self.import_mijia_plug, self.maintenance_buttons, "primary")
         self.mijia_retry_button = self.button(connect, "重新扫码登录", self.retry_mijia_login, self.maintenance_buttons, "primary")
         self.mijia_retry_button.hide()
-        self.mijia_back_button = self.button(connect, "返回修改目标设备", self.return_mijia_target, variant="quiet")
+        self.mijia_back_button = self.button(connect, "切换账号", self.return_mijia_target, variant="quiet")
         parent_layout.addWidget(self.mijia_panel)
         self.mijia_panel.hide()
 
@@ -1219,6 +1175,26 @@ class DashboardViews:
         self.notification_test_feedback.hide()
         channels.addWidget(self.notification_test_feedback)
         separator(channels)
+        sound_row = self.preference_toggle(
+            channels, "sound_notifications", "音效提醒",
+            help_text="任务完成或等待输入时播放一次，独立于系统通知与灯具。默认关闭；音量跟随系统，静音时不会出声。"
+        )
+        sound_row.setSpacing(12)
+        self.sound_category = QComboBox()
+        self.sound_category.setAccessibleName("音效类别")
+        self.sound_category.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
+        for title, value in (("柔和铃声", "chime"), ("清脆提示", "pop"), ("猫叫", "cat")):
+            self.sound_category.addItem(title, value)
+        self.sound_category.currentIndexChanged.connect(
+            lambda _: self.setting("sound_category", self.sound_category.currentData()))
+        sound_row.addWidget(self.sound_category)
+        self.sound_test_button = self.button(sound_row, "试听", self.preview_sound)
+        self.sound_test_button.setToolTip("试听所选音效，无需开启音效提醒。")
+        self.save_feedback_row(channels, "sound_category")
+        self.sound_feedback = label("", role="preferenceHint")
+        self.sound_feedback.hide()
+        channels.addWidget(self.sound_feedback)
+        separator(channels)
         self.build_wechat(channels)
         separator(channels)
         self.preference_toggle(channels, "desktop_flame_enabled", "桌面火焰",
@@ -1290,6 +1266,7 @@ class DashboardViews:
 
     def preference_help_icon(self, layout, key, text):
         titles = {"desktop_notifications": "系统通知", "desktop_flame_enabled": "桌面火焰",
+                  "sound_notifications": "音效提醒",
                   "wechat_notifications": "微信通知", "hardware_notifications": "设备提醒",
                   "hold_until_activity": "完成后保持亮灯", "duration": "提醒持续时间"}
         control = HelpButton(text, titles.get(key, "设置"))
@@ -1414,10 +1391,6 @@ class DashboardViews:
         self.history_stack.addWidget(empty)
         self.history_stack.setMinimumHeight(300)
         activity.addWidget(self.history_stack, 1)
-        self.history_count = label("", True)
-        activity.addWidget(self.history_count)
-        self.history_selection_hint = label("点击「查看」，了解灯光结果、通知回执与任务标识。", True)
-        activity.addWidget(self.history_selection_hint)
         details = card(layout)
         heading = QHBoxLayout()
         heading.addWidget(label("记录详情", role="title"))
@@ -1426,6 +1399,10 @@ class DashboardViews:
         self.copy_task_button = self.button(heading, "复制任务标识", self.copy_task_id, variant="quiet")
         self.button(heading, "关闭详情", self.close_event_detail, variant="quiet", glyph="close")
         details.addLayout(heading)
+        recovery = QHBoxLayout()
+        recovery.addStretch()
+        self.mark_unknown_button = self.button(recovery, "标为状态未知", self.mark_selected_task_unknown, variant="quiet")
+        self.mark_unknown_button.setToolTip("仅清除此任务的进行中或等待输入状态；不会标为成功。")
         self.event_detail_box = details.parentWidget()
         self.event_detail = label("")
         self.event_detail.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
@@ -1433,6 +1410,7 @@ class DashboardViews:
         self.event_detail.setTextFormat(Qt.TextFormat.RichText)
         self.event_detail.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         details.addWidget(self.event_detail)
+        details.addLayout(recovery)
         self.event_detail_box.hide()
 
     def testing(self, layout):
@@ -1482,11 +1460,6 @@ class DashboardViews:
                 "支持后台运行时，关闭窗口仅隐藏界面，提醒会继续运行；从菜单栏、Dock 或托盘可重新打开。选择「退出 SeeEnd」才会停止本应用的服务。\n电脑休眠、浏览器关闭或页面被丢弃时，网页任务可能无法继续采集。",
                 None,
             ),
-            (
-                "Yeelight 连接失败怎么办？",
-                "在 Yeelight APP 中开启「局域网控制」，确认电脑与灯具在同一局域网，再到「我的设备」搜索或手动输入 IP。",
-                ("前往我的设备", 1),
-            ),
         ):
             item = help_disclosure(title)
             item.content.addWidget(label(content, readable=True))
@@ -1501,15 +1474,18 @@ class DashboardViews:
         self.about_disclosure = help_disclosure("版本与支持信息")
         about = self.about_disclosure.content
         about.addWidget(label(f"SeeEnd  {__version__}", readable=True))
+        developer = label("开发者：Yipeng Chen", readable=True)
+        developer.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        about.addWidget(developer)
+        self.developer_email = label("联系邮箱：ypchenmail@gmail.com", readable=True)
+        self.developer_email.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextSelectableByMouse | Qt.TextInteractionFlag.TextSelectableByKeyboard)
+        self.developer_email.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self.developer_email.setAccessibleName("联系邮箱：ypchenmail@gmail.com")
+        about.addWidget(self.developer_email)
         about.addWidget(
             label(
-                "支持 Yeelight 屏幕挂灯 Pro（YLTD003）、W3 彩色灯泡（YLDP005）、Beam 塔灯（YLFWD-0021）、Cube Lite 和米家智能插座 3 / 4（ZNCZ301KK / ZNCZ401KK），可同时连接多台设备。网页接入的兼容性以各版本实测范围为准。",
-                readable=True,
-            )
-        )
-        about.addWidget(
-            label(
-                "当前构建为本地预览版。正式发行的签名、公证和各平台兼容性验收尚未完成。",
+                "支持 Yeelight 屏幕挂灯 Pro（YLTD003）、W3 彩色灯泡（YLDP005）、Beam 塔灯（YLFWD-0021）、Cube Lite 和米家智能插座 3 / 4（ZNCZ301KK / ZNCZ401KK），可同时连接多台设备。如需更多灯具支持，欢迎邮箱联系开发者。网页接入的兼容性以各版本实测范围为准。",
                 readable=True,
             )
         )

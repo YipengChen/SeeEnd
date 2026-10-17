@@ -26,20 +26,26 @@ class DashboardInteraction:
         margins = self.home_channels_layout.contentsMargins()
         available = (page.viewport().width() - page_margins.left() - page_margins.right()
                      - margins.left() - margins.right() - 2 * self.home_channels_frame.frameWidth())
+        count = len(self.home_channel_items)
+        spacing = self.home_channels_grid.horizontalSpacing()
         required = (self.home_channel_heading.sizeHint().width()
                     + sum(item.minimumSizeHint().width() for item in self.home_channel_items)
-                    + 3 * self.home_channels_grid.horizontalSpacing()
+                    + (count - 1) * spacing
                     + self.home_channels_heading.horizontalSpacing())
         inline = available >= required
-        if inline == self.home_channels_inline:
+        item_width = max(item.minimumSizeHint().width() for item in self.home_channel_items)
+        capacity = max(1, min(count, (available + spacing) // (item_width + spacing)))
+        rows = (count + capacity - 1) // capacity
+        columns = count if inline else (count + rows - 1) // rows
+        if (inline, columns) == (self.home_channels_inline, self.home_channels_columns):
             return
         self.home_channels_inline = inline
-        columns = 4 if inline else 2
+        self.home_channels_columns = columns
         for item in self.home_channel_items:
             self.home_channels_grid.removeWidget(item)
         for index, item in enumerate(self.home_channel_items):
             self.home_channels_grid.addWidget(item, index // columns, index % columns)
-        for column in range(4):
+        for column in range(count):
             self.home_channels_grid.setColumnStretch(column, int(column < columns))
         self.home_channels_heading.removeItem(self.home_channels_grid)
         if inline:
@@ -264,14 +270,17 @@ class DashboardInteraction:
             return False
         if self.writing:
             action = self.active_action
-            return bool(action and action[0] == "/api/settings" and action[1]
-                        and set(action[1]).issubset(self.home_channel_checks))
+            # Demo requests do not change channel settings; keep the switches
+            # stable while the serialized request queue starts or stops a demo.
+            return bool(action and (action[0] == "/api/preview" or
+                        action[0] == "/api/settings" and action[1]
+                        and set(action[1]).issubset(self.home_channel_checks)))
         return True
 
     def update_channel_controls(self):
         self.reflow_home_channels()
         connected = self.ready and self.model is not None and not self.reset_pending
-        for key in ("desktop_flame_enabled", "hardware_notifications"):
+        for key in ("desktop_flame_enabled", "hardware_notifications", "sound_notifications"):
             toggle = self.checks.get(key)
             if toggle is None:
                 continue

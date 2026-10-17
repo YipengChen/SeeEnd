@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "seeend"
-version = "0.8.56"
+version = "0.8.67"
 description = "SeeEnd: local AI task notifications with optional smart lights and plugs"
 readme = "README.md"
 license = "LicenseRef-SeeEnd-Proprietary"
@@ -28,4 +28,4 @@ include = ["aiflame*"]
 namespaces = false
 
 [tool.setuptools.package-data]
-aiflame = ["assets/extension-guide/*.png", "assets/extension-guide/*.jpg", "assets/*.svg", "assets/*.png", "assets/*.ico", "assets/*.icns", "assets/locales/*.json", "assets/brands/*", "assets/devices/*.svg", "integrations/chatgpt_web/extension/*", "integrations/cli_tools/deepseek_bundle/*", "integrations/cli_tools/opencode_bundle/*"]
+aiflame = ["assets/extension-guide/*.png", "assets/extension-guide/*.jpg", "assets/*.svg", "assets/*.png", "assets/*.ico", "assets/*.icns", "assets/locales/*.json", "assets/sounds/*.wav", "assets/brands/*", "assets/devices/*.svg", "integrations/chatgpt_web/extension/*", "integrations/cli_tools/deepseek_bundle/*", "integrations/cli_tools/opencode_bundle/*"]

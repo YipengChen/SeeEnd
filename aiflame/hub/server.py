@@ -1,6 +1,5 @@
 """Loopback-only HTTP service, embeddable in a desktop app or run headlessly."""
 
-import http.cookies
 import json
 import secrets
 import signal
@@ -16,6 +15,7 @@ from aiflame.core.activity import ActivityMonitor
 from aiflame.core.verification import begin_verification
 from aiflame.core.verification import verification_summary, verification_evidence
 from aiflame.core.events import EventError
+from aiflame.core.management_auth import ManagementServer, AuthError, response_proof
 from aiflame.transports.fleet import FleetTransportManager as TransportManager
 from aiflame.devices.fleet import FleetDeviceService as DeviceService
 from aiflame.devices.models import DEFAULT_MODEL
@@ -41,6 +41,7 @@ class Hub:
         self.resetting = False
         self.runtime = runtime or ensure_runtime()
         self.config = config if config is not None else load_config()
+        self.management = ManagementServer()
         self.lock = threading.RLock()
         self.task_returns = TaskReturns()
         self.engine = Engine(self.runtime / "events.sqlite", sources=SOURCES)
@@ -86,6 +87,7 @@ class Hub:
             with self.lock:
                 self.engine.tick()
                 self.engine.desktop.expire()
+                self.engine.sound.expire()
 
     def update_settings(self, patch):
         # Revoke the old worker before saving, without waiting for its I/O.
@@ -137,7 +139,7 @@ class Hub:
         with self.lock:
             self.engine.db.close()
 
-    def reset_app(self):
+    def reset_app(self, expected_config=None):
         from aiflame.hub.reset import reset_app
         with self.request_guard:
             if self.resetting or self.active_posts:
@@ -145,6 +147,8 @@ class Hub:
             self.resetting = True
         try:
             with self.operation_lock:
+                if expected_config is not None and self.config is not expected_config:
+                    raise EventError("管理会话已变化，请重新连接", 401)
                 if self.stopping.is_set() or self.devices.busy() or self.tests.busy():
                     raise EventError("请等待设备操作或诊断结束后重置 APP", 409)
                 return reset_app(self)
@@ -187,13 +191,8 @@ class Handler(BaseHTTPRequestHandler):
             "Content-Security-Policy",
             "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-ancestors 'none'",
         )
-        if cookie:
-            self.send_header(
-                "Set-Cookie",
-                "aiflame="
-                + self.c.config["dashboard"]
-                + "; HttpOnly; SameSite=Strict; Path=/",
-            )
+        if getattr(self, "auth_context", None):
+            self.send_header("X-SeeEnd-Proof", response_proof(self.auth_context, code, body))
         if filename:
             self.send_header(
                 "Content-Disposition", 'attachment; filename="' + filename + '"'
@@ -213,19 +212,17 @@ class Handler(BaseHTTPRequestHandler):
 
     def identity(self):
         auth = self.headers.get("Authorization", "")
+        self.auth_config = self.c.config
         if auth.startswith("Bearer "):
-            for source, saved in self.c.config["tokens"].items():
+            for source, saved in self.auth_config["tokens"].items():
                 if secrets.compare_digest(auth[7:].encode(), saved.encode()):
                     return source
         try:
-            cookies = http.cookies.SimpleCookie(self.headers.get("Cookie", ""))
-            if "aiflame" in cookies and secrets.compare_digest(
-                cookies["aiflame"].value.encode(), self.c.config["dashboard"].encode()
-            ):
-                return "dashboard"
-        except http.cookies.CookieError:
-            pass
-        raise EventError("需要有效凭据", 401)
+            self.auth_context = self.c.management.verify(auth, self.command, self.path,
+                getattr(self, "raw_body", b""), self.auth_config["dashboard"])
+        except AuthError:
+            raise EventError("需要有效的本机管理签名或来源凭据", 401) from None
+        return "dashboard"
 
     def rate_limit(self, source):
         now = time.monotonic()
@@ -236,14 +233,40 @@ class Handler(BaseHTTPRequestHandler):
         self.c.limits[source] = (tokens - 1, now)
 
     def do_GET(self):
+        with self.c.request_guard:
+            if self.c.resetting or self.c.stopping.is_set():
+                self._reject_busy()
+                return
+            self.c.active_posts += 1
         try:
+            return self._do_GET()
+        finally:
+            with self.c.request_guard:
+                self.c.active_posts -= 1
+
+    def _do_GET(self):
+        try:
+            if self.headers.get("Authorization", "").startswith("seeend-hmac-v1 "):
+                self.identity()
             self.validate_host()
             if not self.path.startswith(("/api/", "/v1/")):
                 raise EventError("路径不存在", 404)
-            if self.path == "/api/session":
-                self.reply(200, {"app_name": "SeeEnd", "app_version": __version__}, cookie=True)
+            if urlsplit(self.path).path == "/api/auth/challenge":
+                query = parse_qs(urlsplit(self.path).query, keep_blank_values=True)
+                if set(query) != {"nonce"} or len(query["nonce"]) != 1:
+                    raise EventError("管理挑战格式错误")
+                try:
+                    challenge = self.c.management.challenge(query["nonce"][0], self.c.config["dashboard"], "SeeEnd", __version__)
+                except AuthError:
+                    raise EventError("管理挑战格式错误") from None
+                self.reply(200, challenge)
                 return
-            identity = self.identity()
+            identity = "dashboard" if getattr(self, "auth_context", None) else self.identity()
+            if self.path == "/api/session":
+                if identity != "dashboard":
+                    raise EventError("需要桌面 App 会话", 403)
+                self.reply(200, {"app_name": "SeeEnd", "app_version": __version__})
+                return
             c = self.c
             path = urlsplit(self.path).path
             if path == "/v1/task-return/poll":
@@ -427,8 +450,8 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/api/reset":
             return self._do_POST()
         with self.c.request_guard:
-            if self.c.resetting:
-                self.reply(503, {"error": "APP 正在重置，请稍后重试"})
+            if self.c.resetting or self.c.stopping.is_set():
+                self._reject_busy()
                 return
             self.c.active_posts += 1
         try:
@@ -439,15 +462,16 @@ class Handler(BaseHTTPRequestHandler):
 
     def _do_POST(self):
         try:
-            self.validate_host()
-            identity = self.identity()
             c = self.c
+            self.raw_body = self.read_body(4096)
+            identity = self.identity()
+            self.validate_host()
             with c.lock:
                 self.rate_limit(identity)
             if self.headers.get_content_type() != "application/json":
                 raise EventError("请发送 JSON")
             try:
-                body = json.loads(self.read_body(4096))
+                body = json.loads(self.raw_body)
             except (ValueError, UnicodeError):
                 raise EventError("JSON 格式错误")
             if not isinstance(body, dict):
@@ -483,6 +507,12 @@ class Handler(BaseHTTPRequestHandler):
                         return not c.stopping.is_set() and c.engine.origins.current(destination)
                 self.reply(200, c.task_returns.open(body["event_id"], destination, source, is_current))
                 return
+            if self.path == "/api/tasks/mark-unknown":
+                if set(body) != {"event_id"} or not isinstance(body["event_id"], str):
+                    raise EventError("请选择要恢复的任务")
+                with c.lock:
+                    self.reply(200, c.engine.mark_task_unknown(body["event_id"]))
+                return
             if self.path == "/api/wechat":
                 self.reply(200, c.wechat.action(body))
                 return
@@ -494,7 +524,12 @@ class Handler(BaseHTTPRequestHandler):
             if self.path == "/api/reset":
                 if set(body) != {"confirm"} or body["confirm"] is not True:
                     raise EventError("请先确认重置 APP")
-                self.reply(200, c.reset_app(), cookie=True)
+                self.reply(200, c.reset_app(expected_config=self.auth_config))
+                return
+            if self.path in ("/api/notifications/validate", "/api/sounds/validate"):
+                with c.lock:
+                    output = c.engine.desktop if self.path.startswith("/api/notifications/") else c.engine.sound
+                    self.reply(200, output.validate_claim(body))
                 return
             if self.path == "/api/notifications/claim":
                 if body:
@@ -506,6 +541,17 @@ class Handler(BaseHTTPRequestHandler):
             if self.path == "/api/notifications/ack":
                 with c.lock:
                     self.reply(200, c.engine.desktop.acknowledge(body))
+                return
+            if self.path == "/api/sounds/claim":
+                if body:
+                    raise EventError("音效领取请求不接受额外字段")
+                with c.lock:
+                    c.engine.tick()
+                    self.reply(200, {"sounds": c.engine.sound.claim()})
+                return
+            if self.path == "/api/sounds/ack":
+                with c.lock:
+                    self.reply(200, c.engine.sound.acknowledge(body))
                 return
             if self.path in ("/api/integrations/install", "/api/integrations/uninstall"):
                 source = body.get("source")
@@ -660,6 +706,16 @@ class Handler(BaseHTTPRequestHandler):
             self.reply(error.status, {"error": str(error), "error_code": error.error_code})
         except (BrokenPipeError, ConnectionResetError, TimeoutError):
             pass
+
+    def _reject_busy(self):
+        try:
+            if self.command == "POST":
+                self.raw_body = self.read_body(4096)
+            self.identity()
+            self.validate_host()
+            self.reply(409, {"error": "APP 正在重置或退出，请稍后重试"})
+        except EventError as error:
+            self.reply(error.status, {"error": str(error)})
 
 
 def main():
