@@ -10,6 +10,7 @@ from .api import ILinkClient, ORIGIN, WechatError, bounded_string, qr_image, tru
 from .credentials import WechatCredentials
 
 LABELS = {"done": "任务已完成", "needs_input": "任务等待你的输入"}
+POLL_HEALTH_GRACE = 90
 ERRORS = {
     "network": "无法连接微信，请检查网络后重试。",
     "http": "微信服务暂不可用，请稍后重试。",
@@ -47,6 +48,7 @@ class WechatService:
         self.receiving = False
         self.busy = False
         self.connection_checked = False
+        self._last_poll_success = None
         self.preparing = False
         self.prepare_deadline = 0
 
@@ -69,14 +71,19 @@ class WechatService:
     def _active(self, generation, stop):
         return not self.closed and generation == self.generation and not stop.is_set()
 
+    def _health_current(self):
+        return (self.connection_checked and self._last_poll_success is not None
+                and time.monotonic() - self._last_poll_success <= POLL_HEALTH_GRACE)
+
     def snapshot(self):
         with self.lock:
-            available = bool(self.bound and self.account.get("context") and self.connection_checked
+            healthy = self._health_current()
+            available = bool(self.bound and self.account.get("context") and healthy
                              and not self.closed and not self.error and not self.busy and not self.preparing)
             return {"enabled": self.enabled(), "bound": self.bound,
                     "available": available,
                     "ready": bool(self.enabled() and available and not self.run_stop.is_set()),
-                    "receiving": self.receiving, "busy": self.busy,
+                    "receiving": bool(self.receiving and healthy), "busy": self.busy,
                     "preparing": self.preparing,
                     "needs_message": bool(self.account and not self.account.get("context")),
                     "error": self.error, "test_status": self.test_status, "login": dict(self.qr)}
@@ -107,6 +114,9 @@ class WechatService:
                 return
             if self.busy:
                 return
+            if not self._health_current():
+                self.connection_checked = False
+                self.receiving = False
             self.run_stop = threading.Event()
             generation, stop = self.generation, self.run_stop
             if self.account:
@@ -315,6 +325,18 @@ class WechatService:
                 account = dict(self.account)
             try:
                 result = self.client.updates(account, account.get("cursor", ""))
+                if result is None:
+                    with self.lock:
+                        if not self._active(generation, stop):
+                            return
+                        # Allow ordinary long-poll timeouts briefly, but never
+                        # keep stale health indefinitely or establish it here.
+                        if not self._health_current():
+                            self.connection_checked = False
+                            self.receiving = False
+                            self.error = ERRORS["timeout"]
+                    stop.wait(0.2)
+                    continue
                 with self.lock:
                     if not self._active(generation, stop):
                         return
@@ -327,6 +349,7 @@ class WechatService:
                                 and message.get("message_type") == 1 and bounded_string(message.get("context_token"), 65536)):
                             self.account["context"], changed = message["context_token"], True
                     self.receiving, self.error, self.connection_checked = True, "", True
+                    self._last_poll_success = time.monotonic()
                     self.wake.set()
                 if changed:
                     self._persist(generation, stop)

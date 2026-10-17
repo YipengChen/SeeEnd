@@ -25,7 +25,7 @@ class OutputTests(unittest.TestCase):
     def test_zero_brightness_and_disconnected_lamp_do_not_suppress_desktop(self):
         self.engine.update_settings({'brightness': 0})
         result = self.send('done')
-        self.assertEqual(result['deliveries'], {'flame': 'suppressed', 'desktop': 'pending'})
+        self.assertEqual(result['deliveries'], {'flame': 'suppressed', 'desktop': 'pending', 'sound': 'disabled'})
         self.assertFalse(self.engine.device['online'])
         message, = self.engine.desktop.claim()
         self.assertEqual(message['title'], 'SeeEnd · 任务已完成')
@@ -36,7 +36,7 @@ class OutputTests(unittest.TestCase):
     def test_output_failure_does_not_stop_other_outputs(self):
         def fail(event): raise OSError('offline')
         self.engine.flame.accept = fail
-        self.assertEqual(self.send('done')['deliveries'], {'flame': 'failed', 'desktop': 'pending'})
+        self.assertEqual(self.send('done')['deliveries'], {'flame': 'failed', 'desktop': 'pending', 'sound': 'disabled'})
 
     def test_duplicate_does_not_notify_twice(self):
         event = self.event('done')
@@ -83,7 +83,7 @@ class OutputTests(unittest.TestCase):
 
     def test_disabled_desktop_does_not_suppress_flame(self):
         self.engine.update_settings({'desktop_notifications': False})
-        self.assertEqual(self.send('done')['deliveries'], {'flame': 'queued', 'desktop': 'disabled'})
+        self.assertEqual(self.send('done')['deliveries'], {'flame': 'queued', 'desktop': 'disabled', 'sound': 'disabled'})
         self.assertEqual(self.engine.desktop.claim(), [])
 
     def test_claim_token_and_expiry(self):
@@ -98,11 +98,11 @@ class OutputTests(unittest.TestCase):
         self.engine.device['online'] = True
         self.send('done')
         self.engine.applied(self.engine.desired(), {'result': 'applied'})
-        self.assertEqual({r['output']: r['status'] for r in self.engine.router.snapshot()}, {'flame': 'applied', 'desktop': 'pending'})
+        self.assertEqual({r['output']: r['status'] for r in self.engine.router.snapshot()}, {'flame': 'applied', 'desktop': 'pending', 'sound': 'disabled'})
 
     def test_disabled_source_suppresses_all_outputs(self):
         self.engine.update_settings({'source_enabled': {'test': False}})
-        self.assertEqual(self.send('done')['deliveries'], {'flame': 'unmatched', 'desktop': 'unmatched'})
+        self.assertEqual(self.send('done')['deliveries'], {'flame': 'unmatched', 'desktop': 'unmatched', 'sound': 'unmatched'})
 
     def test_offline_and_idle_receipts_track_legacy_status(self):
         for state in ('working', 'idle', 'cancelled', 'timeout', 'unknown'):

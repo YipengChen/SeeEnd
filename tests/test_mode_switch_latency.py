@@ -6,7 +6,7 @@ import socket
 import tempfile
 import threading
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from aiflame.hub.server import Hub
 
@@ -33,6 +33,25 @@ class ModeSwitchLatencyTests(unittest.TestCase):
             self.assertEqual(result["device"]["status"], "正在连接设备")
             self.hub.transport.stop()
             self.assertFalse(self.hub.engine.device["connecting"])
+
+    def test_dead_worker_is_replaced_and_cannot_keep_stale_online_status(self):
+        from aiflame.transports.manager import TransportManager
+        engine = Mock(settings={'hardware_notifications': True}, device={'online': True})
+        manager = TransportManager(engine, threading.RLock(),
+                                   {'device_id': 'cube', 'hardware_model': 'yeelight-cube-lite'})
+        dead = Mock()
+        dead.is_alive.return_value = False
+        manager.worker = manager.retiring_worker = dead
+        with patch('aiflame.transports.manager.YeelightTransport') as factory:
+            manager.start()
+            replacement = factory.return_value
+            self.assertIs(manager.worker, replacement)
+            replacement.start.assert_called_once()
+            self.assertFalse(engine.device['online'])
+            self.assertTrue(engine.device['connecting'])
+            manager._reap(dead)
+            self.assertIs(manager.worker, replacement)
+            replacement.start.assert_called_once()
 
 
 

@@ -5,7 +5,7 @@ from pathlib import Path
 
 from aiflame.core.events import EventError
 from aiflame.core.paths import write_private
-from aiflame.devices.models import DEFAULT_MODEL, YEELIGHT_MODEL, YEELIGHT_MODELS, SUPPORTED_MODELS, MIJIA_PLUG_MODEL, MIJIA_PLUG_MODELS, CONNECTION_KEYS, hardware_model
+from aiflame.devices.models import DEFAULT_MODEL, YEELIGHT_MODEL, YEELIGHT_MODELS, YEELIGHT_CUBE_MODEL, SUPPORTED_MODELS, MIJIA_PLUG_MODEL, MIJIA_PLUG_MODELS, CONNECTION_KEYS, hardware_model
 from aiflame.devices.service import DeviceService
 from aiflame.devices.light_settings import light_settings, validate_patch, validate_flash_cycle
 
@@ -141,6 +141,13 @@ class FleetDeviceService:
                             # Keep the record available for a retry if the vault denies cleanup.
                             write_private(self.runtime / "credentials.json", self.config)
                             raise
+                    elif record.get("hardware_model") == YEELIGHT_CUBE_MODEL:
+                        from aiflame.devices.yeelight import cube_session_path
+                        try:
+                            cube_session_path(self.runtime, device_id).unlink(missing_ok=True)
+                        except OSError:
+                            write_private(self.runtime / "credentials.json", self.config)
+                            raise
                     self.config.clear()
                     self.config.update(saved)
                     self.transport.records = self.config["devices"]
@@ -207,7 +214,10 @@ class FleetDeviceService:
                 with self.lock:
                     write_private(self.runtime / "credentials.json", self.config)
 
-            service = DeviceService(record, self.runtime, manager, self.lock, save=save, bind=bind)
+            with self.lock:
+                known_devices = [dict(item) for item in self.transport.records.values()]
+            service = DeviceService(record, self.runtime, manager, self.lock, save=save, bind=bind,
+                                    known_devices=known_devices)
             self.active = service
             result = service.start({**body, "hardware_model": model_id})
             if service.job:

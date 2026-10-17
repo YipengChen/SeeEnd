@@ -61,11 +61,13 @@ class MijiaTransport(threading.Thread):
                     with self.lock:
                         desired, settings = self.engine.desired().copy(), self.engine.settings.copy()
                     power = desired_power(desired, settings)
-                    signature = (desired["key"], desired["state"], power)
+                    signature = (getattr(desired, "delivery_context", None), desired["key"], desired["state"], power)
                     if signature != previous or time.monotonic() >= heartbeat:
                         # Check again immediately before mutating physical power.
                         with self.lock:
-                            if self.engine.desired() != desired or desired_power(desired, self.engine.settings) != power:
+                            current = self.engine.desired()
+                            if (current != desired or getattr(current, "delivery_context", None) != getattr(desired, "delivery_context", None)
+                                    or desired_power(desired, self.engine.settings) != power):
                                 continue
                         if actual != power:
                             if time.monotonic() < next_change:

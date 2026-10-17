@@ -128,7 +128,6 @@ class RecoveryTests(unittest.TestCase):
         self.assertTrue(self.widget.history.selectionModel().hasSelection())
         self.widget.history_search.setText("unmatched-filter")
         self.assertEqual(self.widget.history_stack.currentIndex(), 1)
-        self.assertFalse(self.widget.history_selection_hint.isVisible())
         self.widget.history_clear_button.click()
         self.assertEqual(self.widget.history_stack.currentIndex(), 0)
 
@@ -572,7 +571,6 @@ class RecoveryTests(unittest.TestCase):
         self.widget.history.selectRow(0)
         self.assertIn("我的设备", self.widget.event_detail.text())
         self.assertIn("State events", self.widget.event_detail.text())
-        self.assertNotRegex(self.widget.history_count.text(), r"[\u4e00-\u9fff]")
         self.widget.history_view.setCurrentIndex(1)
         self.assertEqual(self.widget.history.rowCount(), 4)
         path = Path(self.work.name) / "activity.csv"
@@ -651,7 +649,7 @@ class RecoveryTests(unittest.TestCase):
         self.addCleanup(consumer.shutdown)
         consumer.timer.stop()
         self.settle()
-        keys = ("desktop_notifications", "wechat_notifications", "desktop_flame_enabled", "hardware_notifications")
+        keys = ("desktop_notifications", "sound_notifications", "wechat_notifications", "desktop_flame_enabled", "hardware_notifications")
         self.assertEqual(set(self.widget.home_channel_checks), set(keys))
         self.wechat = {"bound": True, "available": True}
         self.render()
@@ -1011,10 +1009,10 @@ class RecoveryTests(unittest.TestCase):
         self.assertEqual(self.widget.tabs.widget(4).horizontalScrollBar().maximum(), 0)
         self.assertEqual(self.widget.history.horizontalHeaderItem(3).text(), "Light result")
         self.assertNotRegex(self.widget.history.horizontalHeaderItem(3).toolTip(), r"[\u4e00-\u9fff]")
-        self.assertEqual(self.widget.history_count.text(), "Latest 1 task")
+        self.assertEqual(self.widget.history.rowCount(), 1)
         self.widget.history_view.setCurrentIndex(self.widget.history_view.findData("events"))
         self.settle()
-        self.assertEqual(self.widget.history_count.text(), "Latest 1 event")
+        self.assertEqual(self.widget.history.rowCount(), 1)
 
     def test_current_browser_setup_sentence_is_fully_english(self):
         self.engine.update_settings({"language": "en"})

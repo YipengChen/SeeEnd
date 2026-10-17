@@ -3,17 +3,22 @@
   const site = FlameProviders.siteFor(location.href);
   if (!site) return;
   const adapter = FlameProviders.createAdapter(site, document, location, () => navigator.onLine);
-  let queue = Promise.resolve(), disabled = false;
+  let queue = Promise.resolve(), disabled = false, submission = 0, failedTask;
   function deliver(event) {
+    const owner = submission;
     const return_url = location.origin + (machine.active?.route || FlameProviders.routeFor(location));
+    function failed() {
+      // Drop all queued events for this failed task, including a queued success.
+      // A late failure must not cancel a newer user submission.
+      failedTask = event.task_id;
+      if (owner !== submission) return;
+      disabled = true; cancel('bridge_failed');
+    }
     queue = queue.then(async () => {
-      if (disabled) return;
+      if (event.task_id === failedTask) return;
       const result = await chrome.runtime.sendMessage({kind: 'event', event, return_url});
-      if (!result?.ok) {
-        // Do not replay stale success when Hub is unavailable. Suppress this document's run.
-        disabled = true; cancel('bridge_failed');
-      }
-    }).catch(() => { disabled = true; cancel('bridge_failed'); });
+      if (!result?.ok) failed();
+    }).catch(failed);
   }
   const machine = new FlameTurn(deliver, () => crypto.randomUUID(), () => Date.now(), FlameProviders.routePolicy(site));
   let renderStatus = null;
@@ -29,7 +34,13 @@
       {detail:!disabled && !!(machine.pending || machine.active)}));
   }
   function cancel(cause) { machine.cancel(cause); renderState(); }
-  function arm() { machine.arm(adapter.snapshot()); renderState(); schedule(); }
+  function arm() {
+    const snapshot = adapter.snapshot();
+    if (machine.active && snapshot.busy) return;
+    disabled = false;
+    machine.arm(snapshot); submission++;
+    renderState(); schedule();
+  }
   // A bounded local trace of control types, never message IDs or chat contents.
   let lastTurnKey, replySamples = [];
   let scheduled = false;
@@ -50,7 +61,7 @@
     if (!disabled && (machine.pending || machine.active) && !scheduled) { scheduled = true; setTimeout(check, 100); }
   }
   document.addEventListener('click', e => {
-    if (!e.isTrusted || disabled || !(e.target instanceof Element)) return;
+    if (!e.isTrusted || !(e.target instanceof Element)) return;
     if (adapter.isStop(e.target)) cancel();
     else if (adapter.isSubmit(e.target)) { arm(); }
     else {
@@ -59,11 +70,11 @@
     }
   }, true);
   document.addEventListener('keydown', e => {
-    if (e.isTrusted && !disabled && e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey && !e.isComposing
+    if (e.isTrusted && e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey && !e.isComposing
         && e.target instanceof Element && adapter.isComposer(e.target)) { arm(); }
   }, true);
   document.addEventListener('submit', e => {
-    if (e.isTrusted && !disabled && e.target instanceof Element
+    if (e.isTrusted && e.target instanceof Element
         && e.target.querySelector(site.composer)) { arm(); }
   }, true);
   window.addEventListener('offline', () => cancel('offline'));

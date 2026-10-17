@@ -4,14 +4,17 @@ import datetime as dt
 import json
 import sqlite3
 import time
+import threading
+import queue
 import uuid
 from aiflame.core.events import EventError, make_event, REQUIRED_FIELDS, OPTIONAL_FIELDS, STATES, REASONS
 from aiflame.outputs.flame import FlameOutput
 from aiflame.outputs.router import OutputRouter
 from aiflame.outputs.desktop import DesktopOutput
+from aiflame.outputs.sound import SoundOutput
 from aiflame.core.verification import verification_summary
 from aiflame.core.delivery import delivery_summary
-from aiflame.core.task_origins import TaskOrigins, validate_origin, validate_context
+from aiflame.core.task_origins import TaskOrigins, TERMINAL_SOURCES, validate_origin, validate_context
 
 class Engine:
     def __init__(self, path, clock=time.monotonic, wall=time.time, *, sources=()):
@@ -38,6 +41,8 @@ class Engine:
             **FlameOutput.DEFAULTS,
             "language": "zh-CN",
             "desktop_notifications": False,
+            "sound_notifications": False,
+            "sound_category": "chime",
             "wechat_notifications": False,
             "desktop_flame_enabled": True,
             "source_enabled": {
@@ -84,7 +89,12 @@ class Engine:
         self.router.register(self.flame)
         self.desktop = DesktopOutput(self)
         self.router.register(self.desktop)
+        self.sound = SoundOutput(self)
+        self.router.register(self.sound)
         self.source_last = {}
+        self.last_host_check = self.clock()
+        self.host_check_thread = None
+        self.host_check_results = queue.SimpleQueue()
 
     def cleanup(self, force=False):
         """Retain seven days of history; expire idle data even without new events."""
@@ -96,7 +106,11 @@ class Engine:
         ):
             return
         cutoff = now - 604800
-        self.db.execute("DELETE FROM events WHERE created < ?", (cutoff,))
+        # Keep one current event for each unfinished task so its indicator and
+        # return action remain usable, even when the rest of its history expires.
+        self.db.execute("""DELETE FROM events WHERE created < ? AND NOT EXISTS (
+            SELECT 1 FROM tasks WHERE tasks.source=events.source AND tasks.task=events.task
+            AND tasks.seq=events.seq AND tasks.state IN ('working','needs_input'))""", (cutoff,))
         self.db.execute(
             "DELETE FROM tasks WHERE updated < ? AND state NOT IN ('working','needs_input')", (cutoff,)
         )
@@ -123,6 +137,10 @@ class Engine:
         self.flame.validate_settings(data)
         if type(data["desktop_notifications"]) is not bool:
             raise EventError("桌面通知设置格式错误")
+        if type(data["sound_notifications"]) is not bool:
+            raise EventError("音效提醒设置格式错误")
+        if not isinstance(data["sound_category"], str) or data["sound_category"] not in SoundOutput.CATEGORIES:
+            raise EventError("音效类别不受支持")
         if type(data["wechat_notifications"]) is not bool:
             raise EventError("微信通知设置格式错误")
         if type(data["desktop_flame_enabled"]) is not bool:
@@ -152,6 +170,7 @@ class Engine:
                 )
         self.flame.settings_changed()
         self.desktop.settings_changed()
+        self.sound.settings_changed()
         self.db.commit()
         return data
 
@@ -284,7 +303,10 @@ class Engine:
         if submission and context:
             self.origins.remember_context(source, key[1], context)
         removed = self.db.execute(
-            "DELETE FROM events WHERE id IN (SELECT id FROM events ORDER BY created DESC LIMIT -1 OFFSET 10000)"
+            """DELETE FROM events WHERE id IN (SELECT id FROM events WHERE NOT EXISTS (
+                SELECT 1 FROM tasks WHERE tasks.source=events.source AND tasks.task=events.task
+                AND tasks.seq=events.seq AND tasks.state IN ('working','needs_input'))
+                ORDER BY created DESC, rowid DESC LIMIT -1 OFFSET 10000)"""
         ).rowcount
         if removed:
             self.origins.cleanup()
@@ -332,6 +354,9 @@ class Engine:
             return origins[key]
 
         if include_history:
+            recoverable = {(row["source"], row["task"]): row["seq"] for row in self.db.execute(
+                "SELECT source, task, seq FROM tasks WHERE state IN ('working','needs_input')")
+                          if row["source"] in TERMINAL_SOURCES}
             events = [dict(row) for row in self.db.execute(
                 "SELECT events.*, (source IN ('manual','demo') OR EXISTS(SELECT 1 FROM self_tests WHERE event=events.id)) AS simulated FROM events ORDER BY created DESC, rowid DESC LIMIT 50")]
             # Select task identities first, so a busy task cannot consume the
@@ -365,6 +390,9 @@ class Engine:
             for receipt in receipts:
                 receipts_by_event.setdefault(receipt["event"], []).append(receipt)
             for event in events + task_events:
+                event["can_mark_unknown"] = bool(not event["simulated"]
+                    and recoverable.get((event["source"], event["task"])) == event["seq"]
+                    and event["state"] in ("working", "needs_input"))
                 event["delivery_summary"] = delivery_summary(self.flame, event, receipts_by_event.get(event["id"], ()))
                 # Cache only within this snapshot: terminal availability and task
                 # destinations must be refreshed on the next UI poll.
@@ -421,7 +449,58 @@ class Engine:
         return sum(bool(self.settings["source_enabled"].get(row["source"])) for row in
                    self.db.execute("SELECT source FROM tasks WHERE state IN ('working','needs_input')"))
 
+    def mark_task_unknown(self, event_id):
+        """Explicit recovery is scoped to the current event, never all tasks."""
+        event = self.db.execute("SELECT * FROM events WHERE id=?", (event_id,)).fetchone()
+        task = self.db.execute("SELECT * FROM tasks WHERE source=? AND task=?",
+                               (event["source"], event["task"])).fetchone() if event else None
+        if (not event or event["source"] not in TERMINAL_SOURCES or not task
+                or task["state"] not in ("working", "needs_input") or task["seq"] != event["seq"]
+                or self.db.execute("SELECT 1 FROM self_tests WHERE event=?", (event_id,)).fetchone()):
+            raise EventError("任务状态已变化，请刷新活动记录后重试。", 409)
+        return self._task_unknown((task["source"], task["task"]), "manual_recovery")
+
+    def _task_unknown(self, key, reason):
+        task = self.db.execute("SELECT seq FROM tasks WHERE source=? AND task=? AND state IN ('working','needs_input')", key).fetchone()
+        if task is None:
+            return None
+        active = self.active.pop(key, {})
+        event = make_event(*key, "unknown", task["seq"], reason)
+        if active.get("device_id") is not None:
+            event["device_id"] = active["device_id"]
+        self.db.execute("UPDATE tasks SET state='unknown',updated=? WHERE source=? AND task=?", (self.wall(), *key))
+        self.db.execute("INSERT INTO events VALUES (?,?,?,?,?,?,?,?)",
+                        (event["event_id"], *key, task["seq"], "unknown", reason, self.wall(), "received"))
+        self.router.dispatch({**event, "phase": "unknown", "expires": self.clock() + 60})
+        self.db.commit()
+        return {"event_id": event["event_id"], "state": "unknown", "message": "此任务已标为状态未知。"}
+
     def tick(self):
+        try:
+            results = self.host_check_results.get_nowait()
+        except queue.Empty:
+            results = ()
+        for key, sequence in results or ():
+            current = self.db.execute("SELECT seq FROM tasks WHERE source=? AND task=? AND state IN ('working','needs_input')", key).fetchone()
+            if current and current["seq"] == sequence:
+                self._task_unknown(key, "host_exited")
+        if (self.clock() - self.last_host_check >= 30
+                and (self.host_check_thread is None or not self.host_check_thread.is_alive())):
+            self.last_host_check = self.clock()
+            unfinished = {(row["source"], row["task"]): row["seq"] for row in self.db.execute(
+                "SELECT source, task, seq FROM tasks WHERE state IN ('working','needs_input')")
+                          if row["source"] in TERMINAL_SOURCES}
+            candidates = {key: origin for key in unfinished
+                          if (origin := self.origins.get(*key)) and origin.get("kind") == "terminal"}
+            if candidates:
+                def inspect_hosts():
+                    # No DB or Hub lock in the worker. Apply only on a later
+                    # tick, after checking that the task has not moved on.
+                    self.host_check_results.put([(key, unfinished[key])
+                        for key in self.origins.exited_hosts(candidates)])
+                self.host_check_thread = threading.Thread(target=inspect_hosts, daemon=True,
+                                                          name="SeeEnd-TaskHosts")
+                self.host_check_thread.start()
         for key, item in list(self.active.items()):
             if item["until"] is not None and item["until"] <= self.clock():
                 del self.active[key]

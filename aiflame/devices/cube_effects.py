@@ -8,7 +8,7 @@ import threading
 CUBE_EFFECTS = (
     ("status", "像素状态牌", "四格分别显示四个任务，位置保持稳定；空格熄灭，超过四个时等待空位，当前提醒优先显示。工作中左侧四点依次跳动，完成对勾，等待问号。"),
     ("comet", "彗星巡航", "工作中拖尾光点往返，完成时从中心展开，等待输入时两端交替。动画不代表完成百分比。"),
-    ("snake", "贪吃蛇", "豆子使用已完成颜色。工作中随机吃豆，沿安全最短路线增长至满屏；待输入时停在豆子前，蛇头呼吸、豆子常亮；完成时吃豆，完成色从头传到尾，再盘起休息。蛇身长度不代表任务进度。"),
+    ("snake", "贪吃蛇", "豆子使用已完成颜色。工作中随机吃豆，沿安全最短路线增长至满屏；待输入时保留当前蛇身与豆子位置，原地暂停、蛇头呼吸；完成时立即显示迷你贪吃蛇和豆子仅在左格的左四列活动，吃豆后蛇身增长，填满后重新开始；右三格显示 WIN 并常亮。蛇身长度不代表任务进度。"),
     ("text", "文字状态", "工作中显示 WORK，完成显示 DONE，等待输入显示 WAIT。文字沿用各状态的颜色与亮度。"),
 )
 CUBE_MODES = tuple(item[0] for item in CUBE_EFFECTS)
@@ -46,25 +46,32 @@ SNAKE_INDEX = {point: index for index, point in enumerate(SNAKE_PATH)}
 
 class SnakeGame:
     """Shortest safe shortcuts on a cycle, retaining an escape route at all sizes."""
-    def __init__(self, seed=None):
+    def __init__(self, seed=None, path=SNAKE_PATH):
+        self.path = path
+        self.index = {point: index for index, point in enumerate(path)}
+        self.size = len(path)
         self.rng = random.Random(seed)
         self.lock = threading.RLock()
+        self.phase = None
+        self.phase_step = 0
+        self.waiting_phase = object()
+        self.waiting_snapshot = None
         self.reset()
 
     def reset(self):
-        self.body = [SNAKE_PATH[-i % 100] for i in range(4)]
+        self.body = [self.path[-i % self.size] for i in range(min(4, self.size - 1))]
         self.step = 0
         self.full_ticks = 0
         self.spawn_food()
 
     def spawn_food(self):
-        free = [point for point in SNAKE_PATH if point not in self.body]
+        free = [point for point in self.path if point not in self.body]
         self.food = self.rng.choice(free) if free else None
 
     def next_position(self):
-        head = SNAKE_INDEX[self.body[0]]
-        tail_distance = (SNAKE_INDEX[self.body[-1]] - head) % 100
-        food_distance = (SNAKE_INDEX[self.food] - head) % 100
+        head = self.index[self.body[0]]
+        tail_distance = (self.index[self.body[-1]] - head) % self.size
+        food_distance = (self.index[self.food] - head) % self.size
         # Preserve circular body ordering. The forward free arc is an escape
         # corridor, even when nearly full; arbitrary shortest paths can seal it.
         # BFS finds the shortest route within this safe corridor. If the food
@@ -79,15 +86,15 @@ class SnakeGame:
                         point = parents[point]
                     return point
                 x, y = point
-                distance = (SNAKE_INDEX[point] - head) % 100
+                distance = (self.index[point] - head) % self.size
                 for neighbor in ((x + 1, y), (x, y + 1), (x - 1, y), (x, y - 1)):
-                    if neighbor not in SNAKE_INDEX or neighbor in parents:
+                    if neighbor not in self.index or neighbor in parents:
                         continue
-                    forward = (SNAKE_INDEX[neighbor] - head) % 100
+                    forward = (self.index[neighbor] - head) % self.size
                     if distance < forward <= food_distance:
                         parents[neighbor] = point
                         queue.append(neighbor)
-        return SNAKE_PATH[(head + 1) % 100]
+        return self.path[(head + 1) % self.size]
 
     def advance(self):
         self.step += 1
@@ -120,29 +127,54 @@ def snake_game(key):
     return SnakeGame()
 
 
-def snake_positions(elapsed, key='default'):
-    return snake_game(key).at(max(0, int(elapsed * 4)))
+def snake_positions(elapsed, key='default', phase=None):
+    game = snake_game(key)
+    with game.lock:
+        if phase is None:
+            # Callers without explicit phase IDs signal resume by rendering
+            # work again; the next wait must freeze this newer game state.
+            game.waiting_snapshot = None
+        if phase != game.phase:
+            game.phase, game.phase_step = phase, game.step
+        return game.at(game.phase_step + max(0, int(elapsed * 4)))
 
 
-# State vignettes use one continuous body: approach the food, then curl inward.
-SNAKE_REST_ROUTE = ((12, 1), (11, 1), (10, 1), (9, 1), (8, 1), (7, 1),
-                    (7, 2), (7, 3), (8, 3), (9, 3), (10, 3), (11, 3),
-                    (12, 3), (12, 2), (11, 2), (10, 2))
+def snake_waiting_positions(key='default', phase=None):
+    game = snake_game(key)
+    with game.lock:
+        if game.waiting_snapshot is None or phase != game.waiting_phase:
+            game.waiting_phase = phase
+            game.waiting_snapshot = (tuple(game.body), game.food)
+        return game.waiting_snapshot
 
 
-def snake_done_positions(elapsed):
-    elapsed = max(0, elapsed)
-    body = [(x, 2) for x in range(10, -1, -1)]
-    food = (12, 2)
-    if elapsed >= .2:
-        body = [(11, 2)] + body[:-1]
-    if elapsed >= .4:
-        body = [(12, 2)] + body
-        food = None
-    moves = min(len(SNAKE_REST_ROUTE), max(0, int((elapsed - 1.1) * 10)))
-    for point in SNAKE_REST_ROUTE[:moves]:
-        body = [point] + body[:-1]
-    return tuple(body), food
+# The completion scene reserves the first panel for a growing mini snake.
+# W, I and N each occupy their own 5 x 5 panel, without crossing a seam.
+SNAKE_WIN_GLYPHS = (
+    LETTERS['W'],
+    ('01110', '00100', '00100', '00100', '01110'),
+    ('10001', '11001', '10101', '10011', '10001'),
+)
+# Leave column 4 dark to separate the mini game from the W panel.
+MINI_SNAKE_PATH = tuple([(x, 0) for x in range(4)] + [
+    (x, y) for x in range(3, -1, -1)
+    for y in (range(1, 5) if x % 2 else range(4, 0, -1))])
+
+
+@lru_cache(maxsize=16)
+def mini_snake_game(key):
+    return SnakeGame(0, path=MINI_SNAKE_PATH)
+
+
+def mini_snake_positions(elapsed, key='default'):
+    step = max(0, int(elapsed * 2))
+    game = mini_snake_game(key)
+    with game.lock:
+        if step < game.step:
+            # Replaying a completion scene must reproduce its initial frame.
+            game.rng.seed(0)
+            game.reset()
+        return game.at(step)
 
 
 def frame(desired, settings, elapsed):
@@ -192,38 +224,34 @@ def frame(desired, settings, elapsed):
                         dot(x + col, y, state)
             x += len(LETTERS[letter][0]) + 1
     elif mode == 'snake':
+        animation_id = desired.get('cube_animation_id', desired['key'])
+        phase = desired.get('cube_animation_phase')
         if state == 'working':
-            body, food = snake_positions(elapsed, desired.get('cube_animation_id', desired['key']))
+            body, food = snake_positions(elapsed, animation_id, phase)
             for offset, (x, y) in enumerate(body):
                 dot(x, y, state, 1 if offset == 0 else .55 - .25 * offset / len(body))
             # Food stays steady until eaten.
             if food is not None:
                 dot(*food, state, 1, palette_state='done')
         elif state == 'needs_input':
-            # One empty pixel separates the nose and food: visibly waiting.
-            for x in range(10):
-                dot(x, 2, state, .25)
+            body, food = snake_waiting_positions(animation_id, phase)
+            for x, y in body[1:]:
+                dot(x, y, state, .25)
             breath = (1 - math.cos(elapsed * math.tau / 2.4)) / 2
-            dot(10, 2, state, .4 + .6 * breath)
-            dot(12, 2, state, .9, palette_state='done')
-        elif state == 'done':
-            body, food = snake_done_positions(elapsed)
+            dot(*body[0], state, .4 + .6 * breath)
             if food is not None:
-                dot(*food, state, .8)
-            resting = elapsed >= 2.7
-            breath = .3 + .15 * (1 - math.cos(max(0, elapsed - 2.7) * math.tau / 3)) / 2
+                dot(*food, state, .9, palette_state='done')
+        elif state == 'done':
+            body, food = mini_snake_positions(max(0, elapsed), animation_id)
             for offset, (x, y) in enumerate(body):
-                if resting:
-                    scale = breath + (.15 if offset == 0 else 0)
-                    dot(x, y, state, scale)
-                else:
-                    wave = max(0, min(1, (elapsed - .4 - offset * .04) / .16))
-                    fade = max(0, min(1, (elapsed - 2.2) / .5))
-                    target = 1 - fade * (.55 if offset == 0 else .7)
-                    before = color(state, .35, palette_state='working')
-                    after = color(state, target)
-                    pixels[y * 20 + x] = tuple(round(a + (b - a) * wave)
-                                               for a, b in zip(before, after))
+                dot(x, y, state, 1 if offset == 0 else .4)
+            if food is not None:
+                dot(*food, state, .85)
+            for panel, rows in enumerate(SNAKE_WIN_GLYPHS, start=1):
+                for y, row in enumerate(rows):
+                    for x, value in enumerate(row):
+                        if value == '1':
+                            dot(panel * 5 + x, y, state)
         else:
             status(state, 7)
     elif mode == 'comet':

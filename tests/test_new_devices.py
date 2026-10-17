@@ -200,7 +200,7 @@ class NewDeviceTests(unittest.TestCase):
         client = Mock()
         client.command.return_value = {'result': ['ok']}
         verify_control(client, YEELIGHT_CUBE_MODEL)
-        client.command.assert_called_once_with('set_bright', [100])
+        client.command.assert_called_once_with('set_bright', [1])
         for response in ({'result': ['sent']}, {'result': []}, {'error': {'code': -1}}):
             client.command.return_value = response
             with self.assertRaises(ValueError):
@@ -229,12 +229,15 @@ class NewDeviceTests(unittest.TestCase):
             fleet = FleetTransportManager(engine.flame, lock, config)
             service = FleetDeviceService(config, directory, fleet, lock)
             with patch('aiflame.devices.yeelight.discover', return_value=[info]), \
-                 patch('aiflame.devices.yeelight.CubeClient', return_value=client), \
+                 patch('aiflame.devices.yeelight.YeelightClient', return_value=client), \
+                 patch('aiflame.devices.yeelight.CubeClient') as udp_session, \
                  patch('aiflame.transports.manager.YeelightTransport'):
                 service.start({'action': 'connect', 'hardware_model': YEELIGHT_CUBE_MODEL,
                                'device_id': '', 'transport': 'yeelight', 'host': info['host']})
                 service.thread.join(2)
                 self.assertEqual(service.job['state'], 'succeeded', service.job)
+                udp_session.assert_not_called()
+                client.close.assert_called_once()
                 saved = json.loads((Path(directory) / 'credentials.json').read_text())
                 self.assertIn(info['device_id'], saved['devices'])
             output = Mock(settings=light_settings({'hardware_model': YEELIGHT_CUBE_MODEL}))
@@ -349,8 +352,11 @@ class NewDeviceTests(unittest.TestCase):
             result = client.command('update_leds', [base64.b64encode(bytes(300)).decode()])
             self.assertEqual(udp.address, ('192.168.1.44', 55444))
             self.assertEqual([p['method'] for p in udp.sent],
-                             ['udp_sess_new', 'udp_sess_keep_alive', 'activate_fx_mode',
-                              'set_bright', 'set_power', 'update_leds'])
+                             ['udp_sess_new', 'udp_sess_keep_alive', 'set_power',
+                              'set_bright', 'activate_fx_mode', 'update_leds', 'set_power', 'update_leds'])
+            self.assertEqual(udp.sent[2]['params'], ['off', 'sudden', 0])
+            self.assertEqual(base64.b64decode(udp.sent[5]['params'][0]), bytes(300))
+            self.assertEqual(udp.sent[6]['params'], ['on', 'sudden'])
             self.assertTrue(all(p['token'] == 'session' for p in udp.sent[1:]))
             self.assertEqual(result['result'], ['sent'])
             tcp.assert_not_called()

@@ -473,6 +473,68 @@ class FleetReceiptTests(unittest.TestCase):
         output = self.fleet.outputs[key]
         output.applied(output.desired(), {"result": "applied", "command_id": key})
 
+    def test_pixel_send_starts_prompt_timer_without_confirming_any_device(self):
+        self.engine.update_settings({"hold_until_activity": False})
+        event_id = self.emit("done")
+        output = self.fleet.outputs["one"]
+        output.applied(output.desired(), {"result": "sent"})
+        receipts = self.receipts(event_id)
+        self.assertEqual(receipts["flame"], "sent")
+        self.assertEqual(receipts["flame:one"], "sent")
+        self.assertEqual(receipts["flame:two"], "queued")
+        snapshot = self.engine.snapshot()
+        self.assertFalse(snapshot["display"]["device_confirmed"])
+        self.assertEqual(snapshot["display"]["confirmed_count"], 0)
+        summary = snapshot["events"][0]["delivery_summary"]
+        self.assertEqual(summary["devices"][0]["reason"], "指令已发送")
+        self.now += self.engine.settings["duration"] + 1
+        self.assertEqual(self.engine.desired()["state"], "idle")
+        self.assertEqual(self.receipts(event_id)["flame:one"], "sent")
+        self.assertEqual(self.receipts(event_id)["flame:two"], "expired")
+
+    def test_mixed_ack_and_send_keeps_exact_per_device_evidence_in_either_order(self):
+        self.engine.update_settings({"hold_until_activity": False})
+        for sent_first in (True, False):
+            with self.subTest(sent_first=sent_first):
+                event_id = self.emit("done", task="mixed-" + str(sent_first))
+                calls = ("two", "one") if sent_first else ("one", "two")
+                for key in calls:
+                    output = self.fleet.outputs[key]
+                    output.applied(output.desired(), {"result": "applied" if key == "one" else "sent"})
+                self.assertEqual(self.receipts(event_id)["flame"], "applied")
+                self.assertEqual(self.receipts(event_id)["flame:one"], "applied")
+                self.assertEqual(self.receipts(event_id)["flame:two"], "sent")
+                self.assertFalse(self.fleet.confirmed(event_id))
+                self.assertEqual(self.engine.snapshot()["display"]["confirmed_count"], 1)
+                self.now += self.engine.settings["duration"] + 1
+                self.engine.desired()
+
+    def test_unacknowledged_preview_and_working_streams_never_confirm(self):
+        self.engine.start_preview("stream-preview")
+        for output in self.fleet.outputs.values():
+            output.applied(output.desired(), {"result": "sent"})
+        self.assertFalse(self.engine.snapshot()["display"]["device_confirmed"])
+        self.engine.cancel_preview()
+        event_id = self.emit("working")
+        for output in self.fleet.outputs.values():
+            output.applied(output.desired(), {"result": "sent"})
+        self.assertFalse(self.engine.snapshot()["display"]["device_confirmed"])
+        self.assertEqual(self.receipts(event_id)["flame"], "sent")
+        self.emit("done", seq=2)
+        self.assertEqual(self.receipts(event_id)["flame"], "sent")
+
+    def test_idle_receipt_can_upgrade_from_sent_to_real_ack(self):
+        for state in ("idle", "cancelled", "unknown"):
+            with self.subTest(state=state):
+                event_id = self.emit(state, task="idle-" + state)
+                first = self.fleet.outputs["one"]
+                first.applied(first.desired(), {"result": "sent"})
+                self.ack("two")
+                self.assertEqual(self.receipts(event_id)["flame"], "applied")
+                self.assertEqual(self.receipts(event_id)["flame:one"], "sent")
+                self.assertEqual(self.receipts(event_id)["flame:two"], "applied")
+                self.ack("one")
+                self.assertEqual(self.receipts(event_id)["flame:one"], "applied")
     def test_admission_records_each_online_offline_disabled_and_muted_target(self):
         for key, fields in (("offline", {}), ("disabled", {"connection_paused": True}),
                             ("muted", {"light_settings": {"brightness": 0, "reduced": False}})):

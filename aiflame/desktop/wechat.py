@@ -29,7 +29,6 @@ class WechatConnection:
         self.wechat_notice = ""
         actions = self.preference_toggle(
             body, "wechat_notifications", "微信通知",
-            actions_below=True,
             help_text="任务完成或等待输入时发送微信通知，需保持 SeeEnd 运行。仅发送来源、任务状态和时间。关闭通知保留绑定，其他提醒方式独立工作。"
         )
         self.checks["wechat_notifications"].setToolTip("通过本人微信 ClawBot 接收任务提醒。")

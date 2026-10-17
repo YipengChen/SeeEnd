@@ -47,6 +47,7 @@ for (const [index, reason] of ['error', 'aborted', 'blocked', 'max-tokens', 'int
 await h.bridge.drain();
 assert.deepEqual(h.sent.filter(x => x.payload.hook_event_name === 'TurnEnd').map(x => x.payload.reason),
   ['completed', 'error', 'aborted', 'blocked', 'max-tokens']);
+assert.deepEqual(h.sent.filter(x => x.payload.hook_event_name === 'Interrupt').map(x => x.payload.turn_id), ['14', '15']);
 await h.callbacks.get('dispose')();
 
 let now = 10000;
@@ -79,8 +80,17 @@ live.rootAgent.status = 'running';
 now += 5000;
 heartbeat();
 await live.bridge.drain();
-assert.equal(live.sent.length, 2);
+assert.deepEqual(live.sent.map(x => x.payload.hook_event_name), ['TurnStart', 'TurnActivity', 'Interrupt']);
 await live.callbacks.get('dispose')();
+
+const replaced = harness();
+replaced.event(replaced.root, 'turn/start', { turn: 1 });
+replaced.event(replaced.root, 'turn/start', { turn: 1 });
+replaced.event(replaced.root, 'turn/start', { turn: 2 });
+replaced.event(replaced.root, 'turn/end', { turn: 1, reason: { kind: 'interrupted' } });
+await replaced.callbacks.get('dispose')();
+assert.deepEqual(replaced.sent.map(x => [x.payload.hook_event_name, x.payload.turn_id]),
+  [['TurnStart', '1'], ['Interrupt', '1'], ['TurnStart', '2'], ['Interrupt', '2']]);
 
 const failing = harness({ send: async () => { throw new Error('helper unavailable'); } });
 failing.event(failing.root, 'turn/start', { turn: 1 });

@@ -19,7 +19,7 @@ from aiflame.outputs.wechat import WechatOutput
 
 
 DATABASES = ("events.sqlite", "codex-sequences.sqlite", "cli-lifecycle.sqlite", "cli-origin-cache.sqlite")
-OWNED = ("credentials.json", "device-tokens", "wechat-credentials", "cli-integrations.json", "firmware-cache", "BrowserBridge",
+OWNED = ("credentials.json", "device-tokens", "cube-sessions", "wechat-credentials", "cli-integrations.json", "firmware-cache", "BrowserBridge",
          "cli/deepseek-bundle", "live-test.txt", "desktop-adapters-live.json", "desktop-flame.json",
          *(name + suffix for name in DATABASES for suffix in ("", "-wal", "-shm", "-journal")))
 
@@ -69,7 +69,7 @@ def reset_app(hub):
                 os.replace(staging / name, hub.runtime / name)
             connection = sqlite3.connect(str(hub.runtime / "events.sqlite"), check_same_thread=False)
             connection.row_factory = sqlite3.Row
-            old_engine.db = old_engine.router.db = old_engine.flame.db = old_engine.desktop.db = old_engine.origins.db = connection
+            old_engine.db = old_engine.router.db = old_engine.flame.db = old_engine.desktop.db = old_engine.sound.db = old_engine.origins.db = connection
             hub.engine = old_engine
             hub.config = old_config
             _services(hub)

@@ -145,7 +145,8 @@ class LightStateCanvas(QWidget):
     def pixels(self, elapsed):
         panel = self.panel
         desired = {'key': 'local-preview', 'state': self.state, 'duration_ms': 10000,
-                   'cube_animation_id': ('local-preview', id(panel), panel.revision)}
+                   'cube_animation_id': ('local-preview', id(panel), panel.revision),
+                   'cube_animation_phase': panel.selection_revision}
         if panel.model == YEELIGHT_CUBE_MODEL and panel.settings.get('reminder_mode') in CUBE_MODES:
             return frame(desired, panel.settings, elapsed % 30 if self.state == "working" else elapsed)
         return beam_pixel(desired, panel.settings, elapsed) * 100
@@ -218,6 +219,7 @@ class LightPreviewPanel(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.selected_state = None
+        self.selection_revision = 0
         self.model = YEELIGHT_CUBE_MODEL
         self.settings = {}
         self.revision = 0
@@ -272,6 +274,7 @@ class LightPreviewPanel(QWidget):
             return
         if state and state != self.selected_state:
             self.clock.restart()
+            self.selection_revision += 1
         self.selected_state = state
         for card, (key, _) in zip(self.cards, self.STATES):
             card.setChecked(key == state)
@@ -302,7 +305,7 @@ class LightPreviewPanel(QWidget):
         patterns = {
             'status': ('左侧四点跳动', '问号 · 单个任务', '对勾 · 单个任务'),
             'comet': ('拖尾往返', '两端交替', '从中心展开'),
-            'snake': ('随机吃豆', '停下等你喂食', '吃饱盘起休息'),
+            'snake': ('随机吃豆', '原地暂停 · 蛇头呼吸', '迷你贪吃蛇 · WIN 常亮'),
             'text': ('WORK', 'WAIT', 'DONE'),
         }
         for index, (state, _) in enumerate(self.STATES):

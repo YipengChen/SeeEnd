@@ -41,10 +41,12 @@ class IntegrationGuidanceTests(unittest.TestCase):
         handler = object.__new__(Handler)
         handler.server = SimpleNamespace(context=self.hub, server_address=('127.0.0.1', 8765))
         handler.path = path
+        handler.command = 'GET' if body is None else 'POST'
         handler.headers = Message()
         handler.headers['Host'] = '127.0.0.1:8765'
         if identity == 'dashboard':
-            handler.headers['Cookie'] = 'aiflame=fixture'
+            from test_session_auth import auth_header
+            handler.headers['Authorization'] = auth_header(self.hub, 'GET' if body is None else 'POST', path, None if body is None else json.dumps(body).encode())
         elif identity:
             handler.headers['Authorization'] = 'Bearer fixture-token'
         handler.reply = Mock()

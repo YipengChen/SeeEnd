@@ -38,7 +38,11 @@ class TransportManager:
         # Called under guard. A retiring worker keeps its place until its final
         # lights-off command and connection close have both completed.
         if self.worker:
-            return
+            if self.worker.is_alive():
+                return
+            self.worker = None
+            with self.lock:
+                self.engine.device.update(online=False, connecting=True, status="正在连接设备", last_error=None)
         c = self.config
         if not c.get("device_id"):
             self.engine.device.update(online=False, connecting=False, status="未连接设备，请连接 Yeelight 灯具")

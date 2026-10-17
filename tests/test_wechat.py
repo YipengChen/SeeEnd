@@ -111,7 +111,7 @@ class ProtocolTests(unittest.TestCase):
         def timeout(request, timeout):
             raise TimeoutError()
             yield
-        self.assertEqual(ILinkClient(SimpleNamespace(open=timeout)).updates(ACCOUNT, "cursor"), {"msgs": []})
+        self.assertIsNone(ILinkClient(SimpleNamespace(open=timeout)).updates(ACCOUNT, "cursor"))
 
     def test_receive_owner_context_when_success_omits_ret(self):
         result = {"msgs": [{"from_user_id": "owner", "message_type": 1, "context_token": "new-context"}],
@@ -266,6 +266,100 @@ class ServiceTests(unittest.TestCase):
         self.assertEqual(self.client.calls, [])
         self.assertEqual(self.store.loads, 0)
         with self.assertRaises(EventError): self.engine.update_settings({"wechat_notifications": 1})
+
+    def test_poll_timeouts_require_first_success_expire_health_and_recover(self):
+        self.service.account = dict(ACCOUNT)
+        self.service.bound = True
+        self.engine.update_settings({"wechat_notifications": True})
+        stop = self.service.run_stop = threading.Event()
+        responses = iter(((0, None), (1, {"msgs": []}), (36, None), (72, None),
+                          (92, None), (95, {"msgs": []})))
+        now = [0]
+        def updates(account, cursor):
+            now[0], response = next(responses)
+            return response
+        self.client.updates = updates
+        snapshots = []
+        def after_poll(delay):
+            snapshots.append(self.service.snapshot())
+            if len(snapshots) == 6:
+                stop.set()
+        with patch.object(stop, "wait", side_effect=after_poll), patch(
+                "aiflame.integrations.wechat.service.time.monotonic", side_effect=lambda: now[0]):
+            self.service._receive(self.service.generation, stop)
+        initial, healthy, first_timeout, second_timeout, expired, recovered = snapshots
+        for result in (initial, expired):
+            self.assertFalse(result["available"])
+            self.assertFalse(result["ready"])
+            self.assertFalse(result["receiving"])
+            self.assertIn("超时", result["error"])
+        for result in (healthy, first_timeout, second_timeout, recovered):
+            self.assertTrue(result["available"])
+            self.assertTrue(result["ready"])
+            self.assertTrue(result["receiving"])
+            self.assertEqual(result["error"], "")
+
+    def test_reenable_after_health_expiry_waits_for_fresh_poll(self):
+        self.service.account = dict(ACCOUNT)
+        self.service.bound = True
+        self.service.connection_checked = self.service.receiving = True
+        self.service._last_poll_success = 10
+        now = [20]
+        with patch("aiflame.integrations.wechat.service.time.monotonic", side_effect=lambda: now[0]), \
+                patch.object(self.service, "_workers"):
+            self.assertTrue(self.service.snapshot()["available"])
+            self.service.settings_changed()  # Disabled: stop the old worker.
+            now[0] = 1000
+            self.assertFalse(self.service.snapshot()["available"])
+            self.engine.update_settings({"wechat_notifications": True})
+            self.service.settings_changed()
+            pending = self.service.snapshot()
+            self.assertFalse(pending["ready"])
+            self.assertFalse(pending["receiving"])
+            self.assertFalse(self.service.connection_checked)
+            stop = self.service.run_stop
+            self.client.updates = lambda account, cursor: {"msgs": []}
+            with patch.object(stop, "wait", side_effect=lambda delay: stop.set()):
+                self.service._receive(self.service.generation, stop)
+            self.assertTrue(self.service.snapshot()["available"])
+            self.assertEqual(self.service._last_poll_success, 1000)
+
+    def test_health_expires_while_poll_response_is_still_pending(self):
+        self.service.account = dict(ACCOUNT)
+        self.service.bound = self.service.connection_checked = self.service.receiving = True
+        self.service._last_poll_success = 10
+        self.engine.update_settings({"wechat_notifications": True})
+        self.service.run_stop.clear()
+        with patch("aiflame.integrations.wechat.service.time.monotonic", return_value=100):
+            self.assertTrue(self.service.snapshot()["ready"])
+        with patch("aiflame.integrations.wechat.service.time.monotonic", return_value=100.01):
+            self.assertFalse(self.service.snapshot()["ready"])
+            self.assertFalse(self.service.snapshot()["receiving"])
+
+    def test_stopped_or_replaced_poll_cannot_change_health_or_last_success(self):
+        self.service.account = dict(ACCOUNT)
+        for invalidation in ("stop", "generation"):
+            for response in (None, {"msgs": []}):
+                with self.subTest(invalidation=invalidation, response=response):
+                    stop = self.service.run_stop = threading.Event()
+                    generation = self.service.generation
+                    self.service.connection_checked = True
+                    self.service.receiving = True
+                    self.service.error = "newer worker status"
+                    self.service._last_poll_success = 10
+                    def updates(account, cursor):
+                        if invalidation == "stop":
+                            stop.set()
+                        else:
+                            self.service.generation += 1
+                        return response
+                    self.client.updates = updates
+                    with patch("aiflame.integrations.wechat.service.time.monotonic", return_value=1000):
+                        self.service._receive(generation, stop)
+                    self.assertTrue(self.service.connection_checked)
+                    self.assertTrue(self.service.receiving)
+                    self.assertEqual(self.service.error, "newer worker status")
+                    self.assertEqual(self.service._last_poll_success, 10)
 
     def test_root_states_and_dedup_independent_of_lamp(self):
         self.enable()
@@ -438,12 +532,15 @@ class WechatHttpHandlerTests(unittest.TestCase):
         handler = Handler.__new__(Handler)
         handler.server = SimpleNamespace(context=self.hub)
         handler.path = "/api/wechat"
+        handler.command = "POST"
         handler.headers = Message()
         handler.headers["Host"] = "127.0.0.1:8765"
         handler.headers["Content-Type"] = "application/json"
         payload = json.dumps(body).encode()
         handler.headers["Content-Length"] = str(len(payload))
-        if auth == "dashboard": handler.headers["Cookie"] = "aiflame=" + self.hub.config["dashboard"]
+        if auth == "dashboard":
+            from test_session_auth import auth_header
+            handler.headers["Authorization"] = auth_header(self.hub, "POST", handler.path, payload)
         elif auth: handler.headers["Authorization"] = "Bearer " + self.hub.config["tokens"][auth]
         if origin: handler.headers["Origin"] = origin
         handler.rfile = BytesIO(payload)

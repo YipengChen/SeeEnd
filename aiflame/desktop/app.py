@@ -1,18 +1,14 @@
 """Native Qt Widgets shell and tray; no embedded browser process."""
 
-import http.cookiejar
 import json
 import sys
-import urllib.request
-from aiflame.core.paths import PACKAGE
+from aiflame.core.paths import PACKAGE, dashboard_token
 from aiflame import __version__
 
 
 def existing_hub():
-    jar = http.cookiejar.CookieJar()
-    opener = urllib.request.build_opener(
-        urllib.request.ProxyHandler({}), urllib.request.HTTPCookieProcessor(jar)
-    )
+    from aiflame.core.management_auth import SignedOpener
+    opener = SignedOpener("http://127.0.0.1:8765", dashboard_token)
     try:
         with opener.open("http://127.0.0.1:8765/api/session", timeout=1):
             pass
@@ -124,6 +120,9 @@ def _run_primary(app, instance, resources):
     from aiflame.desktop.notifications import NotificationConsumer, SystemNotifications
     notifications = NotificationConsumer(dashboard, SystemNotifications(tray), app)
     resources.callback(notifications.shutdown)
+    from aiflame.desktop.sound_consumer import SoundConsumer
+    sounds = SoundConsumer(dashboard, parent=app)
+    resources.callback(sounds.shutdown)
     restorer = WindowRestorer(app, window, activate)
     if hasattr(dashboard, "return_failed"):
         dashboard.return_failed.connect(restorer.request)

@@ -87,6 +87,7 @@ class OriginTests(unittest.TestCase):
         self.engine = Engine(Path(self.temp.name) / "events.sqlite", sources=SOURCES)
         self.assertEqual(self.engine.return_target(event["event_id"])[0], event["return_target"])
         self.engine.db.execute("UPDATE events SET created=0")
+        self.engine.db.execute("UPDATE tasks SET updated=0")
         self.engine.cleanup(force=True)
         self.assertEqual(self.engine.db.execute("SELECT count(*) FROM task_origins").fetchone()[0], 0)
 
@@ -207,6 +208,39 @@ class ReturnQueueTests(unittest.TestCase):
     def test_disconnected_profile_is_actionable_failure(self):
         with self.assertRaisesRegex(EventError, "原浏览器"):
             self.service.open("event", web(), "chatgpt-web")
+
+    def test_reconnect_delivers_unpolled_request_once_and_keeps_its_receipt(self):
+        destination = web()
+        client = destination["client_id"]
+        previous = self.service.register(client)["connection_id"]
+        request = self.service.open("event", destination, "chatgpt-web")
+        for _ in range(2):
+            connection = self.service.register(client)["connection_id"]
+        with self.assertRaises(EventError):
+            self.service.poll(client, previous, wait=0)
+        self.assertEqual(self.service.open("event", destination, "chatgpt-web"), request)
+        commands = self.service.poll(client, connection, wait=0)["commands"]
+        self.assertEqual([item["request_id"] for item in commands], [request["request_id"]])
+        self.assertEqual(self.service.poll(client, connection, wait=0)["commands"], [])
+        self.service.result(client, connection, request["request_id"], "opened")
+        self.assertEqual(self.service.status(request["request_id"])["status"], "opened")
+
+    def test_reconnect_never_replays_a_polled_or_expired_request(self):
+        destination = web()
+        client = destination["client_id"]
+        connection = self.service.register(client)["connection_id"]
+        request = self.service.open("delivered", destination, "chatgpt-web")
+        self.assertEqual(len(self.service.poll(client, connection, wait=0)["commands"]), 1)
+        self.service.open("expired", destination, "chatgpt-web")
+        self.now = 19
+        connection = self.service.register(client)["connection_id"]
+        commands = self.service.poll(client, connection, wait=0)["commands"]
+        self.assertEqual(len(commands), 1)
+        self.assertNotEqual(commands[0]["request_id"], request["request_id"])
+        self.service.open("also-expired", destination, "chatgpt-web")
+        self.now = 40
+        connection = self.service.register(client)["connection_id"]
+        self.assertEqual(self.service.poll(client, connection, wait=0)["commands"], [])
 
 
 class TerminalReturnTests(unittest.TestCase):

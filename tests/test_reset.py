@@ -72,7 +72,7 @@ class ResetTests(ResetFixture, unittest.TestCase):
                 (self.runtime / (base + suffix)).write_text("owned old cache")
         for name in ("cli-integrations.json", "live-test.txt", "desktop-adapters-live.json", "desktop-flame.json"):
             (self.runtime / name).write_text("owned old state")
-        for name in ("firmware-cache", "cli/deepseek-bundle"):
+        for name in ("firmware-cache", "cli/deepseek-bundle", "cube-sessions"):
             directory = self.runtime / name
             directory.mkdir(parents=True)
             (directory / "cache.bin").write_bytes(b"old cache")
@@ -114,7 +114,7 @@ class ResetTests(ResetFixture, unittest.TestCase):
         self.assertEqual(saved, self.hub.config)
         self.assertNotIn("old-pairing", json.dumps(saved))
         for name in ("codex-sequences.sqlite", "cli-lifecycle.sqlite", "cli-integrations.json",
-                     "live-test.txt", "desktop-adapters-live.json", "desktop-flame.json", "firmware-cache", "cli/deepseek-bundle"):
+                     "live-test.txt", "desktop-adapters-live.json", "desktop-flame.json", "firmware-cache", "cli/deepseek-bundle", "cube-sessions"):
             self.assertFalse((self.runtime / name).exists(), name)
         for base in ("codex-sequences.sqlite", "cli-lifecycle.sqlite"):
             for suffix in ("-wal", "-shm", "-journal"):
@@ -296,7 +296,8 @@ class ResetHttpTests(ResetFixture, unittest.TestCase):
                                          headers={"Content-Type": "application/json"})
         with self.client.opener.open(request, timeout=5) as response:
             self.assertEqual(response.status, 200)
-            self.assertIn("aiflame=" + self.hub.config["dashboard"], response.headers["Set-Cookie"])
+            self.assertNotIn("Set-Cookie", response.headers)
+            self.assertIn("X-SeeEnd-Proof", response.headers)
             self.assertEqual(json.load(response)["events"], [])
         self.assertIs(self.hub.server, server)
         self.assertIs(self.hub.thread, thread)
@@ -339,7 +340,7 @@ class ResetHttpTests(ResetFixture, unittest.TestCase):
             thread.start()
             try:
                 self.assertTrue(entered.wait(2))
-                self.assertEqual(self.client.request("/api/settings", {"duration": 45})[0], 503)
+                self.assertEqual(self.client.request("/api/settings", {"duration": 45})[0], 409)
             finally:
                 release.set()
                 thread.join(5)

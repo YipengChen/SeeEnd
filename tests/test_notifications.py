@@ -4,6 +4,7 @@ from importlib.util import find_spec
 os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
 import unittest
 from types import SimpleNamespace
+from unittest.mock import patch
 HAS_QT = find_spec("PySide6") is not None
 if HAS_QT:
     from PySide6.QtWidgets import QApplication
@@ -17,13 +18,26 @@ class ConsumerTests(unittest.TestCase):
         cls.app = QApplication.instance() or QApplication([])
 
     def setUp(self):
-        self.message = {"event_id": "e", "claim": "c", "title": "title", "body": "source"}
+        self.message = {"event_id": "e", "claim": "c", "title": "title", "body": "source",
+                        "source_id": "test", "task_id": "task", "seq": 1,
+                        "generation": "generation", "expires": 1015}
         self.calls = []
         self.sent = []
-        self.dashboard = SimpleNamespace(ready=True, api=SimpleNamespace(request=lambda *a, **kw: self.calls.append((a, kw))))
-        self.backend = SimpleNamespace(submit=lambda message, done: (self.sent.append(message), done('submitted')))
+        def request(*args, **kwargs):
+            self.calls.append((args, kwargs))
+            if args[0] == '/api/notifications/validate':
+                args[1]({'valid': True})
+        self.dashboard = SimpleNamespace(ready=True, model={"settings": {
+            "desktop_notifications": True, "source_enabled": {"test": True}}},
+            api=SimpleNamespace(request=request))
+        def submit(message, done):
+            message['_before_submit'](lambda: (self.sent.append(message), done('submitted')))
+        self.backend = SimpleNamespace(submit=submit)
         self.consumer = NotificationConsumer(self.dashboard, self.backend)
         self.addCleanup(self.consumer.shutdown)
+        clock = patch('aiflame.desktop.notifications.time.time', return_value=1000)
+        clock.start()
+        self.addCleanup(clock.stop)
 
     def test_pending_claim_blocks_duplicate_poll_and_submission_is_acknowledged(self):
         self.consumer.poll()
@@ -69,6 +83,74 @@ class ConsumerTests(unittest.TestCase):
         callbacks[1]('denied')
         callbacks[0]('authorized')
         self.assertEqual(statuses, ['denied'])
+
+    def test_validate_response_in_flight_rechecks_channel_source_task_expiry_and_reset(self):
+        from test_sound_consumer import Toggle
+        for reason in ('channel','source','task','expiry','reset'):
+            with self.subTest(reason=reason):
+                self.sent.clear()
+                self.dashboard.model={'settings':{'desktop_notifications':True,'source_enabled':{'test':True}}}
+                self.dashboard.writing=False
+                self.dashboard.checks={'desktop_notifications':Toggle()}
+                self.dashboard.source_checks={'test':Toggle()}
+                pending=[]
+                self.dashboard.api.request=lambda *args,**kwargs: pending.append((args,kwargs))
+                self.consumer.received({'notifications':[dict(self.message)]})
+                validate=next(args[1] for args,kwargs in pending if args[0]=='/api/notifications/validate')
+                if reason in ('channel','source'):
+                    toggle=(self.dashboard.checks['desktop_notifications'] if reason=='channel'
+                            else self.dashboard.source_checks['test'])
+                    toggle.setChecked(False)
+                    toggle.setChecked(True)
+                elif reason=='task':
+                    self.dashboard.model['tasks']=[{'source':'test','task':'task','seq':2}]
+                elif reason=='reset':
+                    self.dashboard.reset_pending=True
+                with patch('aiflame.desktop.notifications.time.time',return_value=2000 if reason=='expiry' else 1000):
+                    validate({'valid':True})
+                self.app.processEvents()
+                self.assertEqual(self.sent,[])
+                self.dashboard.reset_pending=False
+
+    @unittest.skipUnless(__import__('sys').platform == 'darwin', 'macOS native backend')
+    def test_authorization_callback_revalidates_before_native_submission(self):
+        from aiflame.desktop.notifications import SystemNotifications
+        callbacks,posted=[],[]
+        class Center:
+            def requestAuthorizationWithOptions_completionHandler_(self,options,callback):callbacks.append(callback)
+            def addNotificationRequest_withCompletionHandler_(self,request,callback):posted.append(request)
+        backend=SystemNotifications.__new__(SystemNotifications)
+        backend.center=Center()
+        self.consumer.backend=backend
+        self.dashboard.notification_status='authorized'
+        self.consumer.received({'notifications':[self.message]})
+        self.dashboard.model['settings']['desktop_notifications']=False
+        callbacks[0](True,None)
+        self.app.processEvents()
+        self.assertEqual(posted,[])
+
+    def test_pending_claim_cannot_survive_source_disable_reenable_before_response(self):
+        from test_sound_consumer import Toggle
+        self.dashboard.source_checks={'test':Toggle()}
+        self.consumer.poll()
+        callback=self.calls[-1][0][1]
+        self.dashboard.source_checks['test'].setChecked(False)
+        self.dashboard.source_checks['test'].setChecked(True)
+        callback({'notifications':[self.message]})
+        self.app.processEvents()
+        self.assertEqual(self.sent,[])
+
+    def test_unrelated_ui_settings_do_not_cancel_a_validated_notification(self):
+        pending=[]
+        self.dashboard.api.request=lambda *args,**kwargs:pending.append((args,kwargs))
+        self.consumer.received({'notifications':[self.message]})
+        validate=next(args[1] for args,kwargs in pending if args[0]=='/api/notifications/validate')
+        self.dashboard.model['settings']['brightness']=5
+        self.dashboard.model['settings']['source_enabled']['other']=False
+        self.dashboard.writing=True
+        validate({'valid':True})
+        self.app.processEvents()
+        self.assertEqual(len(self.sent),1)
 
     def test_permission_request_does_not_submit_a_notification(self):
         callbacks, statuses = [], []

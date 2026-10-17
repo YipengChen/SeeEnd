@@ -147,7 +147,7 @@ def main():
     assets = resources / "aiflame/assets"
     if (assets / "web").exists():
         raise RuntimeError("Removed web console assets were bundled")
-    for filename in ("brands/codex.png", "devices/yeelight-yldp005.svg", "devices/yeelight-ylfwd0021.svg", "devices/mijia-zncz301kk.svg", "locales/en.json"):
+    for filename in ("sounds/chime.wav", "sounds/pop.wav", "sounds/cat.wav", "brands/codex.png", "brands/taobao.svg", "brands/jd.svg", "devices/yeelight-yldp005.svg", "devices/yeelight-ylfwd0021.svg", "devices/mijia-zncz301kk.svg", "locales/en.json"):
         if not (assets / filename).is_file():
             raise RuntimeError("Missing shared desktop resource: " + filename)
     print("Web console is absent; shared desktop icons and translations are bundled.")

@@ -69,10 +69,11 @@ class FlameOutput:
     def mark(self, event_id, status):
         previous = self.db.execute("SELECT status FROM events WHERE id=?", (event_id,)).fetchone()
         # Ending a displayed prompt cannot undo an acknowledgement already received.
-        if not (previous and previous["status"] == "applied" and status in
-                ("suppressed", "superseded", "expired", "ended_on_reconnect", "dropped")):
+        if not (previous and previous["status"] in ("applied", "sent") and status in
+                ("suppressed", "superseded", "expired", "ended_on_reconnect", "dropped")
+                or previous and previous["status"] == "applied" and status == "sent"):
             self.core.router.record(event_id, self.name, status)
-        if status not in ("queued", "applied", "screen"):
+        if status not in ("queued", "applied", "sent", "screen"):
             self.settle_targets(event_id, status)
 
     def settle_targets(self, event_id, status):
@@ -80,7 +81,7 @@ class FlameOutput:
         for row in rows:
             self.core.router.record(event_id, row["output"], status, row["detail"])
 
-    def record_targets(self, event_id, result, target=None):
+    def record_targets(self, event_id, result, target=None, expires=None):
         from aiflame.devices.models import hardware_model, DEFAULT_MODEL
         from aiflame.devices.light_settings import light_settings
         for key, record in getattr(self.transport, "records", {}).items():
@@ -95,8 +96,13 @@ class FlameOutput:
                           "offline" if not output or not output.device.get("online") else "queued")
             elif result == "suppressed" and light_settings(record)["brightness"] == 0:
                 status = "muted"
-            detail = json.dumps({"name": hardware_model(record.get("hardware_model", DEFAULT_MODEL))["name"]}, ensure_ascii=False)
+            detail = json.dumps({"name": hardware_model(record.get("hardware_model", DEFAULT_MODEL))["name"],
+                                 "session": output.token if output else None,
+                                 "expires": self.wall() + max(0, expires - self.clock()) if expires is not None else self.wall()},
+                                ensure_ascii=False)
             self.core.router.record(event_id, "flame:" + key, status, detail)
+            if output:
+                output.admission_id = event_id
 
     def validate_target(self, event):
         target = event.get("device_id")
@@ -123,7 +129,7 @@ class FlameOutput:
                 self.settle_targets(row["id"], "superseded")
         if not self.settings["source_enabled"].get(key[0], False):
             self.mark(eid, "unmatched")
-            self.record_targets(eid, "unmatched", event.get("device_id"))
+            self.record_targets(eid, "unmatched", event.get("device_id"), event.get("expires"))
             return "unmatched"
         result = "suppressed" if self.muted() else "queued"
         self.cancel_preview()
@@ -164,7 +170,7 @@ class FlameOutput:
                 if victim["id"] == eid:
                     result = "dropped"
         self.mark(eid, result)
-        self.record_targets(eid, result, event.get("device_id"))
+        self.record_targets(eid, result, event.get("device_id"), event.get("expires"))
         return result
 
     def settings_changed(self):
@@ -336,6 +342,10 @@ class FlameOutput:
                 item["deadline"] = self.clock() + item["duration"]
 
     def applied(self, desired, ack, device_id=None):
+        # Pixel streams only acknowledge local transmission. Start the prompt's
+        # timer either way, but only an explicit device ACK is confirmation.
+        status = "applied" if ack.get("result") == "applied" else "sent"
+        recipients = getattr(desired, "event_ids", None)
         if desired.get("preview"):
             current = self.preview_display()
             if current and current["key"] == desired["key"]:
@@ -349,15 +359,17 @@ class FlameOutput:
                 self.current["applied"] = True
                 if not self.current.get("holding") and not self.current["deadline"]:
                     self.current["deadline"] = self.clock() + self.current["duration"]
-            self.mark(self.current["id"], "applied")
+            self.mark(self.current["id"], status)
         elif desired["state"] == "working":
             for item in self.active.values():
-                if device_id is None or item.get("device_id") in (None, device_id):
-                    self.mark(item["id"], "applied")
+                if ((device_id is None or item.get("device_id") in (None, device_id))
+                        and (recipients is None or item["id"] in recipients)):
+                    self.mark(item["id"], status)
         elif desired["state"] == "idle":
-            for row in self.db.execute("SELECT id FROM events WHERE state IN ('idle','cancelled','timeout','unknown') AND status='queued'").fetchall():
-                if device_id is None or self.db.execute("SELECT 1 FROM deliveries WHERE event=? AND output=? AND status='queued'", (row["id"], "flame:" + device_id)).fetchone():
-                    self.mark(row["id"], "applied")
+            for row in self.db.execute("SELECT id FROM events WHERE state IN ('idle','cancelled','timeout','unknown') AND status IN ('queued','sent')").fetchall():
+                if ((recipients is None or row["id"] in recipients)
+                        and (device_id is None or self.db.execute("SELECT 1 FROM deliveries WHERE event=? AND output=? AND status IN ('queued','sent')", (row["id"], "flame:" + device_id)).fetchone())):
+                    self.mark(row["id"], status)
 
     def session_changed(self):
         self.cancel_preview()
@@ -370,7 +382,7 @@ class FlameOutput:
         if display.get("preview"):
             display["task_state"] = display["state"]
             display["simulated"] = True
-            display["device_confirmed"] = self.transport.confirmed(display["key"]) if self.transport and hasattr(self.transport, "confirmed") and self.transport.records else self.last_display_key == display["key"]
+            display["device_confirmed"] = self.transport.confirmed(display["key"]) if self.transport and hasattr(self.transport, "confirmed") and self.transport.records else self.last_display_key == display["key"] and (self.last_command or {}).get("result") == "applied"
             return display
         ids = (
             [self.current["id"]]
@@ -403,11 +415,11 @@ class FlameOutput:
                 all(row["status"] == "applied" for row in records)
                 and len(records) == len(ids)
                 if ids
-                else self.last_display_key == display["key"]
+                else self.last_display_key == display["key"] and (self.last_command or {}).get("result") == "applied"
             )
         )
         if self.transport and hasattr(self.transport, "confirmed") and self.transport.records:
             display["device_confirmed"] = self.transport.confirmed(display["key"])
-            display["confirmed_count"] = sum(output.device.get("online", False) and output.last_display_key == display["key"] for output in self.transport.outputs.values())
+            display["confirmed_count"] = sum(self.transport.output_confirmed(output, display["key"]) for output in self.transport.outputs.values())
             display["connected_count"] = len(self.transport.sessions())
         return display

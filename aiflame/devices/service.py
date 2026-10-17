@@ -5,10 +5,10 @@ import uuid
 from pathlib import Path
 from aiflame.core.events import EventError
 from aiflame.core.paths import write_private
-from aiflame.devices.models import DEFAULT_MODEL, YEELIGHT_MODELS, YEELIGHT_CUBE_MODEL, MIJIA_PLUG_MODELS, MODELS, CONNECTION_KEYS, hardware_model
+from aiflame.devices.models import DEFAULT_MODEL, YEELIGHT_MODELS, MIJIA_PLUG_MODELS, MODELS, CONNECTION_KEYS, hardware_model
 
 class DeviceService:
-    def __init__(self, config, runtime, transport, lock, save=None, bind=None):
+    def __init__(self, config, runtime, transport, lock, save=None, bind=None, known_devices=()):
         self.config, self.runtime = config, Path(runtime)
         self.transport, self.lock = transport, lock
         self.guard = threading.RLock()
@@ -16,6 +16,7 @@ class DeviceService:
         self.thread = None
         self.save = save or (lambda: write_private(self.runtime / "credentials.json", self.config))
         self.bind = bind or (lambda device_id: None)
+        self.known_devices = tuple(dict(record) for record in known_devices)
 
     def status(self):
         with self.lock, self.guard:
@@ -110,9 +111,11 @@ class DeviceService:
                     self.update(100, "扫描仅用于发现 IP 和身份；请扫码获取插座凭据。", state="succeeded",
                                 result={"devices": rows}, finished_at=time.time())
                     return
-                from aiflame.devices.yeelight import discover
+                from aiflame.devices.yeelight import discover_with_known_devices
                 self.update(20, "正在搜索局域网 " + model["name"])
-                rows = discover(model_id=model["id"])
+                with self.lock:
+                    known_devices = (*self.known_devices, dict(self.config))
+                rows = discover_with_known_devices(known_devices, model_id=model["id"])
                 self.update(100, "请选择搜索到的灯具，或手动输入 IP。", state="succeeded",
                             result={"devices": rows}, finished_at=time.time())
                 return
@@ -172,7 +175,7 @@ class DeviceService:
                     self.save()
                 result = {"device_id": physical_id, "board": model["name"]}
             elif action == "connect" and values["hardware_model"] in YEELIGHT_MODELS:
-                from aiflame.devices.yeelight import discover, YeelightClient, CubeClient, verify_control, matches_model
+                from aiflame.devices.yeelight import discover, YeelightClient, verify_control, matches_model
                 self.update(25, "正在识别 Yeelight 灯具")
                 rows = [row for row in discover(values["host"], model_id=model["id"]) if matches_model(row, model["id"])]
                 if not rows:
@@ -183,10 +186,13 @@ class DeviceService:
                 expected = self.config.get("device_id")
                 if expected and expected != info["device_id"]:
                     raise RuntimeError("灯具身份与所选设备不一致，请选择添加新设备")
-                cube = model["id"] == YEELIGHT_CUBE_MODEL
-                client = (CubeClient if cube else YeelightClient)(info["host"])
+                # Maintenance must not create a second Cube UDP session just
+                # before the persistent renderer. Closing a local UDP socket
+                # does not explicitly end its device-side session. TCP setters work on CubeLite
+                # 1.0.0 even though get_prop does not; verify_control uses one.
+                client = YeelightClient(info["host"])
                 try:
-                    self.update(45, "已识别灯具，正在连接控制端口 " + info["host"] + (":55444 / UDP" if cube else ":55443"))
+                    self.update(45, "已识别灯具，正在连接控制端口 " + info["host"] + ":55443")
                     client.open()
                     self.update(65, "控制端口已接通，正在验证灯具控制回执")
                     verify_control(client, model["id"])

@@ -7,7 +7,9 @@ from pathlib import Path
 from aiflame.integrations.registry import SOURCES
 from aiflame.core.engine import Engine
 from aiflame.core.events import EventError, make_event
-from aiflame.devices.cube_effects import CUBE_MODES, frame, SnakeGame, snake_done_positions
+from aiflame.devices.cube_effects import (CUBE_MODES, frame, SnakeGame,
+                                         snake_game, snake_positions, snake_waiting_positions,
+                                         mini_snake_positions, mini_snake_game)
 from aiflame.devices.light_settings import light_settings, validate_patch, migrate_light_settings
 from aiflame.devices.models import YEELIGHT_CUBE_MODEL, YEELIGHT_BEAM_MODEL
 from aiflame.devices.fleet import FleetDeviceService
@@ -16,6 +18,8 @@ from aiflame.transports.fleet import FleetTransportManager
 
 class CubeEffectsTests(unittest.TestCase):
     def setUp(self):
+        snake_game.cache_clear()
+        mini_snake_game.cache_clear()
         self.settings = light_settings({'hardware_model': YEELIGHT_CUBE_MODEL})
 
     def draw(self, mode, state, elapsed=0, **extra):
@@ -61,10 +65,11 @@ class CubeEffectsTests(unittest.TestCase):
                 for mode in CUBE_MODES:
                     with self.subTest(color=color, brightness=brightness, mode=mode):
                         data = self.draw(mode, 'needs_input', 1.2)
-                        # Snake's nose reaches full intensity at 1.2 s; food
-                        # intentionally keeps the completion color.
+                        # Snake's frozen head reaches full intensity at 1.2 s;
+                        # food intentionally keeps the completion color.
                         if mode == 'snake':
-                            offset = (2 * 20 + 10) * 3
+                            (x, y), *_ = snake_waiting_positions('needs_input')[0]
+                            offset = ((4 - y) * 20 + x) * 3
                             self.assertEqual(data[offset:offset + 3], expected)
                         else:
                             lit = {data[i:i + 3] for i in range(0, len(data), 3) if any(data[i:i + 3])}
@@ -175,31 +180,88 @@ class CubeEffectsTests(unittest.TestCase):
         snapshot = game.at(3)
         self.assertEqual(game.at(3), snapshot)
 
-    def test_snake_completion_eats_then_curls_without_body_collisions(self):
+    def test_snake_completion_immediately_shows_full_win_in_right_three_panels(self):
+        self.settings['colors']['done'] = '#123456'
+        self.settings['state_brightness']['done'] = 50
+        final = self.draw('snake', 'done', 0)
+        def right_panels(data):
+            return b''.join(data[y * 60 + 15:(y + 1) * 60] for y in range(5))
+        for elapsed in (.1, .2, .4, .8, 1.2, 1.3, 3, 4.2, 60):
+            self.assertEqual(right_panels(final), right_panels(self.draw('snake', 'done', elapsed)))
+        expected = ('10001' '01110' '10001',
+                    '10001' '00100' '11001',
+                    '10101' '00100' '10101',
+                    '10101' '00100' '10011',
+                    '01010' '01110' '10001')
+        for y, row in enumerate(expected):
+            for x, bit in enumerate(row):
+                offset = ((4 - y) * 20 + 5 + x) * 3
+                self.assertEqual(final[offset:offset + 3], bytes((9, 26, 43)) if bit == '1' else bytes(3))
+        self.assertNotEqual(final, self.draw('snake', 'done', 3))
+        body, food = mini_snake_positions(0, 'done')
+        left_lit = {(x, y) for y in range(5) for x in range(5)
+                    if any(final[((4 - y) * 20 + x) * 3:((4 - y) * 20 + x + 1) * 3])}
+        self.assertEqual(left_lit, set(body) | {food})
+        for tick in range(13):
+            self.assertTrue(any(self.draw('snake', 'done', tick / 10)))
+        self.assertEqual(self.draw('snake', 'done', -1), self.draw('snake', 'done', 0))
+
+    def test_mini_snake_grows_inside_left_four_columns_then_restarts_when_full(self):
         previous = None
-        for tick in range(61):
-            elapsed = tick / 10
-            body, food = snake_done_positions(elapsed)
+        sizes = set()
+        full_at = None
+        for tick in range(1000):
+            body, food = mini_snake_positions(tick / 2)
+            sizes.add(len(body))
             self.assertEqual(len(set(body)), len(body))
             self.assertNotIn(food, body)
-            self.assertEqual(len(body), 11 if elapsed < .4 else 12)
+            self.assertTrue(all(0 <= x < 4 and 0 <= y < 5 for x, y in body))
+            if food is not None:
+                self.assertTrue(0 <= food[0] < 4 and 0 <= food[1] < 5)
             for a, b in zip(body, body[1:]):
                 self.assertEqual(abs(a[0] - b[0]) + abs(a[1] - b[1]), 1)
-            if previous and body != previous:
-                # Sampling can span two discrete movement slots due to floats.
-                self.assertLessEqual(abs(body[0][0] - previous[0][0]) + abs(body[0][1] - previous[0][1]), 2)
-            previous = body
-        self.assertEqual(snake_done_positions(3), snake_done_positions(60))
-        self.assertNotEqual(self.draw('snake', 'done', .5), self.draw('snake', 'done', 1))
-        self.assertNotEqual(self.draw('snake', 'done', 3), self.draw('snake', 'done', 4.2))
+            if previous:
+                old_body, old_food = previous
+                if body[0] == old_food:
+                    self.assertEqual(len(body), len(old_body) + 1)
+                    self.assertEqual(body[1:], old_body)
+                    self.assertNotEqual(food, old_food)
+                else:
+                    self.assertEqual(len(body), len(old_body))
+                    self.assertEqual(body[1:], old_body[:-1])
+                    self.assertEqual(food, old_food)
+            previous = body, food
+            if len(body) == 20:
+                full_at = tick
+                self.assertIsNone(food)
+                break
+        self.assertIsNotNone(full_at)
+        self.assertEqual(sizes, set(range(4, 21)))
+        for tick in range(full_at, full_at + 8):
+            self.assertEqual(mini_snake_positions(tick / 2), previous)
+        self.assertEqual(len(mini_snake_positions((full_at + 8) / 2)[0]), 4)
+
+    def test_mini_snake_game_never_lights_separator_column_or_changes_win(self):
+        initial = self.draw('snake', 'done', 0)
+        for tick in range(160):
+            data = self.draw('snake', 'done', tick / 2)
+            for y in range(5):
+                self.assertEqual(data[y * 60 + 12:y * 60 + 15], bytes(3))
+                self.assertEqual(data[y * 60 + 15:(y + 1) * 60], initial[y * 60 + 15:(y + 1) * 60])
 
     def test_snake_attention_holds_position_and_breathes_with_state_brightness(self):
         def lit(data):
             return {i // 3 for i in range(0, 300, 3) if any(data[i:i + 3])}
-        first = self.draw('snake', 'needs_input', 0)
-        later = self.draw('snake', 'needs_input', 1.3)
+        body, food = snake_positions(12, 'inherited', 'working')
+        working = self.draw('snake', 'working', 12, cube_animation_id='inherited', cube_animation_phase='working')
+        first = self.draw('snake', 'needs_input', 0, cube_animation_id='inherited', cube_animation_phase='waiting')
+        later = self.draw('snake', 'needs_input', 1.3, cube_animation_id='inherited', cube_animation_phase='waiting')
         self.assertEqual(lit(first), lit(later))
-        self.assertEqual(lit(first), set(range(40, 51)) | {52})
+        self.assertEqual(lit(first), lit(working))
+        self.assertEqual(snake_waiting_positions('inherited', 'waiting'), (body, food))
+        self.assertEqual(snake_game('inherited').step, 48)
+        self.assertEqual(lit(first), lit(self.draw('snake', 'needs_input', 60,
+                                                cube_animation_id='inherited', cube_animation_phase='waiting')))
         self.assertNotEqual(first, later)
         self.settings['state_brightness']['needs_input'] = 0
         self.settings['state_brightness']['done'] = 0
@@ -207,23 +269,31 @@ class CubeEffectsTests(unittest.TestCase):
             for elapsed in (0, .4, 1, 2, 3, 5):
                 self.assertEqual(self.draw('snake', state, elapsed), bytes(300))
 
+    def test_snake_wait_snapshot_refreshes_after_work_without_explicit_phase(self):
+        first = snake_positions(1, 'implicit-phase')
+        self.assertEqual(snake_waiting_positions('implicit-phase'), first)
+        current = snake_positions(2, 'implicit-phase')
+        self.assertNotEqual(first, current)
+        self.assertEqual(snake_waiting_positions('implicit-phase'), current)
+        self.assertEqual(snake_waiting_positions('implicit-phase'), current)
+
     def test_snake_food_uses_done_color_and_current_state_brightness(self):
-        from aiflame.devices.cube_effects import snake_positions
         self.settings['colors'].update(working='#FF0000', done='#00FF00', needs_input='#0000FF')
         self.settings['state_brightness'].update(working=40, done=90, needs_input=20)
         for state, elapsed, food, value in (
             ('working', 0, None, 102),
             ('working', .3, None, 102),
-            ('needs_input', 0, (12, 2), 46),
-            ('needs_input', 1.3, (12, 2), 46),
+            ('needs_input', 0, None, 46),
+            ('needs_input', 1.3, None, 46),
         ):
             data = self.draw('snake', state, elapsed)
-            x, y = food if food is not None else snake_positions(elapsed, 'working')[1]
+            x, y = (snake_waiting_positions('needs_input')[1] if state == 'needs_input'
+                    else snake_positions(elapsed, 'working')[1])
             start = ((4 - y) * 20 + x) * 3
             self.assertEqual(data[start:start + 3], bytes((0, value, 0)))
         before = self.draw('snake', 'done', 0)
         after = self.draw('snake', 'done', 1.05)
-        self.assertTrue(any(before[i] for i in range(0, 300, 3)))
+        self.assertFalse(any(before[i] for i in range(0, 300, 3)))
         self.assertFalse(any(after[i] for i in range(0, 300, 3)))
 
     def fixture(self, directory):

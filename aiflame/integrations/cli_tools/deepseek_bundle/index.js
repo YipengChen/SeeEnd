@@ -54,17 +54,28 @@ export function createBridge(ctx, config = {}, dependencies = {}) {
     task.lastActivity = now;
     emit(sessionId, task.turn, 'TurnActivity');
   };
+  const cancel = sessionId => {
+    const task = active.get(sessionId);
+    if (!task) return;
+    active.delete(sessionId);
+    emit(sessionId, task.turn, 'Interrupt');
+  };
   ctx.on('session/event', (session, event) => {
     if (disposed || !rootSession(session)) return;
     if (event.type === 'turn/start') {
+      if (active.get(session.id)?.turn === event.data.turn) return;
+      cancel(session.id);
       active.set(session.id, { turn: event.data.turn, lastActivity: clock() });
       emit(session.id, event.data.turn, 'TurnStart');
     } else if (event.type === 'turn/end') {
       const task = active.get(session.id);
       if (!task || task.turn !== event.data.turn) return;
-      active.delete(session.id);
       const reason = event.data.reason.kind;
-      if (reason !== 'interrupted' && reason !== 'forked') emit(session.id, event.data.turn, 'TurnEnd', reason);
+      if (reason === 'interrupted' || reason === 'forked') cancel(session.id);
+      else {
+        active.delete(session.id);
+        emit(session.id, event.data.turn, 'TurnEnd', reason);
+      }
     } else if (['step/start', 'tool/call', 'tool/result', 'assistant/message'].includes(event.type)) {
       activity(session.id);
     }
@@ -72,7 +83,7 @@ export function createBridge(ctx, config = {}, dependencies = {}) {
   ctx.on('agent/assistant-stream', ({ agent, frame }) => {
     if (!disposed && frame.type === 'chunk') activity(agent.session.id);
   });
-  ctx.on('session/disposed', session => active.delete(session.id));
+  ctx.on('session/disposed', session => cancel(session.id));
   // Keep a long streaming request alive without needing its text or tool output.
   const heartbeat = (dependencies.setInterval ?? setInterval)(() => {
     if (disposed) return;
@@ -87,7 +98,7 @@ export function createBridge(ctx, config = {}, dependencies = {}) {
   ctx.on('dispose', async () => {
     disposed = true;
     (dependencies.clearInterval ?? clearInterval)(heartbeat);
-    active.clear();
+    for (const sessionId of active.keys()) cancel(sessionId);
     await pending;
   });
   return { drain: () => pending };
