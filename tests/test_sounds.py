@@ -1,4 +1,5 @@
 """Sound lifecycle behavior without opening an audio device."""
+from contextlib import ExitStack
 import datetime as dt
 import os
 import tempfile
@@ -137,7 +138,8 @@ class SoundOutputTests(unittest.TestCase):
         self.assertEqual(self.engine.sound.accept({**event, "expires": self.now}), "expired")
 
     def test_preferences_persist_but_pending_audio_does_not_replay_after_restart(self):
-        with tempfile.TemporaryDirectory() as folder:
+        with tempfile.TemporaryDirectory() as folder, ExitStack() as cleanup:
+            cleanup.callback(lambda: self.engine.db.close())
             self.engine.db.close()
             path = Path(folder) / "events.sqlite"
             self.engine = self.create_engine(path)
