@@ -72,7 +72,13 @@ python packaging/archive.py
 
 当前 macOS 包仍为 ad-hoc 签名，deep/strict 完整性验证通过，未 Developer ID 签名或公证。本会话可见有效 Developer ID Application identity 为 0，不代表用户没有开发者会员或其他机器上没有证书。[签名与公证流程](../validation/acceptance-0.8.68/signing-workflow.txt)说明证书、最小权限、由内到外签名、notarytool Accepted、APP staple 后重建 ZIP 和真实下载验收。
 
-Windows 完整编译回归的[首次运行](https://github.com/YipengChen/SeeEnd/actions/runs/39028892983)执行 840 项：823 通过、16 跳过、0 断言失败、1 清理错误。唯一错误来自测试临时 SQLite 连接晚于目录删除才关闭，现以局部 ExitStack 修复关闭顺序，未改产品源码。本地关联 11 项及 Windows 失败用例定向预检通过；[后续运行](https://github.com/YipengChen/SeeEnd/actions/runs/39030419466)继续原生导入、冻结、归档和 EXE 启动检查，不重复此前 840 项全量。macOS 随测试修复再次构建，36 个原生导入、冻结及归档重新通过；前述 837/3 的全量记录仍对应同一产品源码指纹。后续 Windows 最终结果如下。完整日志、去除消息内容的网页状态记录、验收结果与制品校验见[验证目录](../validation/acceptance-0.8.68/)。本地 prepared 已更新，公开发布版本保持原状。
+Windows 完整编译回归的[首次运行](https://github.com/YipengChen/SeeEnd/actions/runs/39028892983)执行 840 项：823 通过、16 跳过、0 断言失败、1 清理错误。唯一错误来自测试临时 SQLite 连接晚于目录删除才关闭，现以局部 ExitStack 修复关闭顺序，未改产品源码。本地关联 11 项及 Windows 失败用例定向预检通过；[后续运行](https://github.com/YipengChen/SeeEnd/actions/runs/39030419466)继续原生导入、冻结、归档和 EXE 启动检查，不重复此前 840 项全量。macOS 随测试修复再次构建，36 个原生导入、冻结及归档重新通过；前述 837/3 的全量记录仍对应同一产品源码指纹。后续 Windows 最终结果如下。完整日志、去除消息内容的网页状态记录、验收结果与制品校验见[验证目录](../validation/acceptance-0.8.68/)。本轮验收后已公开发布 App 0.8.68 和 Skill 1.0.5；发布资产完成匿名完整下载及 SHA-256 校验，公开状态见下载仓库。
+
+### 0.8.68 三仓同步与公开发布
+
+App、Skill 与下载仓库同步当前版本。Skill 1.0.5 文档和契约快照对齐 App 0.8.68；在实际运行 App 上发现多设备与较多活动记录的状态响应约 5.8 MB，超出客户端原 2 MiB 上限，误报为鉴权失败。现将响应上限与 App 客户端对齐为 32 MiB，保留完整响应验签和输出白名单。新增 3 MiB 正常响应通过、同一响应被篡改后拒绝的回归；共 40 项测试通过，独立 ZIP 解压后对实际冻结 App 执行 contract/status 均通过。未改变 App 二进制及产品源码指纹。
+
+公开 Release 同时提供 macOS Apple 芯片和 Windows x64 App、两平台独立第三方材料、扩展、构建收据及校验清单；独立 Skill 1.0.5 也已发布。GitHub 的 11 个 App Release 资产及独立 Skill 资产，共 12 次匿名完整下载与 SHA-256 校验通过；发布状态与来源清单见[0.8.68 公开资料](https://github.com/YipengChen/SeeEnd-downloads/tree/main/releases/v0.8.68)。Chrome 商店未因此自动上传或提交新版本。
 
 ### 0.8.68 Windows x64 最终结果
 
