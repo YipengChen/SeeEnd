@@ -80,6 +80,10 @@ App、Skill 与下载仓库同步当前版本。Skill 1.0.5 文档和契约快�
 
 公开 Release 同时提供 macOS Apple 芯片和 Windows x64 App、两平台独立第三方材料、扩展、构建收据及校验清单；独立 Skill 1.0.5 也已发布。GitHub 的 11 个 App Release 资产及独立 Skill 资产，共 12 次匿名完整下载与 SHA-256 校验通过；发布状态与来源清单见[0.8.68 公开资料](https://github.com/YipengChen/SeeEnd-downloads/tree/main/releases/v0.8.68)。Chrome 商店未因此自动上传或提交新版本。
 
+### 0.8.68 Linux 源码 CI 已知问题
+
+三仓同步时另执行了 Ubuntu 22.04 源码 CI：Python 3.11、3.13 各 840 项中 822 通过、17 跳过、1 失败，均为英文 920 像素窄窗、微信已绑定但连接异常时操作按钮导致 12 像素横向滚动。此项为真实字体度量下的布局边界，保留失败断言，尚未修复；macOS 默认字体同用例定向复测通过，Windows 未补验这一具体状态。源码 CI 不记为全通过，也不据此替代前述安装包验证。公开包保留原始字节与源码指纹；Linux 未发布安装包，布局修复留待后续版本。
+
 ### 0.8.68 Windows x64 最终结果
 
 [最终成功运行](https://github.com/YipengChen/SeeEnd/actions/runs/39030920931)对应隔离快照提交 `bfb30db9e243fc7a065accb9733c5cc5d18bb13e`。20 项源码接入、34 项设备回归、201 项 JavaScript、测试资源清理定向复测及 2 项 CI 端口预检通过；36 个原生模块无 Python 回退，冻结包的 25 项辅助进程和 3 项真实 HTTP 生命周期检查通过。首次全量 Windows 回归结果与后续定向补验分开记录，不将后续构建说成重新执行全部 840 项。
