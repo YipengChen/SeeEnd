@@ -1,6 +1,5 @@
 """Bounded loopback requests on one reusable worker, with Qt UI delivery only."""
 
-import http.cookiejar
 import json
 import queue
 import threading
@@ -8,6 +7,8 @@ import urllib.error
 import urllib.request
 
 from PySide6.QtCore import QObject, Qt, Signal, Slot
+from aiflame.core.paths import dashboard_token
+from aiflame.core.management_auth import NoRedirect, SignedOpener
 
 
 class LocalAPI(QObject):
@@ -53,7 +54,7 @@ class LocalAPI(QObject):
     def _run(self):
         opener = urllib.request.build_opener(
             urllib.request.ProxyHandler({}),
-            urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()),
+            NoRedirect(),
         )
         while True:
             job = self.jobs.get()
@@ -80,8 +81,10 @@ class LocalAPI(QObject):
         )
         request = urllib.request.Request(self.base + path, data=body, headers=headers)
         try:
+            if getattr(self, "signed_opener", None) is None or self.signed_opener.opener is not opener:
+                self.signed_opener = SignedOpener(self.base, dashboard_token, opener=opener)
             timeout = 35 if path in ("/api/integrations/install", "/api/integrations/uninstall", "/api/reset", "/api/device/delete") else 5
-            with opener.open(request, timeout=timeout) as response:
+            with self.signed_opener.open(request, timeout=timeout) as response:
                 data = response.read(32 * 1024 * 1024 + 1)
             if len(data) > 32 * 1024 * 1024:
                 raise ValueError()

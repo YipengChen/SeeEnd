@@ -33,5 +33,18 @@ class NotificationHttpTests(unittest.TestCase):
         receipt = {'event_id': message['event_id'], 'claim': message['claim'], 'status': 'denied'}
         self.assertEqual(self.client.call('/api/notifications/ack', receipt)['status'], 'denied')
         receipts = {r['output']: r['status'] for r in self.client.call('/api/status')['deliveries']}
-        self.assertEqual(receipts, {'flame': 'suppressed', 'desktop': 'denied', 'wechat': 'disabled'})
+        self.assertEqual(receipts, {'flame': 'suppressed', 'desktop': 'denied', 'sound': 'disabled', 'wechat': 'disabled'})
         self.assertEqual(self.client.request('/api/notifications/ack', receipt)[0], 409)
+
+    def test_single_task_unknown_recovery_requires_dashboard_and_rejects_stale_event(self):
+        event = make_event('codex', 'residual', 'working')
+        with self.hub.lock:
+            self.hub.engine.accept(event, 'codex')
+        body = {'event_id': event['event_id']}
+        self.assertEqual(self.client.request('/api/tasks/mark-unknown', body, authenticated=False)[0], 401)
+        self.assertEqual(self.client.call('/api/tasks/mark-unknown', body)['state'], 'unknown')
+        self.assertEqual(self.client.request('/api/tasks/mark-unknown', body)[0], 409)
+        self.assertEqual(self.client.request('/api/tasks/mark-unknown', {**body, 'all': True})[0], 400)
+        with self.hub.lock:
+            self.hub.engine.accept(make_event('codex', 'residual', 'done', 2), 'codex')
+        self.assertEqual(self.client.request('/api/tasks/mark-unknown', body)[0], 409)

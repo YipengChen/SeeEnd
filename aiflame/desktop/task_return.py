@@ -53,6 +53,18 @@ class TaskReturnActions:
         if self.history.selectionModel().hasSelection() and 0 <= row < len(self.visible_events):
             self.return_task(self.visible_events[row]["id"])
 
+    def mark_selected_task_unknown(self):
+        row = self.history.currentRow()
+        if (not self.ready or self.writing or not self.history.selectionModel().hasSelection()
+                or not 0 <= row < len(self.visible_events)):
+            return
+        event = self.visible_events[row]
+        if not event.get("can_mark_unknown"):
+            return
+        self.mark_unknown_button.setEnabled(False)
+        self.act("/api/tasks/mark-unknown", {"event_id": event["id"]},
+                 failed=lambda: self.mark_unknown_button.setEnabled(True))
+
     def return_displayed_task(self):
         if not self.ready:
             self.return_failed_message("本地服务未连接，请重新打开 SeeEnd。")

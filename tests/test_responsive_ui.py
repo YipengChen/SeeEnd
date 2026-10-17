@@ -214,7 +214,10 @@ class ResponsiveUiTests(unittest.TestCase):
         self.assertEqual(self.widget.home_top.direction(), QBoxLayout.Direction.LeftToRight)
         self.render("en")
         self.assertEqual(self.widget.home_top.direction(), QBoxLayout.Direction.TopToBottom)
-        self.assertEqual(len({item.y() for item in self.widget.home_channel_items}), 2)
+        # Five channels wrap to three rows at this English sidebar width.
+        self.assertEqual(len({item.y() for item in self.widget.home_channel_items}), 3)
+        for item in self.widget.home_channel_items:
+            self.assertTrue(item.parentWidget().rect().contains(self.geometry_in(item, item.parentWidget())))
         self.widget.navigate(0)
         self.settle()
         apps = self.geometry_in(self.widget.home_sources_frame, self.widget)

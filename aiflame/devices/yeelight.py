@@ -1,30 +1,44 @@
 """Yeelight LAN discovery and bounded request/response control (official LAN spec)."""
 import ipaddress
+import hashlib
 import base64
 import json
 import socket
 import time
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 from urllib.parse import urlsplit
-from aiflame.devices.models import YEELIGHT_MODELS, YEELIGHT_CUBE_MODEL, hardware_model
+from aiflame.devices.models import DEFAULT_MODEL, YEELIGHT_MODELS, YEELIGHT_CUBE_MODEL, hardware_model
 
 DISCOVERY_ADDRESS = ("239.255.255.250", 1982)
 CONTROL_PORT = 55443
 DISCOVERY_TIMEOUT = 4.0
 DISCOVERY_ATTEMPTS = 3
 DISCOVERY_RETRY_INTERVAL = 1.0
+DISCOVERY_UNICAST_WORKERS = 4
 # W3 (colorb, fw_ver 7) can accept TCP before its command handler is ready.
 # Queries sent immediately may be silently lost; a bounded settle period avoids
 # this on both the maintenance connection and the persistent transport.
 CONNECTION_READY_DELAY = .5
 # Cube uses its UDP pixel session, not quota-limited TCP frame commands.
 CUBE_COMMAND_INTERVAL = .1
+CUBE_CONTROL_INTERVAL = 60
+CUBE_STATIC_REFRESH_INTERVAL = 1
 QUOTA_RETRY_DELAY = 65
 REQUEST = (b'M-SEARCH * HTTP/1.1\r\nHOST: 239.255.255.250:1982\r\n'
            b'MAN: "ssdp:discover"\r\nST: wifi_bulb\r\n\r\n')
 
 
+def cube_session_path(runtime, device_id):
+    return Path(runtime) / "cube-sessions" / (hashlib.sha256(device_id.encode()).hexdigest() + ".json")
+
+
 class YeelightQuotaError(ValueError):
     """Device explicitly refused traffic because its command quota was used."""
+
+
+class CubeControlError(TimeoutError):
+    """The UDP session is reachable but an actuator command was not confirmed."""
 
 
 def raise_command_error(error):
@@ -42,11 +56,12 @@ def verify_control(client, model_id, properties=None):
     """Validate a real command reply without inventing device state.
 
     CubeLite 1.0.0 acknowledges setters but silently ignores get_prop. Its
-    direct renderer uses full master brightness and scales pixels itself, so
-    normalize that brightness here and require the actual setter ACK.
+    direct renderer restores full master brightness only after power-off and
+    before a black startup frame. Verify at minimum brightness so reconnecting
+    cannot restore a previous bright image at full power.
     """
     if model_id == YEELIGHT_CUBE_MODEL:
-        response = client.command("set_bright", [100])
+        response = client.command("set_bright", [1])
         if response.get("result") != ["ok"]:
             raise ValueError("Cube Lite 未确认亮度控制指令")
     else:
@@ -148,6 +163,43 @@ def discover(host=None, timeout=DISCOVERY_TIMEOUT, *, model_id=None, stopping=No
                 found[item["device_id"]] = item
                 if host:
                     break
+    return list(found.values())
+
+
+def discover_with_known_devices(known_devices=(), timeout=DISCOVERY_TIMEOUT, *, model_id=None, stopping=None):
+    """Supplement multicast misses with bounded parallel queries to saved IPs."""
+    rows = discover(timeout=timeout, model_id=model_id, stopping=stopping)
+    found = {row["device_id"]: row for row in rows}
+    seen_hosts = {row["host"] for row in rows}
+    pending = []
+    for record in known_devices:
+        saved_model = record.get("hardware_model", DEFAULT_MODEL)
+        if (saved_model not in YEELIGHT_MODELS or (model_id and saved_model != model_id)
+                or record.get("device_id") in found):
+            continue
+        try:
+            host = lan_host(record.get("yeelight_host"))
+        except ValueError:
+            continue
+        if host not in seen_hosts:
+            seen_hosts.add(host)
+            pending.append(host)
+    if not pending or timeout <= 0 or (stopping and stopping.is_set()):
+        return rows
+
+    def probe(host):
+        if stopping and stopping.is_set():
+            return []
+        try:
+            return discover(host, timeout=timeout, model_id=model_id, stopping=stopping)
+        except OSError:
+            # One stale/offline address must not discard other discovery results.
+            return []
+
+    with ThreadPoolExecutor(max_workers=min(DISCOVERY_UNICAST_WORKERS, len(pending))) as pool:
+        for replies in pool.map(probe, pending):
+            for row in replies:
+                found.setdefault(row["device_id"], row)
     return list(found.values())
 
 
@@ -302,8 +354,11 @@ class CubeClient(YeelightClient):
     TCP update_leds consumes the ordinary command quota. UDP supports sustained
     frames and acknowledged setup/heartbeats; frames themselves remain sent.
     """
-    def __init__(self, host, stopping=None):
+    def __init__(self, host, stopping=None, session_path=None):
         super().__init__(host, stopping)
+        self.session_path = Path(session_path) if session_path else None
+        self.reserved_sequence = 0
+        self.session_reused = False
         self.udp = None
         self.token = None
         self.direct = False
@@ -312,9 +367,62 @@ class CubeClient(YeelightClient):
         self.last_frame_at = 0
         self.last_frame_response = None
         self.pending_heartbeat = None
+        self.pending_control = None
+        self.last_control_ack = 0
+
+    def load_session(self):
+        if self.session_path is None:
+            return None
+        try:
+            saved = json.loads(self.session_path.read_text(encoding="utf-8"))
+        except (FileNotFoundError, ValueError, UnicodeError):
+            return None
+        if (not isinstance(saved, dict) or saved.get("format_version") != 1
+                or not isinstance(saved.get("host"), str)
+                or type(saved.get("local_port")) is not int or not 1 <= saved["local_port"] <= 65535
+                or not isinstance(saved.get("token"), str) or not 1 <= len(saved["token"]) <= 128
+                or type(saved.get("next_sequence")) is not int or saved["next_sequence"] < 1):
+            return None
+        return saved
+
+    def save_session(self):
+        if self.session_path is not None and self.token and self.udp:
+            from aiflame.core.paths import write_private
+            write_private(self.session_path, {"format_version": 1, "host": self.host,
+                          "local_port": self.udp.getsockname()[1], "token": self.token,
+                          "next_sequence": self.reserved_sequence})
+
+    def next_id(self):
+        # Reserve a range before using it. Restart/crash recovery skips the
+        # unused remainder without writing a credential file on every frame.
+        if self.seq + 1 >= self.reserved_sequence:
+            self.reserved_sequence = self.seq + 65536
+            self.save_session()
+        self.seq += 1
+        return self.seq
+
+    def handle_response(self, response):
+        if not isinstance(response, dict):
+            return
+        if "error" in response:
+            raise_command_error(response["error"])
+        for field, clock in (("pending_heartbeat", "last_keep_alive"),
+                             ("pending_control", "last_control_ack")):
+            pending = getattr(self, field)
+            if pending and response.get("id") == pending["id"]:
+                if response.get("result") != ["ok"]:
+                    raise ValueError("Cube Lite 局域网控制回执无效")
+                setattr(self, clock, time.monotonic())
+                setattr(self, field, None)
+                if field == "pending_control":
+                    # A brightness setter can restore an older firmware image.
+                    # Always render the current desired frame again after its ACK.
+                    self.last_frame = None
 
     def udp_command(self, method, params, *, acknowledge=True):
-        self.seq += 1
+        if self.stopping and self.stopping.is_set():
+            raise OSError("服务已停止")
+        self.next_id()
         packet = {"id": self.seq, "method": method, "params": params}
         if self.token:
             packet["token"] = self.token
@@ -339,14 +447,17 @@ class CubeClient(YeelightClient):
                     retries += 1
                     retry_at = time.monotonic() + .25
                 continue
+            self.handle_response(response)
             if not isinstance(response, dict):
                 continue
-            # Errors for earlier unacknowledged frames must not be discarded
-            # while waiting for the next heartbeat's id.
-            if "error" in response:
-                raise_command_error(response["error"])
             if response.get("id") == self.seq:
+                if method != "udp_sess_new" and response.get("result") != ["ok"]:
+                    raise ValueError("Cube Lite 局域网控制回执无效")
+                if method in ("set_bright", "set_power", "activate_fx_mode") and response.get("result") == ["ok"]:
+                    self.last_control_ack = time.monotonic()
                 return response
+        if method in ("set_bright", "set_power", "activate_fx_mode"):
+            raise CubeControlError(f"Cube Lite {method} 控制指令未收到回执，暂停发送并等待 65 秒后重试")
         raise TimeoutError("Cube Lite UDP 局域网会话未收到回执")
 
     def keep_alive(self):
@@ -357,13 +468,40 @@ class CubeClient(YeelightClient):
 
     def open(self):
         try:
+            if self.stopping and self.stopping.is_set():
+                raise OSError("服务已停止")
+            saved = self.load_session()
             self.udp = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            if saved:
+                # The lamp sees IP/port, not the process's socket descriptor.
+                # The caller supplies a cache per physical device, so retain
+                # the endpoint even when discovery finds a new DHCP address.
+                # Reuse the endpoint and token across GUI updates/restarts.
+                # Do not use SO_REUSEADDR: a live owner must prevent a second
+                # process from controlling the same endpoint concurrently.
+                self.udp.bind(("", saved["local_port"]))
+                self.seq = saved["next_sequence"]
+                self.token = saved["token"]
             self.udp.connect((self.host, 55444))
             self.udp.settimeout(.05)
+            if saved:
+                try:
+                    self.keep_alive()
+                except YeelightQuotaError:
+                    raise
+                except (TimeoutError, ValueError):
+                    # A lamp reboot or an evicted token requires one fresh
+                    # handshake on the same endpoint; a send error does not.
+                    self.token = None
+                else:
+                    self.session_reused = True
+                    return self
             response = self.udp_command("udp_sess_new", [])
-            self.token = response.get("params", {}).get("token")
+            params = response.get("params")
+            self.token = params.get("token") if isinstance(params, dict) else None
             if not isinstance(self.token, str) or not self.token or len(self.token) > 128:
                 raise ValueError("Cube Lite 局域网会话 token 无效")
+            self.save_session()
             self.keep_alive()
             return self
         except Exception:
@@ -377,43 +515,51 @@ class CubeClient(YeelightClient):
         for _ in range(64):
             if not select.select([self.udp], [], [], 0)[0]:
                 break
-            response = json.loads(self.udp.recv(8192))
-            if not isinstance(response, dict):
-                continue
-            if "error" in response:
-                raise_command_error(response["error"])
-            pending = self.pending_heartbeat
-            if pending and response.get("id") == pending["id"]:
-                if response.get("result") != ["ok"]:
-                    raise ValueError("Cube Lite 局域网会话回执无效")
-                self.last_keep_alive = time.monotonic()
-                self.pending_heartbeat = None
+            self.handle_response(json.loads(self.udp.recv(8192)))
         now = time.monotonic()
-        pending = self.pending_heartbeat
-        if pending:
+        for field in ("pending_heartbeat", "pending_control"):
+            pending = getattr(self, field)
+            if not pending:
+                continue
             if now >= pending["deadline"]:
+                if field == "pending_control":
+                    raise CubeControlError("Cube Lite 亮度控制在 2 秒内未收到回执，暂停发送并等待 65 秒后重试")
                 raise TimeoutError("Cube Lite UDP 局域网会话未收到回执")
             if now >= pending["retry_at"] and pending["retries"] < 2:
                 self.udp.send(pending["wire"])
                 pending["retries"] += 1
                 pending["retry_at"] = now + .25
-        elif now - self.last_keep_alive >= 5:
-            self.seq += 1
+                if field == "pending_control":
+                    self.last_frame = None
+        if not self.pending_heartbeat and now - self.last_keep_alive >= 5:
+            self.next_id()
             wire = (json.dumps({"id": self.seq, "method": "udp_sess_keep_alive",
                                 "params": ["keeplive_interval", 10], "token": self.token},
                                separators=(",", ":")) + "\r\n").encode()
             self.udp.send(wire)
             self.pending_heartbeat = {"id": self.seq, "wire": wire, "deadline": now + 2,
                                       "retry_at": now + .25, "retries": 0}
+        if self.direct and not self.pending_control and now - self.last_control_ack >= CUBE_CONTROL_INTERVAL:
+            self.next_id()
+            wire = (json.dumps({"id": self.seq, "method": "set_bright",
+                                "params": [100, "sudden", 0], "token": self.token},
+                               separators=(",", ":")) + "\r\n").encode()
+            self.udp.send(wire)
+            self.pending_control = {"id": self.seq, "wire": wire, "deadline": now + 2,
+                                    "retry_at": now + .25, "retries": 0}
+            self.last_frame = None
 
     def prepare_frame(self):
         """Finish potentially slow setup before the caller samples its state."""
         self.check_connection()
         if not self.direct:
-            for name, values in (("activate_fx_mode", [{"mode": "direct"}]),
+            for name, values in (("set_power", ["off", "sudden", 0]),
                                  ("set_bright", [100, "sudden", 0]),
+                                 ("activate_fx_mode", [{"mode": "direct"}]),
+                                 ("update_leds", [base64.b64encode(bytes(300)).decode()]),
                                  ("set_power", ["on", "sudden"])):
-                if self.udp_command(name, values).get("result") != ["ok"]:
+                acknowledge = name != "update_leds"
+                if self.udp_command(name, values, acknowledge=acknowledge).get("result") != (["ok"] if acknowledge else ["sent"]):
                     raise ValueError("Cube Lite 未确认灯点显示初始化")
             self.direct = True
 
@@ -423,7 +569,7 @@ class CubeClient(YeelightClient):
         self.prepare_frame()
         # A periodic resend also repairs isolated UDP packet loss, even for
         # static screens. It is independent of the 5-second session heartbeat.
-        if params == self.last_frame and time.monotonic() - self.last_frame_at < .2:
+        if params == self.last_frame and time.monotonic() - self.last_frame_at < CUBE_STATIC_REFRESH_INTERVAL:
             return dict(self.last_frame_response)
         response = self.udp_command(method, params, acknowledge=False)
         self.last_frame = list(params)
@@ -440,4 +586,9 @@ class CubeClient(YeelightClient):
         self.last_frame = None
         self.last_frame_response = None
         self.pending_heartbeat = None
+        self.pending_control = None
+        self.last_control_ack = 0
+        self.last_keep_alive = 0
+        self.reserved_sequence = 0
+        self.session_reused = False
         super().close()

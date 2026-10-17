@@ -34,6 +34,16 @@ SeeEnd 浏览器 JavaScript 为运行功能随包提供，不构成对原创代�
 
 AI 平台和设备名称、标识用于说明兼容对象，不表示官方隶属或背书。第三方商标及图标保留其权利归属，不由 SeeEnd 专有许可重新授权。
 
+## 音效资源
+
+`aiflame/assets/sounds/cat.wav` 来源于真实小猫录音，原作者 nathan-osman，作品「meow-1.wav」，使用 CC0 1.0 Universal Public Domain Dedication。
+
+- 原作品与许可：https://freesound.org/people/nathan-osman/sounds/686775/
+- 许可全文：https://creativecommons.org/publicdomain/zero/1.0/legalcode
+- 原作品的公开预览：https://cdn.freesound.org/previews/686/686775_2956624-lq.mp3
+
+SeeEnd 将公开预览解码、合并单声道、以 1.18 倍速率提亮音高并输出为 24 kHz / 16-bit PCM WAV，峰值归一化到 0.43，添加 5 毫秒淡入与 8 毫秒淡出。柔和铃声和清脆提示为 SeeEnd 原创合成。
+
 ## 原始政策和源码
 
 - Qt LGPL 说明：https://www.qt.io/development/open-source-lgpl-obligations

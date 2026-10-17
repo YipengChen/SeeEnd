@@ -1,9 +1,12 @@
 """Bounded, content-free task destinations. Destinations are data, never commands."""
 
 import json
+import os
 from pathlib import Path, PurePosixPath, PureWindowsPath
 import re
 import uuid
+import sys
+import subprocess
 
 from aiflame.core.events import EventError
 
@@ -116,12 +119,51 @@ class TaskOrigins:
         row = self.db.execute("SELECT destination FROM task_origins WHERE source=? AND task=?", (source, task)).fetchone()
         return json.loads(row[0]) if row else None
 
+    @staticmethod
+    def exited_hosts(candidates):
+        """Only positive process-death evidence may retire an unfinished task.
+
+        No terminal contents, session logs or command arguments are inspected.
+        A missing ps row alone is insufficient: permission/parse failures must
+        keep the task alive. PID reuse is detected using the captured birth time.
+        """
+        if sys.platform != "darwin":
+            return []
+        table = None
+        exited = []
+        for (source, task), origin in candidates.items():
+            if source not in TERMINAL_SOURCES or not origin or origin.get("kind") != "terminal":
+                continue
+            if type(origin.get("pid")) is not int or not isinstance(origin.get("started"), str):
+                continue
+            try:
+                os.kill(origin["pid"], 0)
+            except ProcessLookupError:
+                exited.append((source, task))
+                continue
+            except OSError:
+                continue
+            if table is None:
+                try:
+                    from aiflame.integrations.cli_tools.origin import processes
+                    table = processes()
+                except (OSError, ValueError, subprocess.SubprocessError):
+                    table = {}
+            process = table.get(origin["pid"])
+            if process and process.get("started") and process["started"] != origin["started"]:
+                exited.append((source, task))
+        return exited
+
     def cleanup(self):
         self.db.execute("""DELETE FROM task_return_contexts WHERE NOT EXISTS (
             SELECT 1 FROM events WHERE events.source=task_return_contexts.source
-            AND events.task=task_return_contexts.task)""")
+            AND events.task=task_return_contexts.task) AND NOT EXISTS (
+            SELECT 1 FROM tasks WHERE tasks.source=task_return_contexts.source
+            AND tasks.task=task_return_contexts.task)""")
         self.db.execute("""DELETE FROM task_origins WHERE NOT EXISTS (
-            SELECT 1 FROM events WHERE events.source=task_origins.source AND events.task=task_origins.task)""")
+            SELECT 1 FROM events WHERE events.source=task_origins.source AND events.task=task_origins.task)
+            AND NOT EXISTS (SELECT 1 FROM tasks WHERE tasks.source=task_origins.source
+            AND tasks.task=task_origins.task)""")
         self.db.execute("""DELETE FROM terminal_instances WHERE instance NOT IN (
             SELECT json_extract(destination,'$.instance_id') FROM task_origins
             WHERE json_extract(destination,'$.kind')='terminal')""")

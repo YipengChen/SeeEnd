@@ -6,7 +6,7 @@
 | skill/（SeeEnd-skill） | Skill、参考资料、脱敏客户端与离线测试 | 实际 App 契约及同任务验证证据 |
 | downloads/（SeeEnd-downloads） | 下载入口、公开政策和版本发布清单 | release-status 中 published / prepared 及资产 SHA-256 |
 
-当前基线为 App 0.8.56、扩展 0.2.13、Skill 1.0.3、事件协议 1.0、管理契约 1。Skill 的入口、参考资料和测试快照均对齐 App 0.8.56；Skill 与扩展保持独立版本号。公开下载以 `downloads/release-status.json` 的 published 记录及已核验资产为准。商店状态见[日期化操作记录](chrome-web-store/APPLICATION_STATUS.md)。
+当前基线为 App 0.8.68、扩展 0.2.14、Skill 1.0.5、事件协议 1.0、管理契约 1。Skill 的入口、参考资料和测试快照均对齐 App 0.8.68；Skill 与扩展保持独立版本号。公开下载以 `downloads/release-status.json` 的 published 记录及已核验资产为准。商店状态见[日期化操作记录](chrome-web-store/APPLICATION_STATUS.md)。
 
 ## 内容维护
 
@@ -22,6 +22,6 @@
 4. 将本地新版本登记为 `prepared`，清单记录版本、构建 receipt、资产路径及摘要。App、第三方材料、扩展与商店包分别校验；源码指纹和随包 receipt 必须匹配。
 5. 只有实际发布并验证公开下载后才更新 `published` 和主下载入口。上传、商店提交、审核通过和网页部署分别记录。
 
-公开资料不得包含用户数据、凭据或 SeeEnd 原创源码；第三方材料按已校验 manifest 选取。当前 App 和构建 receipt 位于 `dist/SeeEnd.app`、`dist/SeeEnd-build.json`；版本化 ZIP、扩展包和分发 receipt 位于 `dist/gemini-0.8.56/`。旧 0.8.55 App 和本地包已按用户要求清理，历史版本清单保留原摘要用于追溯。工作区验证日志位于 `validation/`，不加入源码或公开下载仓库。
+公开资料不得包含用户数据、凭据或 SeeEnd 原创源码；第三方材料按已校验 manifest 选取。当前 macOS App、构建 receipt 及配套 ZIP 位于 `dist/acceptance-0.8.68-final/`；Windows 配套制品位于 `dist/windows-0.8.68/`。工作区验证日志位于 `validation/`，不加入源码或公开下载仓库。
 
-2026-10-17 完成 Windows x64 云端构建，App ZIP、匹配的第三方源码包、receipt 与 `SHA256SUMS` 已下载到 `dist/windows-0.8.56/`。构建来源为提交 `2598da203d7af04b9b453133428e352e6cbfb11f`，验证记录见[Windows 构建验收](validation.md#2026-10-17windows-x64-云端构建)。该包目前保存在本机与私有 Actions artifact；现有公开 macOS Release 资产保持原身份。Windows 第三方源码 ZIP 与 macOS 同名但内容及摘要不同，公开分发时须使用平台后缀，避免覆盖旧资产。
+2026-10-17 完成 0.8.68 两平台构建与验收，详情见[验证记录](validation.md#2026-10-17app-0868-真实提醒链路验收)。两平台通过逐文件与规范排序指纹证明产品源码一致；Windows 的平台 receipt 排序指纹单独记录。Windows 与 macOS 的第三方源码 ZIP 内容及摘要不同，公开分发使用平台后缀，构建 receipt 也分别命名。正式发布状态及下载地址以公开下载仓库为准。

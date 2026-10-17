@@ -95,7 +95,7 @@ QPushButton#lightPreviewTile:hover { background: #f0eee8; border-color: #d9d4ca;
 QPushButton#lightPreviewTile:checked { background: #fbefe7; border-color: #cf5c32; }
 QPushButton#lightPreviewTile:focus { border: 2px solid #a64725; }
 QPushButton#lightPreviewTile:disabled { background: #f6f5f1; border-color: #eeece6; color: #99958c; }
-QPushButton#deviceModelCard { background: #ffffff; border: 1px solid #e2dfd7; border-radius: 14px; padding: 0; }
+QPushButton#deviceModelCard { background: #ffffff; border: 1px solid #e2dfd7; border-radius: 14px; padding: 0; min-height: 200px; }
 QPushButton#deviceModelCard:hover { background: #fffdf9; border-color: #d1a487; }
 QPushButton#deviceModelCard:pressed { background: #faf2e9; border-color: #c85b2b; }
 QPushButton#deviceModelCard:focus { border: 2px solid #c85b2b; }
@@ -106,6 +106,10 @@ QLabel#deviceThumbnail[kind="rgb"] { background: #f0f3f1; }
 QLabel[role="deviceBrand"] { color: #625f57; font-size: 12px; font-weight: 500; }
 QLabel[role="deviceName"] { color: #33332d; font-size: 16px; font-weight: 600; }
 QLabel[role="deviceMeta"], QLabel[role="deviceCount"] { color: #625f57; font-size: 12px; }
+QLabel[role="devicePurchase"] { color: #625f57; font-size: 12px; }
+QPushButton#devicePurchaseLink { background: transparent; border: 1px solid transparent; border-radius: 3px; padding: 0; min-height: 0; }
+QPushButton#devicePurchaseLink:hover { background: #f4f2ed; }
+QPushButton#devicePurchaseLink:focus { border-color: #c85b2b; }
 QLabel[role="deviceCount"][online="true"] { color: #38735b; font-weight: 600; }
 QLabel[role="deviceArrow"] { color: #b38b70; font-size: 20px; }
 QLabel[role="deviceName"]:disabled, QLabel[role="deviceCount"]:disabled { color: #aaa69b; }

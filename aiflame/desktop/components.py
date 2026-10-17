@@ -19,8 +19,8 @@ from PySide6.QtGui import (
     QRegion,
 )
 from PySide6.QtSvg import QSvgRenderer
-from PySide6.QtWidgets import QHBoxLayout, QSizePolicy, QToolTip, QVBoxLayout, QTabBar
-from aiflame.desktop.localization import QCheckBox, QFrame, QLabel, QPushButton, QSlider, QWidget, localized_type, t
+from PySide6.QtWidgets import QGridLayout, QHBoxLayout, QSizePolicy, QToolTip, QVBoxLayout, QTabBar
+from aiflame.desktop.localization import QCheckBox, QFrame, QLabel, QPushButton, QSlider, QWidget, language, localized_type, t
 from aiflame.desktop.theme import COLORS
 
 ICONS = {
@@ -29,9 +29,11 @@ ICONS = {
     "apps": '<rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><path d="M14 17.5h7m-3.5-3.5v7"/>',
     "settings": '<path d="M4 6h16M4 12h16M4 18h16"/><circle cx="9" cy="6" r="2" fill="{fill}"/><circle cx="16" cy="12" r="2" fill="{fill}"/><circle cx="8" cy="18" r="2" fill="{fill}"/>',
     "bell": '<path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/>',
+    "speaker": '<path d="m11 4-6 5H2v6h3l6 5V4zM15 8a6 6 0 0 1 0 8M18 5a10 10 0 0 1 0 14"/>',
     "message": '<path d="M21 11a8 8 0 0 1-8 8H8l-5 3 1-6a8 8 0 0 1-1-5 8 8 0 0 1 8-8h2a8 8 0 0 1 8 8zM8 10h8M8 14h5"/>',
     "history": '<path d="M3 11a9 9 0 1 1 3 7M3 5v6h6m3-4v5l3 2"/>',
     "help": '<circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 0 1 5 0c0 2-2.5 2-2.5 4m0 3h.01"/>',
+    "info": '<circle cx="12" cy="12" r="9"/><path d="M12 11v6m0-10h.01"/>',
     "arrow": '<path d="M5 12h14m-5-5 5 5-5 5"/>',
     "back": '<path d="M19 12H5m5-5-5 5 5 5"/>',
     "chevron": '<path d="m9 5 7 7-7 7"/>',
@@ -206,8 +208,37 @@ def separator(layout, name="separator"):
     layout.addWidget(line)
 
 
+class DevicePurchaseLink(QPushButton):
+    """A small brand mark with a larger target and no leading artwork padding."""
+
+    def __init__(self, platform):
+        super().__init__()
+        self.setObjectName("devicePurchaseLink")
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        asset = Path(__file__).resolve().parents[1] / "assets/brands" / (platform + ".svg")
+        self.renderer = QSvgRenderer(str(asset), self)
+        bounds = self.renderer.viewBoxF()
+        logo_height = 12
+        self.logo_size = QSize(round(logo_height * bounds.width() / max(1, bounds.height())), logo_height)
+        self.setFixedSize(self.logo_size.width() + 4, 24)
+        title = "淘宝购买" if platform == "taobao" else "京东购买"
+        self.setToolTip(title)
+        self.setAccessibleName(title)
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        painter = QPainter(self)
+        if not self.isEnabled():
+            painter.setOpacity(.4)
+        self.renderer.render(painter, QRectF(0, (self.height() - self.logo_size.height()) / 2,
+                                             self.logo_size.width(), self.logo_size.height()))
+
+
 class DeviceModelCard(QPushButton):
-    """A single accessible click target with independent device information."""
+    """Device setup target with separate shopping actions in its footer."""
+
+    purchase_requested = Signal(str)
 
     def __init__(self, model):
         super().__init__()
@@ -216,11 +247,15 @@ class DeviceModelCard(QPushButton):
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.setMinimumWidth(300)
-        self.setFixedHeight(172)
+        self.setFixedHeight(240)
         self.setAccessibleDescription("选择此型号，添加或配置你的设备")
-        row = QHBoxLayout(self)
-        row.setContentsMargins(18, 18, 18, 18)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(18, 16, 18, 12)
+        layout.setSpacing(10)
+        row = QHBoxLayout()
+        row.setContentsMargins(0, 0, 0, 0)
         row.setSpacing(16)
+        layout.addLayout(row, 1)
         self.thumbnail = label()
         self.thumbnail.setObjectName("deviceThumbnail")
         self.thumbnail.setProperty("kind", "rgb")
@@ -248,9 +283,50 @@ class DeviceModelCard(QPushButton):
         footer.addWidget(arrow)
         content.addLayout(footer)
         row.addLayout(content, 1)
+        separator(layout)
+        from aiflame.devices.purchase import DEVICE_PURCHASES
+        self.purchase = DEVICE_PURCHASES.get(model['id'], {})
+        self.purchase_layout = QGridLayout()
+        self.purchase_layout.setContentsMargins(0, 0, 0, 0)
+        self.purchase_layout.setHorizontalSpacing(4)
+        self.purchase_layout.setVerticalSpacing(2)
+        self.purchase_layout.setColumnStretch(1, 1)
+        self.purchase_advice_label = label("使用建议：", role="devicePurchase")
+        self.purchase_channels_label = label("购买渠道：", role="devicePurchase")
+        for title in (self.purchase_advice_label, self.purchase_channels_label):
+            title.setWordWrap(False)
+        self.purchase_advice = label(role="devicePurchase", elide=True)
+        self.purchase_advice.setWordWrap(False)
+        self.purchase_advice.setProperty("literalText", True)
+        self.purchase_links = QWidget()
+        links = QHBoxLayout(self.purchase_links)
+        links.setContentsMargins(0, 0, 0, 0)
+        links.setSpacing(4)
+        self.purchase_buttons = {}
+        for platform, url in self.purchase.items():
+            if platform in ('taobao', 'jd') and url:
+                button = DevicePurchaseLink(platform)
+                button.clicked.connect(lambda checked=False, url=url: self.purchase_requested.emit(url))
+                links.addWidget(button)
+                self.purchase_buttons[platform] = button
+        links.addStretch()
+        self.purchase_layout.addWidget(self.purchase_advice_label, 0, 0)
+        self.purchase_layout.addWidget(self.purchase_advice, 0, 1)
+        self.purchase_layout.addWidget(self.purchase_channels_label, 1, 0)
+        self.purchase_layout.addWidget(self.purchase_links, 1, 1)
+        layout.addLayout(self.purchase_layout)
         for child in self.findChildren(QLabel):
             child.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        self.purchase_advice.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, False)
         self.set_connection_count(0)
+        self.retranslate()
+
+    def retranslate(self):
+        super().retranslate()
+        if hasattr(self, 'purchase_advice'):
+            advice = (self.purchase.get('advice_en') if language() == 'en' else None) or self.purchase.get('advice', '')
+            self.purchase_advice.setText(advice)
+            self.purchase_advice.setToolTip(advice)
 
     def set_connection_count(self, online, offline=0):
         self.connection_count.setText(f"在线 {online} · 离线 {offline}" if online + offline else "未添加设备")

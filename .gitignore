@@ -38,3 +38,6 @@ desktop.log
 
 # Local UI evidence is archived outside the source distribution.
 /.impeccable/
+
+# Local validation logs, screenshots, runtime metadata and isolated source snapshots
+/validation/

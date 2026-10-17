@@ -1,6 +1,6 @@
 """First-use evidence and error recovery; no browser permissions or paid tasks."""
 import unittest
-from aiflame.integrations.chatgpt_web.guide import verification_text, offline_html, STEPS, CHECKS, STORE_URL
+from aiflame.integrations.chatgpt_web.guide import verification_text, offline_html, STEPS, STORE_URL
 
 class BrowserOnboardingTests(unittest.TestCase):
     def snapshot(self, status="verified", source="chatgpt-web", started=101):
@@ -19,15 +19,16 @@ class BrowserOnboardingTests(unittest.TestCase):
         data["sources"][0]["enabled"]=False
         self.assertIn("开关已关闭", verification_text(data, {}, "chatgpt-web"))
 
-    def test_store_steps_have_success_criteria_and_no_manual_loading(self):
+    def test_store_guide_has_only_install_and_allow_connection(self):
         self.assertEqual(len(STEPS), 2)
-        self.assertEqual(len(STEPS), len(CHECKS))
         text = offline_html()
         self.assertNotIn("迁移", text)
         self.assertNotIn("<script", text)
         self.assertNotIn("<svg", text)
         self.assertNotIn("加载未打包", text)
         self.assertIn(STORE_URL, text)
-        self.assertIn("添加至 Chrome", text)
-        self.assertIn("完成标志", text)
-        self.assertIn("仅打开商店页面不代表安装完成", text)
+        self.assertIn("1. 安装扩展", text)
+        self.assertIn("2. 允许连接", text)
+        self.assertEqual(text.count('<section>'), 2)
+        for redundant in ("选择网站", "普通文字提问", "检查当前页面", "遇到问题", "勾选", "无需灯具"):
+            self.assertNotIn(redundant, text)

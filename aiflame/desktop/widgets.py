@@ -41,7 +41,8 @@ NAMES = {
 RESULTS = {
     "screen": "本地状态已更新",
     "queued": "等待发送",
-    "applied": "设备已确认",
+    "applied": "设备已接收指令",
+    "sent": "指令已发送",
     "suppressed": "未触发灯光",
     "unmatched": "来源已停用",
     "expired": "事件已过期",
@@ -61,6 +62,7 @@ class Dashboard(DashboardInteraction, DashboardViews, MijiaConnection, WechatCon
     notification_status_requested = Signal()
     notification_test_requested = Signal()
     notification_enable_requested = Signal(int)
+    sound_preview_requested = Signal(str)
 
     def __init__(self, parent=None, port=8765):
         super().__init__(parent)
@@ -357,6 +359,15 @@ class Dashboard(DashboardInteraction, DashboardViews, MijiaConnection, WechatCon
 
     def device_reminders_enabled(self):
         return bool(self.model and self.model["settings"].get("hardware_notifications"))
+
+    def preview_sound(self):
+        self.sound_feedback.hide()
+        self.sound_preview_requested.emit(self.sound_category.currentData())
+
+    def sound_failed(self, message):
+        self.sound_feedback.setText(message)
+        restyle(self.sound_feedback, "tone", "warning")
+        self.sound_feedback.show()
 
     def flush_device_brightness(self):
         self.brightness_timer.stop()
@@ -765,7 +776,7 @@ class Dashboard(DashboardInteraction, DashboardViews, MijiaConnection, WechatCon
             self.connection_prepare_disclosure.button.setChecked(not self.selected_device_id)
             self.device_information.button.setChecked(False)
             self.connection_prepare_identity = identity
-        self.connection_prepare_hint.setText("此电脑与插座需在同一局域网。灯具应保持自身开关开启，并支持通电自动亮起。" if plug else
+        self.connection_prepare_hint.setText("插座需提前接入米家APP。此电脑与插座需在同一局域网。灯具应保持自身开关开启，并支持通电自动亮起。" if plug else
             "在 Yeelight APP 中配置灯具，接入2.4 GHz WiFi，开启「局域网控制」。此电脑需与灯具在同一局域网内。")
         self.yeelight_connect_button.setVisible(not plug)
         self.yeelight_host.setPlaceholderText("插座 IP（可留空自动查找）" if plug else "灯具 IP，例如 192.168.1.100")
@@ -1138,6 +1149,9 @@ class Dashboard(DashboardInteraction, DashboardViews, MijiaConnection, WechatCon
             for key, check in self.checks.items():
                 with QSignalBlocker(check):
                     check.setChecked(settings[key])
+            if not self.sound_category.hasFocus():
+                with QSignalBlocker(self.sound_category):
+                    self.sound_category.setCurrentIndex(self.sound_category.findData(settings.get("sound_category", "chime")))
         self.order_sources()
         self.render_task_context({s["id"]: s["name"].replace("（实验）", "") for s in data["sources"]})
         enabled_sources = {source["id"]: source["name"].replace("（实验）", "")
@@ -1160,8 +1174,8 @@ class Dashboard(DashboardInteraction, DashboardViews, MijiaConnection, WechatCon
                 with QSignalBlocker(self.source_checks[sid]):
                     self.source_checks[sid].setChecked(source["enabled"])
         key = (
-            [(e["id"], e["status"], e["reason"], e.get("delivery_summary")) for e in data["events"]],
-            [(e["id"], e["status"], e["reason"], e.get("delivery_summary")) for e in data.get("task_events", [])],
+            [(e["id"], e["status"], e["reason"], e.get("delivery_summary"), e.get("can_mark_unknown")) for e in data["events"]],
+            [(e["id"], e["status"], e["reason"], e.get("delivery_summary"), e.get("can_mark_unknown")) for e in data.get("task_events", [])],
             [(r["event"], r["output"], r["status"], r.get("detail")) for r in data.get("deliveries", [])],
         )
         if key != self.history_key:
@@ -1194,21 +1208,22 @@ class Dashboard(DashboardInteraction, DashboardViews, MijiaConnection, WechatCon
         devices = (event.get("delivery_summary") or {}).get("devices", [])
         if not devices:
             return result
-        confirmed = sum(device["status"] == "applied" for device in devices)
-        if confirmed == len(devices):
-            return f"全部确认 · {confirmed}/{len(devices)} 台设备"
-        if confirmed:
-            return f"部分确认 · {confirmed}/{len(devices)} 台设备"
-        return result + f" · 0/{len(devices)} 台设备确认"
+        sent = sum(device["status"] in ("applied", "sent") for device in devices)
+        if sent:
+            return f"指令已发送 · {sent}/{len(devices)} 台设备"
+        return result + f" · 0/{len(devices)} 台设备"
 
     @staticmethod
     def delivery_color(event):
         devices = (event.get("delivery_summary") or {}).get("devices", [])
-        confirmed = sum(device["status"] == "applied" for device in devices)
-        if devices and 0 < confirmed < len(devices):
-            return "#95630b"
-        if event["status"] == "applied" and (not devices or confirmed == len(devices)):
+        statuses = [device["status"] for device in devices] or [event["status"]]
+        if all(status in ("applied", "sent") for status in statuses):
             return "#38735b"
+        if "failed" in statuses:
+            return "#a34235"
+        if any(status in ("queued", "offline", "expired", "dropped", "interrupted", "ended_on_reconnect")
+               for status in statuses):
+            return "#95630b"
         return "#625f57"
 
     def event_search_text(self, event):
@@ -1245,8 +1260,6 @@ class Dashboard(DashboardInteraction, DashboardViews, MijiaConnection, WechatCon
                 values = list(self.event_values(event))
                 values[0] = values[0][-8:]
                 detail = values[3]
-                if event["status"] != "applied":
-                    values[3] = RESULTS.get(event["status"], event["status"])
                 for item, value in zip(labels, values):
                     item.setText(value)
                     item.setToolTip(value)
@@ -1335,15 +1348,10 @@ class Dashboard(DashboardInteraction, DashboardViews, MijiaConnection, WechatCon
                 self.history.setCurrentCell(-1, -1)
         self.history_stack.setCurrentIndex(0 if events else 1)
         self.history_clear_button.setVisible(bool(query or kind != "all"))
-        self.history_selection_hint.setVisible(bool(events))
         self.history_empty.setText(
             "没有符合筛选条件的记录，试试其他关键词或事件类型。"
             if history_events
             else "还没有记录。接入应用后，新任务会自动出现在这里。"
-        )
-        self.history_count.setText(
-            (f"显示 {len(events)} 项任务" if query or kind != "all" else f"最近 {len(events)} 项任务") if grouped
-            else (f"显示 {len(events)} 条事件" if query or kind != "all" else f"最近 {len(events)} 条事件")
         )
         self.show_event_detail()
 
@@ -1371,6 +1379,8 @@ class Dashboard(DashboardInteraction, DashboardViews, MijiaConnection, WechatCon
         self.event_detail_box.show()
         event = self.visible_events[row]
         self.configure_return_button(self.return_task_button, event)
+        self.mark_unknown_button.setVisible(bool(event.get("can_mark_unknown")))
+        self.mark_unknown_button.setEnabled(self.ready and not self.writing)
         def paragraph(text, style, *, literal=False):
             return '<p style="' + style + '">' + escape(text if literal else t(text)) + '</p>'
 
@@ -1388,6 +1398,9 @@ class Dashboard(DashboardInteraction, DashboardViews, MijiaConnection, WechatCon
                             "font-size:14px; font-weight:600; color:#292824; margin-top:0px; margin-bottom:4px;")]
         blocks.append(paragraph(values[0], metadata))
         blocks.append(paragraph(t("任务标识：") + display_id, metadata, literal=True))
+        if event.get("reason") in ("host_exited", "manual_recovery"):
+            blocks.append(paragraph("原编程进程已退出，任务结果未知。" if event["reason"] == "host_exited"
+                                    else "此任务已手动标为状态未知，未确认任务成功或失败。", secondary))
         blocks.append(paragraph("灯光处理结果：", heading))
         blocks.append(paragraph(self.event_delivery_result(event),
                                 "font-size:16px; font-weight:500; color:" + self.delivery_color(event) + "; margin-top:0px; margin-bottom:0px;"))
@@ -1400,7 +1413,7 @@ class Dashboard(DashboardInteraction, DashboardViews, MijiaConnection, WechatCon
         if devices:
             blocks.append(paragraph("设备回执", heading))
             for device in devices:
-                color = "#38735b" if device["status"] == "applied" else "#625f57"
+                color = self.delivery_color({"status": device["status"]})
                 blocks.append('<p style="font-size:14px; font-weight:400; color:#292824; margin-top:0px; margin-bottom:6px; line-height:130%;">'
                               + escape(t(device["name"]) if device["name"] in ("Yeelight 屏幕挂灯 Pro", "Yeelight W3 彩色灯泡", "Yeelight Beam 塔灯") else device["name"]) + '<span style="' + secondary + '">（'
                               + escape(device["device_id"]) + '）</span><br>'
@@ -1415,11 +1428,16 @@ class Dashboard(DashboardInteraction, DashboardViews, MijiaConnection, WechatCon
         wechat = [WECHAT_RECEIPTS.get(receipt["status"], receipt["status"])
                   for receipt in self.model.get("deliveries", [])
                   if receipt["event"] == event["id"] and receipt["output"] == "wechat"]
-        if notifications or wechat:
+        sound_statuses = {**statuses, "submitted": "已提交播放（实际声音取决于系统音量与输出设备）",
+                          "unavailable": "音效未播放", "not_requested": "本事件无需音效"}
+        sounds = [sound_statuses.get(receipt["status"], RESULTS.get(receipt["status"], receipt["status"]))
+                  for receipt in self.model.get("deliveries", [])
+                  if receipt["event"] == event["id"] and receipt["output"] == "sound"]
+        if notifications or wechat or sounds:
             blocks.append(paragraph("通知回执", heading))
             blocks.append('<table width="100%" cellspacing="0" cellpadding="0">')
             channel_width = 156 if language() == "en" else 120
-            for channel, receipts in (("系统通知", notifications), ("微信通知", wechat)):
+            for channel, receipts in (("系统通知", notifications), ("微信通知", wechat), ("音效提醒", sounds)):
                 if not receipts:
                     continue
                 blocks.append(f'<tr><td width="{channel_width}" valign="top" style="font-size:12px; font-weight:400; color:#292824; padding-right:16px; padding-bottom:6px;">'
@@ -1658,7 +1676,7 @@ class Dashboard(DashboardInteraction, DashboardViews, MijiaConnection, WechatCon
                 self.rendered_yeelight_discovery = job.get("id")
                 rows = job.get("result", {}).get("devices", [])
                 if self.selected_device_model in MIJIA_PLUG_MODELS:
-                    self.render_mijia_discovery(rows)
+                    self.render_mijia_discovery(rows, job_id=job["id"])
                 else:
                     with QSignalBlocker(self.yeelight_choices):
                         self.yeelight_choices.clear()
@@ -1670,7 +1688,7 @@ class Dashboard(DashboardInteraction, DashboardViews, MijiaConnection, WechatCon
             plug_scan = self.selected_device_model in MIJIA_PLUG_MODELS and job.get("action") == "discover"
             self.job_message.setVisible(not plug_scan)
             if plug_scan and job["state"] == "failed":
-                self.mijia_scan_status.setText(job["message"])
+                self.mijia_discovery_failed(job["message"], job_id=job["id"])
             self.progress.setValue(job["progress"])
             self.job_message.setText(job["message"])
             self.job_message.setStyleSheet(
@@ -1698,6 +1716,8 @@ class Dashboard(DashboardInteraction, DashboardViews, MijiaConnection, WechatCon
             or bool(self.model and self.model["maintenance"])
         )
         self.reset_button.setEnabled(connected and not busy)
+        self.sound_category.setEnabled(connected and not busy)
+        self.sound_test_button.setEnabled(not self.reset_pending)
         hardware = connected and self.device_reminders_enabled() and not self.device_selection_loading
         for button in self.device_model_buttons.values():
             button.setEnabled(connected and not self.reset_pending)
@@ -1796,8 +1816,6 @@ class Dashboard(DashboardInteraction, DashboardViews, MijiaConnection, WechatCon
         dialog = getattr(self, "extension_guide", None)
         if dialog is None:
             dialog = self.extension_guide = ExtensionGuide(self)
-        if source in WEB_SOURCES:
-            dialog.site_choice.setCurrentIndex(dialog.site_choice.findData(source))
         dialog.show()
         dialog.raise_()
         dialog.activateWindow()

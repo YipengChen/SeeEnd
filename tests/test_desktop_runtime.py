@@ -4,6 +4,7 @@ import os
 from importlib.util import find_spec
 from pathlib import Path
 from copy import deepcopy
+from types import SimpleNamespace
 import sys
 import tempfile
 import time
@@ -39,6 +40,10 @@ class NativeDesktopTests(unittest.TestCase):
             },
         )
         self.hub.start(hardware=False)
+        credential = patch("aiflame.desktop.network.dashboard_token",
+                           side_effect=lambda: self.hub.config["dashboard"])
+        credential.start()
+        self.addCleanup(credential.stop)
         self.widget = Dashboard(port=self.hub.port)
         self.widget.resize(1180, 850)
         self.widget.show()
@@ -107,6 +112,7 @@ class NativeDesktopTests(unittest.TestCase):
         rows = [{"did": "123", "host": "192.168.1.2", "name": "插座 3", "hardware_model": MIJIA_PLUG_MODEL},
                 {"did": "456", "host": "192.168.1.3", "name": "插座 4", "hardware_model": MIJIA_PLUG4_MODEL}]
         self.widget.render_mijia_login({"id": "mixed-models", "state": "selecting", "devices": rows})
+        self.widget.render_mijia_discovery([{"did": "123", "host": "192.168.1.40"}, {"did": "456", "host": "192.168.1.41"}])
         self.assertEqual(self.widget.mijia_choices.count(), 2)
         self.assertEqual(self.widget.mijia_choices.itemData(1)["did"], "456")
         self.widget.choose_device_model(YEELIGHT_CUBE_MODEL)
@@ -165,18 +171,14 @@ class NativeDesktopTests(unittest.TestCase):
             self.assertFalse(self.widget.device_model_buttons[MIJIA_PLUG_MODEL].thumbnail.pixmap().isNull())
             self.assertTrue(self.widget.device_light_card.isHidden())
             self.assertEqual(self.widget.mijia_step, 0)
-            self.widget.mijia_scan_button.click()
-            self.wait(lambda: self.widget.mijia_scan_choices.count() == 2 and not self.widget.job_busy)
-            self.widget.mijia_scan_choices.setCurrentIndex(1)
-            self.assertEqual(self.widget.mijia_target_ip.text(), "192.168.1.2")
-            self.assertEqual(self.widget.mijia_target_did.text(), "123")
-            self.widget.mijia_next_button.click()
-            self.assertEqual(self.widget.mijia_step, 1)
+            self.assertFalse(self.widget.mijia_scan_button.isVisible())
             self.widget.mijia_login_button.click()
-            self.wait(lambda: self.widget.mijia_choices.count() == 3 and not self.widget.writing)
-            self.assertEqual(self.widget.mijia_step, 2)
+            self.wait(lambda: self.widget.mijia_choices.count() == 2 and not self.widget.writing and not self.widget.job_busy)
+            self.assertEqual(self.widget.mijia_target()[0], "192.168.1.2")
+            self.assertEqual(self.widget.mijia_step, 1)
+            self.assertIn("米家智能插座 3", self.widget.mijia_choices.currentText())
             self.assertEqual(self.widget.mijia_choices.currentData()["did"], "123")
-            self.assertEqual(self.widget.mijia_target_did.text(), "123")
+            self.assertEqual(self.widget.mijia_target()[1], "123")
             self.assertTrue(self.widget.mijia_import_button.isEnabled())
             self.widget.mijia_import_button.click()
             self.wait(lambda: "miio:123" in self.hub.transport.records and self.widget.selected_device_id == "miio:123")
@@ -236,7 +238,6 @@ class NativeDesktopTests(unittest.TestCase):
         self.widget.navigate(1)
         self.widget.choose_device_model(MIJIA_PLUG_MODEL)
         self.wait(lambda: not self.widget.device_selection_loading)
-        self.widget.mijia_next_button.click()
         self.widget.mijia_login_button.click()
         try:
             self.wait(lambda: (self.widget.mijia_login_state or {}).get("state") == "waiting")
@@ -246,9 +247,8 @@ class NativeDesktopTests(unittest.TestCase):
             self.assertIn("手机已确认登录", self.widget.mijia_login_status.text())
             self.assertTrue(self.widget.mijia_qr.isHidden())
             self.assertFalse(self.widget.mijia_login_button.isEnabled())
-            self.assertFalse(self.widget.mijia_region.isEnabled())
             self.assertTrue(self.widget.mijia_cancel_button.isEnabled())
-            self.wait(lambda: self.widget.mijia_step == 2 and self.widget.mijia_choices.count() == 3)
+            self.wait(lambda: self.widget.mijia_step == 1 and (self.widget.mijia_login_state or {}).get("state") == "selecting")
             self.assertEqual((cloud.polls, cloud.authorizations, cloud.queries), (1, 2, 2))
             self.assertEqual(self.widget.poll_timer.interval(), 1500)
             self.widget.return_mijia_target()
@@ -304,83 +304,190 @@ class NativeDesktopTests(unittest.TestCase):
         self.widget.render_mijia_login(state)
         self.assertTrue(self.widget.mijia_qr.isHidden())
         self.assertIn("二维码无法显示", self.widget.mijia_login_status.text())
+        self.assertIn("重新获取二维码", self.widget.mijia_login_status.text())
+        self.assertNotIn("浏览器", self.widget.mijia_login_status.text())
+        self.assertEqual(self.widget.mijia_login_button.text(), "重新获取二维码")
 
-    def test_mijia_target_validation_matching_and_back_navigation(self):
+    def test_mijia_login_first_for_both_models_and_no_manual_fields(self):
+        from aiflame.devices.models import MIJIA_PLUG_MODEL, MIJIA_PLUG4_MODEL
+        from PySide6.QtWidgets import QLineEdit
+        self.widget.act("/api/settings", {"hardware_notifications": True})
+        self.wait(lambda: self.widget.device_reminders_enabled() and not self.widget.writing)
+        self.widget.navigate(1)
+        for model in (MIJIA_PLUG_MODEL, MIJIA_PLUG4_MODEL):
+            with self.subTest(model=model):
+                self.widget.choose_device_model(model)
+                self.wait(lambda: not self.widget.device_selection_loading)
+                self.assertEqual(self.widget.mijia_panel.findChildren(QLineEdit), [])
+                self.assertEqual(self.widget.mijia_step, 0)
+                self.assertTrue(self.widget.mijia_login_button.isVisible())
+                self.assertFalse(self.widget.mijia_cancel_button.isVisible())
+                self.assertFalse(hasattr(self.widget, "mijia_login_link_button"))
+                self.assertFalse(self.widget.mijia_scan_button.isVisible())
+                with patch.object(self.widget, "act") as request:
+                    self.widget.scan_mijia_devices()
+                    request.assert_not_called()
+                    self.widget.start_mijia_login()
+                    self.assertEqual(request.call_args.args[:2], ("/api/device/mijia", {"action": "login", "region": "cn"}))
+                self.widget.return_mijia_target()
+                self.wait(lambda: not self.widget.writing)
+
+    def test_mijia_cancel_button_resets_active_login_and_rejects_late_responses(self):
         from aiflame.devices.models import MIJIA_PLUG_MODEL
         self.widget.act("/api/settings", {"hardware_notifications": True})
         self.wait(lambda: self.widget.device_reminders_enabled() and not self.widget.writing)
         self.widget.navigate(1)
         self.widget.choose_device_model(MIJIA_PLUG_MODEL)
+        self.wait(lambda: not self.widget.device_selection_loading and not self.widget.api.pending)
+        self.assertFalse(self.widget.mijia_cancel_button.isVisible())
+        with patch.object(self.widget, "act") as request:
+            self.widget.start_mijia_login()
+            received = request.call_args.args[2]
+            self.widget.update_busy()
+            self.assertTrue(self.widget.mijia_cancel_button.isVisible())
+            self.assertEqual(self.widget.mijia_cancel_button.text(), "取消登录")
+            self.widget.mijia_cancel_button.click()
+            self.assertFalse(self.widget.mijia_cancel_button.isVisible())
+            self.assertIsNone(self.widget.mijia_login_state)
+            received({"id": "late-cancelled", "state": "waiting"})
+            self.assertEqual(request.call_args.args[:2], ("/api/device/mijia", {"action": "cancel", "id": "late-cancelled"}))
+            self.assertIsNone(self.widget.mijia_login_state)
+            state = {"id": "visible-session", "state": "waiting", "qr_image": "", "message": "请扫码"}
+            self.widget.render_mijia_login(state)
+            self.assertTrue(self.widget.mijia_cancel_button.isVisible())
+            self.widget.mijia_cancel_button.click()
+            self.assertEqual(request.call_args.args[:2], ("/api/device/mijia", {"action": "cancel", "id": "visible-session"}))
+            self.assertTrue(self.widget.mijia_qr.isHidden())
+            self.assertFalse(self.widget.mijia_cancel_button.isVisible())
+            self.assertEqual(self.widget.mijia_step, 0)
+            self.widget.render_mijia_login(state)
+            self.assertIsNone(self.widget.mijia_login_state)
+
+    def test_mijia_matches_names_models_and_scan_ips_with_explicit_multiple_selection(self):
+        from aiflame.devices.models import MIJIA_PLUG_MODEL
+        self.widget.navigate(1)
+        self.widget.choose_device_model(MIJIA_PLUG_MODEL)
         self.wait(lambda: not self.widget.device_selection_loading)
-        self.assertIn("网络信息", self.widget.mijia_app_hint.text())
-        self.widget.mijia_target_ip.setText("8.8.8.8")
-        self.assertFalse(self.widget.mijia_next_button.isEnabled())
-        self.widget.mijia_target_ip.setText("192.168.1.20")
-        for invalid in ("cuco.plug.v3", "00:11:22", "9" * 5000):
-            self.widget.mijia_target_did.setText(invalid)
-            self.assertFalse(self.widget.mijia_next_button.isEnabled())
-        self.widget.mijia_target_did.setText("123")
-        self.widget.continue_mijia_login()
-        rows = [{"did": "456", "host": "192.168.1.21", "name": "米家智能插座 3"},
-                {"did": "123", "host": "192.168.1.22", "name": "米家智能插座 3"}]
-        state = {"id": "matching", "state": "selecting", "devices": rows, "message": "请选择"}
-        self.widget.render_mijia_login(state)
-        self.assertEqual(self.widget.mijia_choices.currentData()["did"], "123")
-        self.assertIn("目标匹配", self.widget.mijia_choices.currentText())
-        self.assertIn("IP", self.widget.mijia_choices.currentText())
-        self.assertIn("设备 ID 已匹配", self.widget.mijia_match_hint.text())
-        self.widget.mijia_choices.setCurrentIndex(2)
-        self.assertFalse(self.widget.mijia_import_button.isEnabled())
+        rows = [{"did": "123", "host": "192.168.1.2", "name": "书房插座"},
+                {"did": "456", "host": "192.168.1.3", "name": "客厅插座"}]
+        self.widget.render_mijia_login({"id": "match", "state": "selecting", "devices": rows})
+        self.assertFalse(self.widget.mijia_can_import())
+        self.widget.render_mijia_discovery([{"did": "123", "host": "192.168.1.40"},
+                                            {"did": "456", "host": "192.168.1.41"},
+                                            {"did": "789", "host": "192.168.1.42"}])
+        self.assertEqual(self.widget.mijia_choices.count(), 3)
+        self.assertIsNone(self.widget.mijia_choices.currentData())
+        self.assertFalse(self.widget.mijia_can_import())
+        self.assertIn("书房插座", self.widget.mijia_choices.itemText(1))
+        self.assertIn("米家智能插座 3", self.widget.mijia_choices.itemText(1))
+        self.assertIn("192.168.1.40", self.widget.mijia_choices.itemText(1))
+        self.widget.mijia_choices.setCurrentIndex(1)
+        self.assertTrue(self.widget.mijia_can_import())
         with patch.object(self.widget, "act") as request:
             self.widget.import_mijia_plug()
-            request.assert_not_called()
-            self.widget.return_mijia_target()
-            request.assert_called_once_with("/api/device/mijia", {"action": "cancel", "id": "matching"})
-        self.assertEqual(self.widget.mijia_step, 0)
-        self.assertEqual(self.widget.mijia_target_did.text(), "123")
-        self.widget.render_mijia_login(state)  # A queued poll cannot revive a cancelled login.
-        self.assertIsNone(self.widget.mijia_login_state)
-        self.assertEqual(self.widget.mijia_step, 0)
-        self.widget.reset_finished({**self.engine_snapshot(), "devices": [], "maintenance": False})
-        self.assertEqual(self.widget.mijia_target_ip.text(), "")
-        self.assertEqual(self.widget.mijia_target_did.text(), "")
-        self.assertEqual(self.widget.mijia_discovered, [])
+            self.assertEqual(request.call_args.args[:2], ("/api/device/mijia",
+                {"action": "import", "id": "match", "did": "123", "host": "192.168.1.40"}))
+        self.widget.render_mijia_login({"id": "match", "state": "selecting", "devices": rows, "expires_at": 1})
+        self.assertFalse(self.widget.mijia_can_import())
 
-    def test_mijia_scan_request_failure_is_shown_in_current_step(self):
+    def test_mijia_scan_request_failure_is_shown_in_selection_step_and_retry_clears_stale_results(self):
         from aiflame.devices.models import MIJIA_PLUG_MODEL
         self.widget.act("/api/settings", {"hardware_notifications": True})
         self.wait(lambda: self.widget.device_reminders_enabled() and not self.widget.writing)
         self.widget.navigate(1)
         self.widget.choose_device_model(MIJIA_PLUG_MODEL)
         self.wait(lambda: not self.widget.device_selection_loading)
+        self.widget.render_mijia_login({"id": "scan-failure", "state": "selecting", "devices": [
+            {"did": "123", "host": "192.168.1.2", "name": "插座"}]})
+        self.widget.render_mijia_discovery([{"did": "123", "host": "192.168.1.40"}])
+        self.assertTrue(self.widget.mijia_can_import())
         with patch.object(self.widget, "act") as request:
             self.widget.scan_mijia_devices()
+            self.assertFalse(self.widget.mijia_can_import())
+            self.assertEqual(request.call_args.args[1], {"action": "discover", "hardware_model": MIJIA_PLUG_MODEL, "device_id": ""})
             self.widget.message.setText("扫描请求失败，请重试")
             request.call_args.args[3]()
         self.assertIn("扫描请求失败", self.widget.mijia_scan_status.text())
-        self.assertTrue(self.widget.job_message.isHidden())
-        self.assertTrue(self.widget.progress.isHidden())
-        self.assertEqual(self.widget.mijia_step, 0)
+        self.assertEqual(self.widget.mijia_step, 1)
+        self.assertTrue(self.widget.mijia_scan_button.isEnabled())
+        self.assertFalse(self.widget.mijia_can_import())
+        self.widget.render_mijia_discovery([])
+        self.assertIn("未匹配", self.widget.mijia_scan_status.text())
 
-    def test_mijia_multiple_plugs_require_selection_and_match_lan_identity(self):
-        from aiflame.devices.models import MIJIA_PLUG_MODEL
+    def test_mijia_model_identity_and_missing_account_devices_remain_blocked(self):
+        from aiflame.devices.models import MIJIA_PLUG_MODEL, MIJIA_PLUG4_MODEL
         self.widget.navigate(1)
         self.widget.choose_device_model(MIJIA_PLUG_MODEL)
         self.wait(lambda: not self.widget.device_selection_loading)
-        rows = [{"did": "123", "host": "192.168.1.2", "name": "插座"},
-                {"did": "456", "host": "192.168.1.3", "name": "插座"}]
-        self.widget.render_mijia_login({"id": "ambiguous", "state": "selecting", "devices": rows})
-        self.assertIsNone(self.widget.mijia_choices.currentData())
+        rows = [{"did": "123", "host": "192.168.1.2", "name": "插座"}]
+        self.widget.render_mijia_login({"id": "match", "state": "selecting", "devices": rows})
+        self.widget.render_mijia_discovery([{"did": "456", "host": "192.168.1.40"}])
         self.assertFalse(self.widget.mijia_can_import())
-        self.widget.return_mijia_target()
-        self.widget.mijia_target_ip.setText("192.168.1.40")
+        self.widget.render_mijia_login({"id": "wrong-model", "state": "selecting", "devices": [
+            {**rows[0], "hardware_model": MIJIA_PLUG4_MODEL}]})
         self.widget.render_mijia_discovery([{"did": "123", "host": "192.168.1.40"}])
-        self.widget.render_mijia_login({"id": "lan-match", "state": "selecting", "devices": rows})
-        self.assertEqual(self.widget.mijia_choices.currentData()["did"], "123")
-        self.assertEqual(self.widget.mijia_connect_ip.text(), "192.168.1.40")
-        self.assertTrue(self.widget.mijia_can_import())
-        self.widget.mijia_connect_ip.setText("8.8.8.8")
+        self.assertEqual(self.widget.mijia_choices.count(), 1)
         self.assertFalse(self.widget.mijia_can_import())
+        self.assertIn("此型号插座", self.widget.mijia_scan_status.text())
+        self.widget.return_mijia_target()
+        self.assertEqual(self.widget.mijia_discovered, [])
+        self.assertEqual(self.widget.mijia_target()[:2], ("", ""))
+        self.widget.render_mijia_login({"id": "wrong-model", "state": "selecting", "devices": rows})
+        self.assertIsNone(self.widget.mijia_login_state)
+
+    def test_mijia_auto_scan_retries_after_temporary_busy(self):
+        from aiflame.devices.models import MIJIA_PLUG_MODEL
+        self.widget.act("/api/settings", {"hardware_notifications": True})
+        self.wait(lambda: self.widget.device_reminders_enabled() and not self.widget.writing and not self.widget.api.pending)
+        self.widget.navigate(1)
+        self.widget.choose_device_model(MIJIA_PLUG_MODEL)
+        self.wait(lambda: not self.widget.device_selection_loading and not self.widget.api.pending)
+        with patch.object(self.widget, "act") as request:
+            self.widget.render_mijia_login({"id": "busy-login", "state": "selecting", "devices": [
+                {"did": "123", "host": "192.168.1.2", "name": "插座"}]})
+            self.widget.writing = True
+            self.app.processEvents()
+            request.assert_not_called()
+            self.widget.writing = False
+            self.widget.update_busy()
+            self.app.processEvents()
+            request.assert_called_once()
+            self.assertEqual(request.call_args.args[1]["action"], "discover")
+            self.assertTrue(self.widget.mijia_scan_pending)
+
+    def test_mijia_auto_scan_once_and_ignore_old_session_scan_results(self):
+        from aiflame.devices.models import MIJIA_PLUG_MODEL
+        self.widget.act("/api/settings", {"hardware_notifications": True})
+        self.wait(lambda: self.widget.device_reminders_enabled() and not self.widget.writing and not self.widget.api.pending)
+        self.widget.navigate(1)
+        self.widget.choose_device_model(MIJIA_PLUG_MODEL)
+        self.wait(lambda: not self.widget.device_selection_loading and not self.widget.api.pending)
+        rows = [{"did": "123", "host": "192.168.1.2", "name": "旧账号插座"}]
+        session = {"id": "old", "state": "selecting", "devices": rows}
+        with patch.object(self.widget, "act") as request:
+            for _ in range(3):
+                self.widget.render_mijia_login(session)
+            self.app.processEvents()
+            request.assert_called_once()
+            received = request.call_args.args[2]
+            received({"id": "old-scan", "action": "discover", "state": "running", "progress": 0, "message": "扫描中"})
+            for _ in range(3):
+                self.widget.render_mijia_login(session)
+                self.app.processEvents()
+            request.assert_called_once()
+            self.widget.render_mijia_discovery([{"did": "123", "host": "192.168.1.40"}], job_id="old-scan")
+            self.assertTrue(self.widget.mijia_can_import())
+            self.widget.render_mijia_login(session)
+            self.assertTrue(self.widget.mijia_can_import())
+            self.widget.return_mijia_target()
+            self.widget.job_busy = False
+            self.widget.render_mijia_login({"id": "new", "state": "selecting", "devices": [
+                {**rows[0], "name": "新账号插座"}]})
+            received({"id": "old-scan", "action": "discover", "state": "succeeded", "progress": 100,
+                      "message": "旧结果", "result": {"devices": [{"did": "123", "host": "192.168.1.40"}]}})
+            self.widget.render_mijia_discovery([{"did": "123", "host": "192.168.1.40"}], job_id="old-scan")
+            self.assertEqual(self.widget.mijia_choices.count(), 1)
+            self.assertFalse(self.widget.mijia_can_import())
 
     def test_yeelight_has_lan_controls_and_keeps_discovery_selection(self):
         self.widget.navigate(1)
@@ -509,14 +616,13 @@ class NativeDesktopTests(unittest.TestCase):
             self.assertEqual(self.widget.device_cards_layout.itemAtPosition(1, 0).widget().model['id'], 'yeelight-ylfwd0021')
             self.assertEqual(self.widget.tabs.widget(1).horizontalScrollBar().maximum(), 0)
             self.assertEqual(self.widget.device_cards_layout.itemAtPosition(2, 1).widget().model['id'], 'mijia-zncz401kk')
-            if height >= 850:
-                self.assertEqual(self.widget.tabs.widget(1).verticalScrollBar().maximum(), 0)
-            else:
-                page = self.widget.tabs.widget(1)
-                last = self.widget.device_cards_layout.itemAtPosition(2, 1).widget()
-                page.ensureWidgetVisible(last)
-                self.app.processEvents()
-                self.assertLessEqual(last.mapTo(page.viewport(), last.rect().bottomRight()).y(), page.viewport().height())
+            # Advice and shopping rows add vertical content; every card must
+            # remain reachable at either window height without horizontal scroll.
+            page = self.widget.tabs.widget(1)
+            last = self.widget.device_cards_layout.itemAtPosition(2, 1).widget()
+            page.ensureWidgetVisible(last)
+            self.app.processEvents()
+            self.assertLessEqual(last.mapTo(page.viewport(), last.rect().bottomRight()).y(), page.viewport().height())
 
     def test_beam_model_has_color_controls_and_network_loss_explanation(self):
         self.widget.navigate(1)
@@ -848,6 +954,7 @@ class NativeDesktopTests(unittest.TestCase):
         response.read.return_value = b"{}"
         opener.open.return_value.__enter__ = Mock(return_value=response)
         opener.open.return_value.__exit__ = Mock(return_value=False)
+        self.widget.api.signed_opener = SimpleNamespace(opener=opener, open=opener.open)
         for path, timeout in (("/api/integrations/install", 35),
                               ("/api/integrations/uninstall", 35),
                               ("/api/reset", 35),
@@ -1961,11 +2068,9 @@ class NativeDesktopTests(unittest.TestCase):
         self.assertEqual(len(self.widget.model["task_events"]), 100)
         self.assertEqual(len(self.widget.event_groups), 50)
         self.assertTrue(all(len(items) == 2 for items in self.widget.event_groups.values()))
-        self.assertIn("最近 50 项任务", self.widget.history_count.text())
         self.widget.history_view.setCurrentIndex(self.widget.history_view.findData("events"))
         self.assertEqual(len(self.widget.visible_events), 50)
         self.assertEqual(len(self.widget.event_groups), 25)
-        self.assertIn("最近 50 条事件", self.widget.history_count.text())
 
     def test_reset_roundtrip_restores_defaults_and_refreshes_dashboard_cookie(self):
         self.widget.poll_timer.stop()
@@ -2011,9 +2116,9 @@ class NativeDesktopTests(unittest.TestCase):
         snapshot = deepcopy(self.widget.model)
         event = {"id": "receipt-event", "source": "local-script", "state": "done",
                  "reason": "completed", "created": time.time(), "status": "applied",
-                 "delivery_summary": {"reason": "设备已确认接收指令", "devices": [
+                 "delivery_summary": {"reason": "设备已接收指令", "devices": [
                      {"device_id": "desk-one", "name": "Yeelight 屏幕挂灯 Pro", "status": "applied",
-                      "reason": "设备已确认接收指令"},
+                      "reason": "设备已接收指令"},
                      {"device_id": "desk-two", "name": "Yeelight W3 彩色灯泡", "status": "offline",
                       "reason": "事件到达时设备离线，未收到设备回执"},
                  ]}}
@@ -2032,28 +2137,51 @@ class NativeDesktopTests(unittest.TestCase):
     def test_activity_lists_device_acknowledgments_and_refreshes_partial_receipts(self):
         snapshot = self.activity_delivery_fixture()
         result = self.widget.history.item(0, 3).text()
-        self.assertEqual(result, "部分确认 · 1/2 台设备")
+        self.assertEqual(result, "指令已发送 · 1/2 台设备")
         self.assertNotIn("desk-one", result)
         self.assertNotIn("AI Flame", result)
         detail = self.activity_detail_text()
-        self.assertIn("处理结果：\n部分确认 · 1/2 台设备", detail)
-        self.assertIn("设备回执\nYeelight 屏幕挂灯 Pro（desk-one）\n设备已确认接收指令", detail)
+        self.assertIn("处理结果：\n指令已发送 · 1/2 台设备", detail)
+        self.assertIn("设备回执\nYeelight 屏幕挂灯 Pro（desk-one）\n设备已接收指令", detail)
         self.assertIn("Yeelight W3 彩色灯泡（desk-two）\n事件到达时设备离线", detail)
         self.assertIn("系统通知\n系统通知权限未允许", detail)
         self.assertNotIn("已收到事件 →", detail)
         self.assertNotIn("未确认：", detail)
-        self.assertEqual(detail.count("设备已确认接收指令"), 1)
+        self.assertEqual(detail.count("设备已接收指令"), 1)
         self.assertNotIn("flame:", detail)
         changed = deepcopy(snapshot)
         changed["events"][0]["delivery_summary"]["devices"][1].update(
-            status="applied", reason="设备已确认接收指令")
+            status="applied", reason="设备已接收指令")
         # The overall event stays applied; the second device's ACK alone refreshes it.
         self.widget.render(changed)
         result = self.widget.history.item(0, 3).text()
-        self.assertEqual(result, "全部确认 · 2/2 台设备")
+        self.assertEqual(result, "指令已发送 · 2/2 台设备")
         self.assertEqual(self.widget.history.currentRow(), 0)
         self.assertTrue(self.widget.history.selectionModel().hasSelection())
-        self.assertIn("Yeelight W3 彩色灯泡（desk-two）\n设备已确认接收指令", self.activity_detail_text())
+        self.assertIn("Yeelight W3 彩色灯泡（desk-two）\n设备已接收指令", self.activity_detail_text())
+        changed = deepcopy(changed)
+        changed["events"][0]["delivery_summary"]["devices"].extend([
+            {"device_id": "plug", "name": "米家智能插座 4", "status": "applied", "reason": "设备已接收指令"},
+            {"device_id": "beam", "name": "Yeelight Beam 塔灯", "status": "sent", "reason": "指令已发送"},
+            {"device_id": "cube", "name": "Yeelight Cube Lite", "status": "sent", "reason": "指令已发送"},
+        ])
+        self.widget.render(changed)
+        self.assertEqual(self.widget.history.item(0, 3).text(), "指令已发送 · 5/5 台设备")
+        self.assertEqual(self.widget.history.item(0, 3).foreground().color().name(), "#38735b")
+        self.assertEqual(self.widget.delivery_color({"status": "sent"}), "#38735b")
+        detail = self.activity_detail_text()
+        self.assertIn("Yeelight Beam 塔灯（beam）\n指令已发送", detail)
+        self.assertIn("Yeelight Cube Lite（cube）\n指令已发送", detail)
+        self.assertNotIn("部分确认", detail)
+        self.assertNotIn("未提供显示确认", detail)
+        # Real exceptions still reduce the sent count and retain their tone.
+        for status, color in (("offline", "#95630b"), ("queued", "#95630b"), ("failed", "#a34235")):
+            with self.subTest(status=status):
+                changed = deepcopy(changed)
+                changed["events"][0]["delivery_summary"]["devices"][-1]["status"] = status
+                self.widget.render(changed)
+                self.assertEqual(self.widget.history.item(0, 3).text(), "指令已发送 · 4/5 台设备")
+                self.assertEqual(self.widget.history.item(0, 3).foreground().color().name(), color)
 
     def test_activity_detail_emphasizes_result_and_escapes_device_text(self):
         snapshot = deepcopy(self.activity_delivery_fixture())
@@ -2063,7 +2191,7 @@ class NativeDesktopTests(unittest.TestCase):
         document = QTextDocument()
         document.setHtml(self.widget.event_detail.text())
         self.assertIn('<b>Desk & lamp</b>', document.toPlainText())
-        result = document.find('部分确认 · 1/2 台设备').charFormat()
+        result = document.find('指令已发送 · 1/2 台设备').charFormat()
         section = document.find('设备回执').charFormat()
         device_id = document.find('desk-one').charFormat()
         self.assertGreater(result.font().pixelSize(), section.font().pixelSize())
@@ -2082,7 +2210,7 @@ class NativeDesktopTests(unittest.TestCase):
             {"event": "receipt-event", "output": "internal-output", "status": "failed"},
         ])
         self.widget.render(changed)
-        self.assertEqual(self.widget.history.item(0, 3).text(), "等待发送 · 0/2 台设备确认")
+        self.assertEqual(self.widget.history.item(0, 3).text(), "等待发送 · 0/2 台设备")
         detail = self.activity_detail_text()
         self.assertIn("已进入提醒调度，等待设备回执", detail)
         self.assertIn("Yeelight 屏幕挂灯 Pro（desk-one）\n等待设备确认", detail)
@@ -2098,6 +2226,7 @@ class NativeDesktopTests(unittest.TestCase):
         result = self.widget.history.item(0, 3).text()
         detail = self.activity_detail_text()
         self.assertIn("1/2", result)
+        self.assertIn("Command sent", result)
         self.assertNotIn("desk-one", result)
         self.assertNotIn("desk-two", result)
         self.assertIn("desk-one", detail)
@@ -2135,50 +2264,38 @@ class NativeDesktopTests(unittest.TestCase):
 
 
 
-    def test_first_use_extension_guide_opens_store_only_from_step_one(self):
+    def test_first_use_extension_guide_has_two_generic_actions(self):
         from aiflame.integrations.chatgpt_web.guide import STORE_URL
         with patch('aiflame.desktop.extension_guide.open_in_chrome', return_value=True) as launch:
-            self.widget.open_browser_extension_guide()
+            self.widget.open_browser_extension_guide('gemini-web')
             launch.assert_not_called()
             guide = self.widget.extension_guide
             guide.close()
-            self.widget.open_browser_extension_guide()
+            self.widget.open_browser_extension_guide('chatgpt-web')
             launch.assert_not_called()
-            guide.primary.click()
+            guide.store_button.click()
         launch.assert_called_once_with(STORE_URL)
-        guide = self.widget.extension_guide
-        self.assertFalse(guide.installed)
-        self.assertEqual(guide.primary.text(), "在 Chrome 安装扩展")
-        guide.go(1)
-        self.assertEqual(guide.step, 0)
-        guide.copy_store()
-        self.assertEqual(self.app.clipboard().text(), STORE_URL)
-        guide.checkpoint.setChecked(True)
-        guide.primary.click()
-        self.assertEqual(guide.step, 1)
-        self.wait(lambda: not self.widget.api.pending)
+        self.assertFalse(guide.configured)
+        self.assertEqual(guide.primary.text(), "允许连接")
         with patch.object(self.widget, "act") as action:
-            guide.connect()
+            guide.primary.click()
             self.assertFalse(guide.primary.isEnabled())
             self.assertEqual(action.call_args.args[:2], ("/api/integrations/install", {"source": "chatgpt-web"}))
             action.call_args.args[3]()
             self.assertTrue(guide.primary.isEnabled())
             self.assertFalse(guide.configured)
-            guide.connect()
+            guide.primary.click()
             action.call_args.args[2]({"message": "通信配置已准备。"})
-        self.wait(lambda: not self.widget.api.pending)
         self.assertTrue(guide.configured)
-        self.assertEqual(guide.primary.text(), "完成设置")
+        self.assertEqual(guide.primary.text(), "完成")
         self.assertNotIn("已验证", guide.status.text())
         guide.close()
-        self.assertFalse(guide.timer.isActive())
         with patch('aiflame.desktop.extension_guide.open_in_chrome') as launch:
             self.widget.open_browser_extension_guide()
         launch.assert_not_called()
-        self.assertEqual(self.widget.extension_guide.step, 1)
+        self.assertIs(self.widget.extension_guide, guide)
+        self.assertTrue(guide.configured)
         guide.close()
-
-
 
     def test_source_help_is_local_and_available_on_hover_or_activation(self):
         self.widget.navigate(2)

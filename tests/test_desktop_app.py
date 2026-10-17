@@ -20,7 +20,11 @@ if HAS_QT:
 @unittest.skipUnless(HAS_QT, "Install desktop dependencies to test the app shell")
 class DesktopAppTests(unittest.TestCase):
     def test_existing_hub_requires_matching_release_and_brand(self):
-        with patch.object(shell.urllib.request, "build_opener"), patch.object(shell.json, "load") as load:
+        with (
+            patch("aiflame.core.management_auth.SignedOpener") as factory,
+            patch.object(shell.json, "load") as load,
+            patch.object(shell, "dashboard_token", return_value="test-dashboard-token"),
+        ):
             for data, expected in (
                 ({"app_version": shell.__version__}, False),
                 ({"app_version": "0.8.0", "app_name": "SeeEnd"}, False),
@@ -28,6 +32,8 @@ class DesktopAppTests(unittest.TestCase):
             ):
                 load.return_value = data
                 self.assertEqual(shell.existing_hub(), expected)
+            self.assertEqual(factory.call_args.args[0], "http://127.0.0.1:8765")
+            self.assertIs(factory.call_args.args[1], shell.dashboard_token)
 
     @classmethod
     def setUpClass(cls):
@@ -151,6 +157,7 @@ class DesktopAppTests(unittest.TestCase):
                  patch('aiflame.desktop.macos_shell.MacTray') as tray, \\
                  patch('aiflame.desktop.macos_shell.activate_application'), \\
                  patch('aiflame.desktop.notifications.NotificationConsumer'), \\
+                 patch('aiflame.desktop.sound_consumer.SoundConsumer') as sounds, \\
                  patch('aiflame.desktop.tray.TrayIndicator') as indicator, \\
                  patch('aiflame.desktop.floating_flame.DesktopFlame', side_effect=create_flame), \\
                  patch('PySide6.QtWidgets.QMessageBox.information'):
@@ -165,6 +172,7 @@ class DesktopAppTests(unittest.TestCase):
                 hub.stop.assert_called_once()
                 widgets['dashboard'].shutdown.assert_called_once()
                 tray.return_value.shutdown.assert_called_once()
+                sounds.return_value.shutdown.assert_called_once()
                 owner.return_value.close.assert_called_once()
         """)
         for visible, enabled in ((0, 1), (1, 1), (0, 0), (1, 0)):

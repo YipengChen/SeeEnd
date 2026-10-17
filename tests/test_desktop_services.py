@@ -330,9 +330,11 @@ class HTTPTests(unittest.TestCase):
         self.addCleanup(self.hub.stop)
         self.base = "http://127.0.0.1:" + str(self.hub.port)
         self.opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        from aiflame.core.management_auth import SignedOpener
+        self.signed_opener = SignedOpener(self.base, lambda: self.hub.config["dashboard"], opener=self.opener)
 
     def request(self, path, body=None, headers=None):
-        h = {"Cookie": "aiflame=cookie-secret"}
+        h = {}
         if body is not None:
             h["Content-Type"] = "application/json"
         if headers:
@@ -342,7 +344,9 @@ class HTTPTests(unittest.TestCase):
             data=json.dumps(body).encode() if body is not None else None,
             headers=h,
         )
-        return self.opener.open(request, timeout=2)
+        if any(key.lower() in ("authorization", "cookie") for key in h):
+            return self.opener.open(request, timeout=2)
+        return self.signed_opener.open(request, timeout=2)
 
 
     def test_extension_folder_preparation_is_console_only_and_cannot_choose_path(self):
@@ -370,10 +374,21 @@ class HTTPTests(unittest.TestCase):
                     self.assertEqual(error.exception.code, 404)
                     self.assertNotIn("Set-Cookie", error.exception.headers)
                     error.exception.close()
-        with self.request("/api/session", headers={"Cookie": ""}) as response:
+        with self.request("/api/session") as response:
             self.assertEqual(response.headers.get_content_type(), "application/json")
             self.assertEqual(json.load(response)["app_name"], "SeeEnd")
-            self.assertIn("Set-Cookie", response.headers)
+            self.assertNotIn("Set-Cookie", response.headers)
+
+        for headers, status in (({"Cookie": ""}, 401),
+                                ({"Authorization": "Bearer cookie-secret"}, 401),
+                                ({"Cookie": "", "Authorization": "Bearer api-secret"}, 403),
+                                ({"Cookie": "", "Authorization": "Bearer web-secret"}, 403)):
+            with self.subTest(headers=tuple(headers), status=status):
+                with self.assertRaises(urllib.error.HTTPError) as error:
+                    self.request("/api/session", headers=headers)
+                self.assertEqual(error.exception.code, status)
+                self.assertNotIn("Set-Cookie", error.exception.headers)
+                error.exception.close()
 
         for path, body in (("/api/desktop-clients", None),
                            ("/api/desktop-clients/permissions", {})):
