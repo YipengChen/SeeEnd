@@ -21,3 +21,5 @@ Qt/PySide、米家参考实现与猫声已有许可/来源记录。品牌图标�
 修复已有 Linux CI 失败：英文窄窗口中微信设置标题、按钮与开关同排导致横向溢出，按钮改用独立行，新增字形宽度边界回归。构建与测试结果以本次 Actions 实际状态为准；自动测试不替代目标系统签名/安装、真实浏览器、系统通知和实体设备验收。
 
 固定直接依赖的 PyPI 安全公告检查发现 cryptography 49.0.0 有 CVE-2026-69247，影响 PKCS#7 EnvelopedData 解密。SeeEnd 使用 AES CBC/GCM，未调用受影响接口；依赖仍升级至已修复的 50.0.2。其余固定直接依赖在本次检查未列出安全公告，此结果不涵盖全部传递依赖或未来公告。依据：[cryptography 官方变更记录](https://cryptography.io/en/latest/changelog/)。构建矩阵沿用已有的 macOS Apple 芯片、Windows x64、Linux x64 范围，不在本次仓库整理中新增 Intel Mac 发行支持。macOS runner 使用 macos-15，避开即将下线的 macos-14。
+
+云端 macOS 15 编译回归暴露两项 Beam 流式测试的固定 250ms 等待假设，实际多帧持续发送但该窗口少调度一帧。测试改用原有 2 秒有界条件等待，保留 Beam +3 / Cube +2 帧、内容、回执和停机断言；受控增加每帧处理耗时后，旧测试失败、新测试通过。产品代码及帧率未改。Node 开发依赖的 npm audit 在本次检查为 0 项公告。
