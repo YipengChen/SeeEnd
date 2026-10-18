@@ -588,7 +588,10 @@ class YeelightTests(unittest.TestCase):
                     self.assertTrue(any(call.args[0] == 'update_leds' and base64.b64decode(call.args[1][0]) == expected_pixel * hardware_model(model_id)["pixel_count"]
                                         for call in client.command.call_args_list))
                     frames_before = sum(call.args[0] == 'update_leds' for call in client.command.call_args_list)
-                    time.sleep(.25)
+                    # Verify continued streaming without assuming CI thread scheduling.
+                    minimum_frames = 2 if model_id == YEELIGHT_CUBE_MODEL else 3
+                    wait_for(lambda: sum(call.args[0] == 'update_leds' for call in client.command.call_args_list)
+                             >= frames_before + minimum_frames)
                     frames_after = sum(call.args[0] == 'update_leds' for call in client.command.call_args_list)
                     if model_id == YEELIGHT_CUBE_MODEL:
                         self.assertGreaterEqual(frames_after, frames_before + 2)
