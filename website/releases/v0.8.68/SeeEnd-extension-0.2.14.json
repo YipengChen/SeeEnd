@@ -1,0 +1,32 @@
+{
+  "format_version": 1,
+  "app_version": "0.8.68",
+  "extension_version": "0.2.14",
+  "git_revision": "fd8446347863ab64a924ffb0ac210f9cfa1d772d",
+  "git_dirty": true,
+  "source_sha256": "f845c7dc18f50bcafe95b97da73d9da8971b1c0d2d078ae94e0609498cf18dae",
+  "platform": "Darwin",
+  "architecture": "arm64",
+  "python": "3.14.6",
+  "files_sha256": {
+    "README.md": "6ad6d6ce2caac0e5edfb36e8760eb3de8725581e0736299b7114fb0a33fe06ed",
+    "background.js": "de8e3f97703aea94d1d38bb177e0ffabeb6a944b8013efbbb8304fd5dcc315d4",
+    "content.js": "bdca16d9fbee4d96ed8a44202187a07bfc7556d5bcd83b887be14a0f609af25f",
+    "detector.js": "7d518e9d5c902bf1ef7cac819712c42bbd0325563a86fb5ed80a11f1ca2767df",
+    "frames.js": "7efed33f92f6ca34071f163a221f7b32f8157156d075c6c0e74cee8ec7817ebf",
+    "icon-128.png": "d4bebf130266af1c4eb0b4b4a9cff3781010411353d003c7ca217459c804c260",
+    "icon-16.png": "b6293ef6b19a7bb5b4ac9194213a25d155b9719e0cef8849bafacebfce51826a",
+    "icon-32.png": "5a7eae2db658da3d2b4f7b027318ce7cdd177fc2d362cfe7c29b10b556a7355d",
+    "icon-48.png": "3407b533ee0c86a1f41710f900204be89133785c4a7e6ab49d6a1cb898017a7b",
+    "manifest.json": "514446f379a4a10b41f2cd78d74cfa2ff2c0aaf6e48f0b24094a9e8b9232c564",
+    "popup.html": "ab71313d41591e68c689a63c6a0e4761585833a87b087a837e465e73055d8e3f",
+    "popup.js": "c3d86e354f592a31ab8b3737212e2d22bed1f819f76cd8c86390c8c9f103a93d",
+    "providers.js": "eb0668ac7fc014f205ad08f8ce8e35a96c5ff999aa46c5bc7bdecc6b037c024c",
+    "returns.js": "f36e4649bd0f644f84523dc599a6b874396f2e5b1fffedd858bd378bd1d3d56e",
+    "state.js": "5e337489ca97ba1716aa7f40471fb0e847b21da230ca787e51a863d30504cc97"
+  },
+  "packages_sha256": {
+    "SeeEnd-Web-extension-0.2.14.zip": "aac7977acf74c70e1acc9d817a86eeb677a51d9cca8c1277ed35f6f56114d2f1",
+    "SeeEnd-Chrome-Web-Store-extension-0.2.14.zip": "e53514515610d9d389bedfca88f89b2ae297e13b271bb03810016453839fa3a1"
+  }
+}

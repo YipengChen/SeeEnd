@@ -26,7 +26,7 @@ macOS 已保存原终端位置的编程任务，会在确认宿主进程退出�
 支持 Codex、Claude Code、Qoder CLI、DeepSeek Harness、Gemini CLI 和 OpenCode。先确认工具在当前电脑能正常回复，保持 SeeEnd 运行。在「应用接入 → 编程工具」复制安装指令，粘贴到实际使用的工具：
 
 > 请安装此 Skill，并用它为当前编程工具接入 SeeEnd：
-> https://github.com/YipengChen/SeeEnd-skill
+> https://github.com/YipengChen/SeeEnd/tree/main/skill/seeend
 
 App 0.8.68 的管理接口需要本机私有凭据，请配套使用 Skill 1.0.5 或更新版。客户端先验证本机服务身份，再签名每次管理请求；私有凭据本身不会发送到端口。无需手动复制凭据，旧 Skill 需要更新后才能管理新版 App。
 

@@ -1,0 +1,103 @@
+{
+  "status": "prepared",
+  "app_version": "0.8.55",
+  "extension_version": "0.2.12",
+  "skill_version": "1.0.2",
+  "contract_version": 1,
+  "schema_version": "1.0",
+  "build_receipt": "SeeEnd-build.json",
+  "source_sha256": "576b5d99c94f014b1e527eb270c39ecbf541edfdcc55d07506ac43b1b33ea348",
+  "external_publication_verified": false,
+  "prepared_at": "2026-10-16",
+  "assets": [
+    {
+      "role": "app",
+      "filename": "SeeEnd-0.8.55-Darwin-arm64.zip",
+      "path": "../../../code/dist/audit-0.8.55/SeeEnd-0.8.55-Darwin-arm64.zip",
+      "sha256": "6c79f34b7b2b916f77627ea7aa72722cd7d85d74bf2a1f53fe9621ba18e867f4",
+      "bytes": 56968165
+    },
+    {
+      "role": "third-party-sources",
+      "filename": "SeeEnd-third-party-sources-0.8.55.zip",
+      "path": "../../../code/dist/audit-0.8.55/SeeEnd-third-party-sources-0.8.55.zip",
+      "sha256": "8eceb6b93daca69c6f8001149a99a224645b2645e8cbef8b1077ec93bef6c3d5",
+      "bytes": 111719421
+    },
+    {
+      "role": "extension",
+      "filename": "SeeEnd-Web-extension-0.2.12.zip",
+      "path": "../../../code/dist/audit-0.8.55/SeeEnd-Web-extension-0.2.12.zip",
+      "sha256": "cabc1678315fadcf17d91e819b77a7dd175e0100256a97ea264f771e5a519ac9",
+      "bytes": 38807
+    },
+    {
+      "role": "store-extension",
+      "filename": "SeeEnd-Chrome-Web-Store-extension-0.2.12.zip",
+      "path": "../../../code/dist/audit-0.8.55/SeeEnd-Chrome-Web-Store-extension-0.2.12.zip",
+      "sha256": "145cac2a6c8ef09efc8b68e2eb2fd732a40592e3d442635c739b89166e6b6bb9",
+      "bytes": 35501
+    }
+  ],
+  "validation": {
+    "source": {
+      "discovered": 680,
+      "passed": 677,
+      "skipped": 3,
+      "environment_skips": 0,
+      "failures": 0,
+      "errors": 0,
+      "scope": "Unrestricted full-suite pre-push run; 3 existing conditional skips (frozen helper tested separately, native window backend, Windows DPAPI).",
+      "verified_at": "2026-10-16T12:52:13.162569+00:00"
+    },
+    "targeted": {
+      "passed": 63
+    },
+    "javascript": {
+      "passed": 184
+    },
+    "skill": {
+      "passed": 34
+    },
+    "frozen": {
+      "native_modules": 34,
+      "helper_processes": 25,
+      "real_http_lifecycle": "passed",
+      "http_tests": 3,
+      "http_failures": 0,
+      "http_errors": 0,
+      "http_skipped": 0,
+      "reverified_at": "2026-10-16T12:56:18.693114+00:00"
+    },
+    "source_sandbox_initial": {
+      "discovered": 680,
+      "passed": 537,
+      "skipped": 143,
+      "environment_skips": 140,
+      "failures": 0,
+      "errors": 0,
+      "scope": "Earlier sandboxed full-suite run; not rerun during frozen HTTP revalidation."
+    }
+  },
+  "validation_limits": [
+    "Unrestricted full suite: 677 passed, 3 existing conditional skips. Earlier sandbox-limited counts are retained under source_sandbox_initial. Frozen HTTP revalidation separately passed all 3 tests.",
+    "No new physical hardware, real account, system banner or full terminal/browser acceptance.",
+    "Validation itself did not publish binaries or replace the installed App. Repository documentation synchronization and Chrome draft-package upload are tracked separately; App 0.8.55 remains prepared."
+  ],
+  "privacy_deployment": {
+    "url": "https://yipengchen.github.io/SeeEnd-downloads/",
+    "verified_at": "2026-10-16T12:52:13.162569+00:00",
+    "sha256": "93ce5499fc34a64dbdab9766841ee2309303614018e4cfb40a6c80617b633afa",
+    "verification": "anonymous fetched bytes match current privacy source"
+  },
+  "chrome_store": {
+    "item_id": "miokmdeomlchjpihkcnommpnheagoimc",
+    "draft_version": "0.2.12",
+    "published_version": "0.2.10",
+    "upload_status": "uploaded_draft",
+    "submitted_for_review_by_this_task": false,
+    "verified_at": "2026-10-16T12:56:18.693114+00:00",
+    "package_sha256": "145cac2a6c8ef09efc8b68e2eb2fd732a40592e3d442635c739b89166e6b6bb9",
+    "evidence": "Developer Dashboard Package page visibly confirmed draft 0.2.12 and published 0.2.10 after upload."
+  }
+}

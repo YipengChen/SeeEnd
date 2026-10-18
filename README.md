@@ -6,7 +6,7 @@
 
 SeeEnd 是本机 AI 任务提醒应用：接收编程工具、网页对话和本地 API 的状态事件，用桌面火焰、系统通知、音效、微信通知或实体设备提示工作中、等待输入和已完成。无需硬件或向 SeeEnd 提供模型 API Key。
 
-当前源码基线：**App 0.8.68** · 浏览器扩展 **0.2.14** · Python **3.11+** · [专有许可](LICENSE)。源码版本与本机构建不代表已经公开发布；分发与商店状态见[仓库与发布说明](docs/REPOSITORIES.md)和[扩展申请进度](docs/chrome-web-store/APPLICATION_STATUS.md)。
+当前源码基线：**App 0.8.69** · 浏览器扩展 **0.2.14** · Python **3.11+** · [GPL-3.0-only](LICENSE)。源码版本与本机构建不代表已经公开发布；分发与商店状态见[仓库与发布说明](docs/REPOSITORIES.md)和[扩展申请进度](docs/chrome-web-store/APPLICATION_STATUS.md)。
 
 ## 产品与支持范围
 
@@ -17,7 +17,7 @@ SeeEnd 是本机 AI 任务提醒应用：接收编程工具、网页对话和本
 
 | 接入 | 当前实现 |
 | --- | --- |
-| 编程工具 | Codex、Claude Code、Qoder CLI、DeepSeek Harness、Gemini CLI、OpenCode；通过 [SeeEnd Skill](https://github.com/YipengChen/SeeEnd-skill) 安装和维护 |
+| 编程工具 | Codex、Claude Code、Qoder CLI、DeepSeek Harness、Gemini CLI、OpenCode；通过 [SeeEnd Skill](https://github.com/YipengChen/SeeEnd/tree/main/skill/seeend) 安装和维护 |
 | 网页扩展 | ChatGPT、DeepSeek、千问、豆包、腾讯元宝、Kimi、智谱清言、Claude、Gemini；实验功能，网站更新后需复验 |
 | 本地 HTTP API | 自有脚本或工具通过独立来源凭据上报任务事件 |
 
@@ -60,6 +60,8 @@ Python CI 使用 3.11 / 3.13；浏览器测试另需 Node.js（构建 CI 使用 
 python -m unittest discover -s tests -v
 npm ci --ignore-scripts
 npm test
+python -m unittest discover -s skill/tests -v
+python tools/check_workspace.py
 ```
 
 无显示器可设置 `QT_QPA_PLATFORM=offscreen`。部分测试需要回环端口、IPC 或桌面依赖；冻结 Helper 测试需相应产物。`tests/verify_*_live.py` 是手动实机工具，运行前检查目标和参数，不属于常规自动回归。
@@ -75,11 +77,15 @@ python packaging/archive.py
 
 macOS 默认输出 `dist/SeeEnd.app`，Windows 输出 `dist/SeeEnd/SeeEnd.exe`，归档命令生成对应平台的分发包；三个命令可统一加 `--dist-dir dist/staging` 使用独立目录。首次构建下载并校验第三方材料，准备完成后可省略 `--download-sources` 离线重建。需要本机 C 编译器；核心模块经 Cython 原生编译，无 Python 回退。修改核心逻辑可先运行 `python packaging/verify_native.py`，或构建时加 `--verify-native`。
 
-云端原生构建可手动触发 `Build desktop preview`，选择 `target_os=windows-latest`、`probe_only=false`；完整流程包含编译核心回归、冻结验证和归档，成功后下载 `seeend-windows-latest` artifact。Windows 分发 ZIP 需完整解压并保留 `_internal` 等配套文件，再运行 `SeeEnd/SeeEnd.exe`。
+云端构建在 Actions 中手动触发 `Build desktop and draft release`，选择 `target_os=all`、`probe_only=false`，生成 macOS arm64 / Intel、Windows x64、Linux x64 制品。推送与源码版本匹配的 `v<版本>` tag 后，全部平台成功才在本 SeeEnd 仓库创建草稿 Release，包含应用、完整对应源码、独立 Skill、第三方材料及 SHA256SUMS。维护者验收后手动发布；仓库继续保持私有，公开可见性由维护者手动切换。无需从本地上传安装包。步骤见[单仓库维护与发布](docs/REPOSITORIES.md)。
 
 `SeeEnd-build.json` 记录版本、源码指纹、Git 状态与第三方材料身份；源码变更后须重建，冻结验证与归档拒绝复用不匹配的 App。分发 App ZIP（Linux 为 `.tar.gz`）是用户安装入口；第三方源码 ZIP 独立按需下载，使用 App 无需下载。当前机器的签名与发布验收状态应以实际产物为准。
 
 `python packaging/extension_release.py` 生成版本化开发包、商店待提交 ZIP 和校验清单；生成材料不等于已提交或已发布。品牌图标以 `aiflame/assets/icon.svg` 为源，运行 `python packaging/render_icon.py` 更新派生资源后重建。
+
+## 仓库结构
+
+应用源码直接位于本仓库根目录，`aiflame/` 包名继续兼容既有配置。`skill/seeend/` 是可独立安装的接入技能，`website/` 维护政策网页与旧发行清单，`packaging/` 和 `.github/` 负责构建发布；测试位于 `tests/`、`skill/tests/` 和 `tools/`。本地研究素材、用户配置与验证原件不纳入源码仓库。
 
 ## 文档导航与许可
 
@@ -90,4 +96,4 @@ macOS 默认输出 `dist/SeeEnd.app`，Windows 输出 `dist/SeeEnd/SeeEnd.exe`�
 - [协作与发布](docs/REPOSITORIES.md) · [贡献指南](CONTRIBUTING.md)
 - [第三方资源说明](THIRD_PARTY_NOTICES.md) · [第三方库替换说明](LIBRARY_REPLACEMENT.md)
 
-0.8.4 起原创实现采用 [SeeEnd 专有软件许可](LICENSE)，此前已授予的许可权利不撤销。第三方依赖和品牌素材保留各自许可与权利归属。
+当前原创实现采用 [GNU GPL v3.0](LICENSE)（GPL-3.0-only）。旧发行版按各自发行时的许可处理，此前已授予的权利不撤销。第三方依赖和品牌素材保留各自许可与权利归属。

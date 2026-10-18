@@ -1,0 +1,14 @@
+{
+  "format_version": 1,
+  "app_version": "0.8.68",
+  "extension_version": "0.2.14",
+  "git_revision": "fd8446347863ab64a924ffb0ac210f9cfa1d772d",
+  "git_dirty": true,
+  "source_sha256": "f845c7dc18f50bcafe95b97da73d9da8971b1c0d2d078ae94e0609498cf18dae",
+  "platform": "Darwin",
+  "architecture": "arm64",
+  "python": "3.14.6",
+  "built_at": "2026-10-17T11:53:10.880222+00:00",
+  "third_party_sources_sha256": "bac01665b61ecb9e092999f7da24376734956e35f1b89ab071778e68787dda53",
+  "third_party_licenses_sha256": "bac01665b61ecb9e092999f7da24376734956e35f1b89ab071778e68787dda53"
+}

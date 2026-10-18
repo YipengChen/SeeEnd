@@ -2,7 +2,7 @@
 
 from .providers import CLI_SOURCES
 
-SKILL_URL = "https://github.com/YipengChen/SeeEnd-skill"
+SKILL_URL = "https://github.com/YipengChen/SeeEnd/tree/main/skill/seeend"
 NAMES = {"codex": "Codex", **CLI_SOURCES}
 
 

@@ -28,4 +28,4 @@
 
 会话存储保存活跃任务，结束／取消时删除；本地存储保留各来源最近结果供弹窗显示，新结果覆盖旧结果，不按天自动清理。停用或移除扩展可停止处理，移除会清除其存储；App 记录由 App 独立管理。
 
-完整操作、隐私、证据层级及旧版实测记录分别见源码仓库 `docs/quick-start.md`、`docs/chrome-web-store/privacy/`、`docs/validation.md` 和 `docs/history/web-extension-through-0.2.12.md`。
+完整操作、隐私、证据层级及旧版实测记录分别见源码仓库 `docs/quick-start.md`、`website/` 与 `docs/chrome-web-store/privacy/`、`docs/validation.md` 和 `docs/history/web-extension-through-0.2.12.md`。

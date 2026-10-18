@@ -1,0 +1,2 @@
+# Preserve build-receipt bytes across platforms.
+releases/*/SeeEnd-build-*.json -text whitespace=cr-at-eol

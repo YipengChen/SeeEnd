@@ -1,0 +1,108 @@
+{
+  "contract_version": 1,
+  "app_name": "SeeEnd",
+  "app_version": "0.8.69",
+  "schema_version": "1.0",
+  "required_fields": [
+    "schema_version",
+    "event_id",
+    "source_id",
+    "task_id",
+    "seq",
+    "state",
+    "occurred_at",
+    "ttl_ms"
+  ],
+  "optional_fields": [
+    "reason",
+    "device_id",
+    "return_target",
+    "return_context"
+  ],
+  "states": [
+    "idle",
+    "working",
+    "needs_input",
+    "done",
+    "cancelled",
+    "timeout",
+    "unknown"
+  ],
+  "reasons": [
+    "completed",
+    "failed",
+    "cancelled",
+    "timeout"
+  ],
+  "sources": [
+    {
+      "id": "local-script",
+      "authenticated": true,
+      "requires_start": false,
+      "allow_late_cancel": false,
+      "working_lease_seconds": 120
+    },
+    {
+      "id": "codex",
+      "authenticated": true,
+      "requires_start": true,
+      "allow_late_cancel": true,
+      "working_lease_seconds": null
+    },
+    {
+      "id": "claude-code",
+      "authenticated": true,
+      "requires_start": true,
+      "allow_late_cancel": true,
+      "working_lease_seconds": null
+    },
+    {
+      "id": "qoder",
+      "authenticated": true,
+      "requires_start": true,
+      "allow_late_cancel": true,
+      "working_lease_seconds": null
+    },
+    {
+      "id": "deepseek-harness",
+      "authenticated": true,
+      "requires_start": true,
+      "allow_late_cancel": true,
+      "working_lease_seconds": null
+    },
+    {
+      "id": "gemini-cli",
+      "authenticated": true,
+      "requires_start": true,
+      "allow_late_cancel": true,
+      "working_lease_seconds": null
+    },
+    {
+      "id": "opencode",
+      "authenticated": true,
+      "requires_start": true,
+      "allow_late_cancel": true,
+      "working_lease_seconds": null
+    }
+  ],
+  "capabilities": {
+    "native_sources": [
+      "codex",
+      "claude-code",
+      "qoder",
+      "deepseek-harness",
+      "gemini-cli",
+      "opencode"
+    ],
+    "verification_evidence": true,
+    "deepseek_config_dir": false,
+    "device_targeting": true,
+    "task_return": {
+      "web": true,
+      "terminal": [
+        "Terminal",
+        "iTerm2"
+      ]
+    }
+  }
+}

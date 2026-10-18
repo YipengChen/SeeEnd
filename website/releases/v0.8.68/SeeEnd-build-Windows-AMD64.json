@@ -1,0 +1,14 @@
+{
+  "format_version": 1,
+  "app_version": "0.8.68",
+  "extension_version": "0.2.14",
+  "git_revision": "bfb30db9e243fc7a065accb9733c5cc5d18bb13e",
+  "git_dirty": false,
+  "source_sha256": "81623feb972e7b70544b1ba2e5e2f56e0aa36a0c58e2e72f76cbf46d0c6f41be",
+  "platform": "Windows",
+  "architecture": "AMD64",
+  "python": "3.13.16",
+  "built_at": "2026-10-17T12:03:26.460460+00:00",
+  "third_party_sources_sha256": "708d4de68d8455d7eb371a409314b9801f65aa432260c09671a75029902602ee",
+  "third_party_licenses_sha256": "708d4de68d8455d7eb371a409314b9801f65aa432260c09671a75029902602ee"
+}

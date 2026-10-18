@@ -1,20 +1,16 @@
-# SeeEnd 文档索引
-
-当前审校基线为 App **0.8.68**、浏览器扩展 **0.2.14**。版本来自源码及匹配的原始构建 receipt；本地资料修订不代表公开下载或商店已更新。
+# SeeEnd 文档
 
 | 需要了解 | 维护入口 |
 | --- | --- |
-| 产品简介、源码启动、构建 | [中文 README](../README.md) · [English](../README.en.md) |
-| 提醒、接入、任务返回、设备设置 | [使用指南](quick-start.md) |
-| 当前能力、设备与实现限制 | [产品基线](product/CURRENT_PRODUCT.md) |
-| 模块、协议、凭据和数据 | [架构说明](architecture.md) |
-| 自动检查及证据边界 | [验证入口](validation.md) |
-| 当前版本验证与交付 | [验证记录](validation.md) · [协作与发布](REPOSITORIES.md) |
-| 历史内容审校 | [0.8.55 内容审校](CONTENT_AUDIT_0.8.55.md) |
-| 三仓库职责和发布步骤 | [协作与发布](REPOSITORIES.md) |
-| 扩展材料、隐私与日期化商店记录 | [商店资料](chrome-web-store/README.md) |
-| 原生 Hook 与插件安装维护 | [独立 SeeEnd Skill](https://github.com/YipengChen/SeeEnd-skill) |
+| 产品、源码启动、开发测试 | [中文 README](../README.md) · [English](../README.en.md) |
+| 提醒、任务返回与设备连接 | [使用指南](quick-start.md) |
+| 当前功能与兼容范围 | [产品基线](product/CURRENT_PRODUCT.md) |
+| 模块、数据、凭据和协议 | [架构](architecture.md) |
+| 构建、源码分发与 GitHub Release | [单仓库维护与发布](REPOSITORIES.md) |
+| 自动检查及实机证据边界 | [验证说明](validation.md) |
+| 原生 Hook/插件接入 | [SeeEnd Skill](../skill/README.md) |
+| 政策网页与旧版发行清单 | [website](../website/README.md) |
+| 商店说明、素材和提交记录 | [扩展商店资料](chrome-web-store/README.md) |
+| 许可、第三方组件与替换动态库 | [许可说明](legal/RELEASE_LICENSING.md) · [第三方声明](../THIRD_PARTY_NOTICES.md) · [动态库替换](../LIBRARY_REPLACEMENT.md) |
 
-产品说明以当前基线为准；设备参数和操作步骤只在使用指南维护。`history/`、带版本号的设备诊断文件、`MAINTENANCE_AUDIT.md`、`FIX_REPORT_2026-10-10.md`、`WORKSPACE_BACKUP.md` 及其他产品研究保留各自日期的证据。历史文中的“当前”“最新”“支持”不能用于描述后续版本。
-
-商店 `history/` 与 `prepared/0.2.10/` 保存旧提交及准备稿；它们的原始摘要不随当前文案更新。当前源码、待发布材料、历史公开资产与商店状态分别记录，避免把本地构建写成已经发布。
+带日期或版本的设备诊断、`history/`、商店历史提交材料只代表记录当时。它们不能替代当前源码检查或新版本实机验收。私有维护备份、截图日志、原始研究视频及模型已迁出源码工作区。

@@ -1,6 +1,6 @@
 # Historical 0.8.4 proprietary build validation
 
-This records the initial 2026-10-09 release before AI Flame removal. The standalone esptool checks below apply only to that earlier artifact. Current local builds exclude it; see [maintenance audit](../../MAINTENANCE_AUDIT.md). Public release assets are not updated by local builds.
+This records the initial 2026-10-09 release before AI Flame removal. The standalone esptool checks below apply only to that earlier artifact. Current local builds exclude it; see maintenance audit（历史本地材料，已归档）. Public release assets are not updated by local builds.
 
 Original source repository remains private. Original code is proprietary from 0.8.4; existing grants are retained. Public repository uploads use a document whitelist.
 

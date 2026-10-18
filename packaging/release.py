@@ -35,7 +35,7 @@ def source_identity(root):
         if path.is_file():
             paths.append(path)
     digest = hashlib.sha256()
-    for path in sorted(paths):
+    for path in sorted(paths, key=lambda item: item.relative_to(root).as_posix()):
         digest.update(path.relative_to(root).as_posix().encode() + b"\0")
         digest.update(bytes.fromhex(sha256_file(path)))
     try:

@@ -198,7 +198,7 @@ def _run_primary(app, instance, resources):
         from PySide6.QtGui import QDesktopServices
         from aiflame.core.paths import PROJECT
         QMessageBox.information(window, "SeeEnd · Licenses",
-            "SeeEnd © 2026 Yipeng Chen · 专有许可 / Proprietary license\n\n"
+            "SeeEnd © 2026 Yipeng Chen · GNU GPL v3.0 / GPL-3.0-only\n\n"
             "使用 Qt / PySide6 LGPL 动态库；允许按 LGPL 替换库和调试修改。\n"
             "Uses LGPL Qt/PySide libraries; library replacement and debugging are permitted.\n\n"
             "完整许可和替换说明位于软件资源目录。\n"

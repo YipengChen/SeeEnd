@@ -1,0 +1,15 @@
+{
+  "published": {
+    "app_version": "0.8.68",
+    "extension_version": "0.2.14",
+    "skill_version": "1.0.5",
+    "manifest": "releases/v0.8.68/release.json",
+    "release_url": "https://github.com/YipengChen/SeeEnd-downloads/releases/tag/v0.8.68",
+    "source_sha256": "f845c7dc18f50bcafe95b97da73d9da8971b1c0d2d078ae94e0609498cf18dae",
+    "published_at": "2026-10-17T12:24:29Z",
+    "verified_at": "2026-10-17T12:25:13.980164+00:00",
+    "record_source": "Live GitHub releases; 11 App release assets and standalone Skill asset verified by full anonymous download and SHA-256"
+  },
+  "prepared": null,
+  "externally_published_by_this_task": true
+}

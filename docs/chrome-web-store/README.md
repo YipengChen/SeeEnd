@@ -6,7 +6,7 @@
 
 | 内容 | 用途及边界 |
 | --- | --- |
-| [当前隐私政策源文稿](privacy/PRIVACY_POLICY_ZH.md) / [English](privacy/PRIVACY_POLICY_EN.md) / [静态页面](privacy/index.html) | 0.2.13 文稿；数据处理规则沿用已部署政策，包含返回任务地址保存规则 |
+| [当前隐私政策源文稿](privacy/PRIVACY_POLICY_ZH.md) / [English](privacy/PRIVACY_POLICY_EN.md) / [静态页面](../../website/index.html) | 0.2.13 文稿；数据处理规则沿用已部署政策，包含返回任务地址保存规则 |
 | [权限说明](PRIVACY_FIELDS.md) | 当前实现的本地填报草稿，更新文件不等于保存后台字段 |
 | [ID 对接](STORE_ID_SETUP.md) | 商店 ID、公钥和旧开发 ID 兼容边界 |
 | [发布托管](PUBLIC_HOSTING.md)、[提交清单](SUBMISSION_CHECKLIST.md)、STORE_LISTING_*、review/、assets/、extension-upload.zip | 旧提交素材及操作证据，复用前按新版本核对 |

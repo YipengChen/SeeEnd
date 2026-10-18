@@ -70,9 +70,9 @@ python packaging/archive.py
 
 实际启动当前 0.8.68 冻结 App，沿用用户已有配置，5 台设备在线。用户确认系统通知和试听声音正常；修复后真实 Gemini 完成、ChatGPT 后台完成、两站并发任务均记录 desktop/sound submitted。Gemini 停止生成记录 idle/cancelled，无 done 和完成音效；ChatGPT 停止在 0.8.67 实测通过，修复版额外一次任务在点击停止前已结束，不能算停止验收。后来单独补测 Gemini 隐藏标签完成时持续 working 续租，约 255 秒后 Hub 收到 done，sound=submitted、desktop=disabled，符合恢复后的开关。电脑控制期间出现 `cgWindowNotFound`，未取得网页生成终止的实际时点，故提醒延迟仍待核对，不能据此断言软件漏报或网页卡死。微信未绑定，未验证真实送达。测试开关已恢复：系统通知关闭、猫音效开启、微信关闭、设备提醒开启；原始浏览器标签保留。
 
-当前 macOS 包仍为 ad-hoc 签名，deep/strict 完整性验证通过，未 Developer ID 签名或公证。本会话可见有效 Developer ID Application identity 为 0，不代表用户没有开发者会员或其他机器上没有证书。[签名与公证流程](../validation/acceptance-0.8.68/signing-workflow.txt)说明证书、最小权限、由内到外签名、notarytool Accepted、APP staple 后重建 ZIP 和真实下载验收。
+当前 macOS 包仍为 ad-hoc 签名，deep/strict 完整性验证通过，未 Developer ID 签名或公证。本会话可见有效 Developer ID Application identity 为 0，不代表用户没有开发者会员或其他机器上没有证书。签名与公证流程（历史本地材料，已归档）说明证书、最小权限、由内到外签名、notarytool Accepted、APP staple 后重建 ZIP 和真实下载验收。
 
-Windows 完整编译回归的[首次运行](https://github.com/YipengChen/SeeEnd/actions/runs/39028892983)执行 840 项：823 通过、16 跳过、0 断言失败、1 清理错误。唯一错误来自测试临时 SQLite 连接晚于目录删除才关闭，现以局部 ExitStack 修复关闭顺序，未改产品源码。本地关联 11 项及 Windows 失败用例定向预检通过；[后续运行](https://github.com/YipengChen/SeeEnd/actions/runs/39030419466)继续原生导入、冻结、归档和 EXE 启动检查，不重复此前 840 项全量。macOS 随测试修复再次构建，36 个原生导入、冻结及归档重新通过；前述 837/3 的全量记录仍对应同一产品源码指纹。后续 Windows 最终结果如下。完整日志、去除消息内容的网页状态记录、验收结果与制品校验见[验证目录](../validation/acceptance-0.8.68/)。本轮验收后已公开发布 App 0.8.68 和 Skill 1.0.5；发布资产完成匿名完整下载及 SHA-256 校验，公开状态见下载仓库。
+Windows 完整编译回归的[首次运行](https://github.com/YipengChen/SeeEnd/actions/runs/39028892983)执行 840 项：823 通过、16 跳过、0 断言失败、1 清理错误。唯一错误来自测试临时 SQLite 连接晚于目录删除才关闭，现以局部 ExitStack 修复关闭顺序，未改产品源码。本地关联 11 项及 Windows 失败用例定向预检通过；[后续运行](https://github.com/YipengChen/SeeEnd/actions/runs/39030419466)继续原生导入、冻结、归档和 EXE 启动检查，不重复此前 840 项全量。macOS 随测试修复再次构建，36 个原生导入、冻结及归档重新通过；前述 837/3 的全量记录仍对应同一产品源码指纹。后续 Windows 最终结果如下。完整日志、去除消息内容的网页状态记录、验收结果与制品校验见验证目录（历史本地材料，已归档）。本轮验收后已公开发布 App 0.8.68 和 Skill 1.0.5；发布资产完成匿名完整下载及 SHA-256 校验，公开状态见下载仓库。
 
 ### 0.8.68 三仓同步与公开发布
 
@@ -92,7 +92,7 @@ App、Skill 与下载仓库同步当前版本。Skill 1.0.5 文档和契约快�
 
 下载后校验 175 个源码文件与 macOS 相同的规范指纹、4 个 ZIP 的 CRC、3 个 EXE 及 36 个原生库的 AMD64 PE 架构、包内外 receipt、第三方源码与许可清单和扩展 receipt。Windows 路径排序导致平台 receipt 的源指纹与 macOS 不同；逐文件清单和规范 POSIX 排序指纹证明产品源码一致，未修改产品指纹算法。安装包为 `dist/windows-0.8.68/SeeEnd-0.8.68-Windows-AMD64.zip`，SHA-256 `2ec7275fde0b453cd956a0b6d46815efea14f9d9792d267c6e38d59a3d94e6d2`。
 
-云端原生 EXE 启动和窗口截图不替代 Windows 用户桌面、真实浏览器账户、系统通知横幅或实体设备的验收。冻结 HTTP 日志有过期返回连接关闭时的 WinError 10054 堆栈，断言通过，不能称日志完全无异常。证据见[Windows 校验目录](../../validation/windows-0.8.68/)及[包校验结果](../dist/windows-0.8.68/artifact-verification.json)。
+云端原生 EXE 启动和窗口截图不替代 Windows 用户桌面、真实浏览器账户、系统通知横幅或实体设备的验收。冻结 HTTP 日志有过期返回连接关闭时的 WinError 10054 堆栈，断言通过，不能称日志完全无异常。证据见Windows 校验目录（历史本地材料，已归档）及包校验结果（历史本地材料，已归档）。
 
 ## 2026-10-17：App 0.8.67 投递结果文案
 
@@ -100,7 +100,7 @@ App、Skill 与下载仓库同步当前版本。Skill 1.0.5 文档和契约快�
 
 活动记录、导出与设备回执的 59 项定向回归通过。使用隔离 Hub 与模拟记录，在 Cocoa 原生可见窗口检查中文／英文、920／1240 两种宽度，共 4 组截图；未操作真实设备。36 个核心模块完成原生编译及导入检查，冻结包通过身份校验、25 项辅助进程检查和 3 项真实 HTTP 生命周期测试。当前改动未重复运行 0.8.66 的完整回归，旧版完整测试数量不计作本版结果。
 
-本次构建与截图见[验证目录](../validation/receipt-copy-0.8.67/)。当前运行的 App 未自动替换，未公开发布。
+本次构建与截图见验证目录（历史本地材料，已归档）。当前运行的 App 未自动替换，未公开发布。
 
 ## 2026-10-17：App 0.8.66／Skill 1.0.5 复审修复
 
@@ -110,7 +110,7 @@ App、Skill 与下载仓库同步当前版本。Skill 1.0.5 文档和契约快�
 
 原生签名为 ad-hoc，未公证。本次未实际向系统、微信或实体设备投递提醒，未新增 Windows 验收；自动回归不等于物理表现确认。Cube Lite 长期卡死按用户长测通过保持已修复判定。当前运行中的旧 App 未被替换，未上传或公开发布。
 
-详细结果见[本次修复记录](../validation/reaudit-fixes-0.8.66/summary.json)、[编译回归](../validation/reaudit-fixes-0.8.66/build-native.log)、[冻结验证](../validation/reaudit-fixes-0.8.66/frozen-verification.log)与[跨仓检查](../validation/reaudit-fixes-0.8.66/workspace-check.log)。
+详细结果见本次修复记录（历史本地材料，已归档）、编译回归（历史本地材料，已归档）、冻结验证（历史本地材料，已归档）与跨仓检查（历史本地材料，已归档）。
 
 ## 2026-10-16：App 0.8.56／扩展 0.2.13
 

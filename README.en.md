@@ -6,7 +6,7 @@ Turn AI task status into a candle flame.
 
 SeeEnd is a local AI task notification app. It receives lifecycle events from coding tools, web conversations, and local APIs, then signals work, requests for input, and completion through a desktop flame, system notifications, sounds, WeChat, or physical devices. No hardware or model API key for SeeEnd is required.
 
-Source baseline: **App 0.8.68** · browser extension **0.2.14** · Python **3.11+** · [Proprietary license](LICENSE). Source versions and local builds do not imply public availability. See [repositories and releases](docs/REPOSITORIES.md) and [extension submission status](docs/chrome-web-store/APPLICATION_STATUS.md).
+Source baseline: **App 0.8.69** · browser extension **0.2.14** · Python **3.11+** · [GPL-3.0-only](LICENSE). Source versions and local builds do not imply public availability. See [repositories and releases](docs/REPOSITORIES.md) and [extension submission status](docs/chrome-web-store/APPLICATION_STATUS.md).
 
 ## Product and support scope
 
@@ -17,7 +17,7 @@ Source baseline: **App 0.8.68** · browser extension **0.2.14** · Python **3.11
 
 | Integration | Implementation |
 | --- | --- |
-| Coding tools | Codex, Claude Code, Qoder CLI, DeepSeek Harness, Gemini CLI, OpenCode; installed and maintained through [SeeEnd Skill](https://github.com/YipengChen/SeeEnd-skill) |
+| Coding tools | Codex, Claude Code, Qoder CLI, DeepSeek Harness, Gemini CLI, OpenCode; installed and maintained through [SeeEnd Skill](https://github.com/YipengChen/SeeEnd/tree/main/skill/seeend) |
 | Browser extension | ChatGPT, DeepSeek, Qianwen, Doubao, Tencent Yuanbao, Kimi, Zhipu, Claude, Gemini; experimental and subject to website changes |
 | Local HTTP API | Authenticated lifecycle reporting from your own scripts and tools |
 
@@ -60,6 +60,8 @@ Python CI uses 3.11 / 3.13. Browser tests also require Node.js (22 in build CI) 
 python -m unittest discover -s tests -v
 npm ci --ignore-scripts
 npm test
+python -m unittest discover -s skill/tests -v
+python tools/check_workspace.py
 ```
 
 For a headless display, set `QT_QPA_PLATFORM=offscreen`. Some tests require loopback sockets, IPC, desktop dependencies, or a frozen Helper artifact. `tests/verify_*_live.py` scripts are manual acceptance tools outside routine regression; check their targets and arguments before running them.
@@ -79,6 +81,12 @@ The default output is `dist/SeeEnd.app` plus the platform distribution. Use `--d
 
 `python packaging/extension_release.py` generates versioned development packages, a store-submission ZIP, and checksums. Generated packages do not imply submission or publication. The brand icon source is `aiflame/assets/icon.svg`; regenerate derivatives with `python packaging/render_icon.py`, then rebuild.
 
+## Repository and CI releases
+
+Application sources live at this repository root. `skill/seeend/` is independently installable; `website/` contains policy pages and historical release records. `packaging/` and `.github/` build and verify distributions. Personal configuration, raw acceptance evidence and research media stay outside the repository.
+
+Manually run `Build desktop and draft release` in Actions with `target_os=all` to build macOS arm64/Intel, Windows x64 and Linux x64. Pushing a matching `v<app_version>` tag creates a draft Release only after every platform, extension and source job succeeds. Assets include the exact application source, standalone Skill, matching third-party sources, build receipts and SHA256SUMS. The maintainer reviews and publishes the draft manually; repository visibility also stays private until manually changed. Local binary uploads are unnecessary. See [release workflow](docs/REPOSITORIES.md).
+
 ## Documentation and license
 
 - [User guide](docs/quick-start.md): channels, integrations, task return, and devices
@@ -88,4 +96,4 @@ The default output is `dist/SeeEnd.app` plus the platform distribution. Use `--d
 - [Repositories and releases](docs/REPOSITORIES.md) · [Contributing](CONTRIBUTING.md)
 - [Third-party notices](THIRD_PARTY_NOTICES.md) · [Library replacement](LIBRARY_REPLACEMENT.md)
 
-Original implementation has used the [SeeEnd Proprietary Software License](LICENSE) since 0.8.4. Earlier granted rights are not revoked. Third-party dependencies and brand assets retain their respective licenses and ownership.
+The current original implementation is licensed under [GNU GPL v3.0](LICENSE) (GPL-3.0-only). Earlier releases retain their release-time terms and previously granted rights. Third-party dependencies and brand assets retain their respective licenses and ownership.

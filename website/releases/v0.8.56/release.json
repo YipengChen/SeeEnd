@@ -1,0 +1,123 @@
+{
+  "status": "published",
+  "app_version": "0.8.56",
+  "extension_version": "0.2.13",
+  "skill_version": "1.0.3",
+  "contract_version": 1,
+  "schema_version": "1.0",
+  "build_receipt": "SeeEnd-build.json",
+  "source_sha256": "d3323e2a3013acb6305c1ffc7e31c8aacd20dc6b5b0949c26984589b0670156e",
+  "external_publication_verified": true,
+  "prepared_at": "2026-10-16T21:58:15.837395+08:00",
+  "assets": [
+    {
+      "role": "app",
+      "filename": "SeeEnd-0.8.56-Darwin-arm64.zip",
+      "path": "../../../code/dist/gemini-0.8.56/SeeEnd-0.8.56-Darwin-arm64.zip",
+      "sha256": "638154e7a56b601b66000e12c45934b06565dac588b41bfad31bfe7d84e1abae",
+      "bytes": 56968703,
+      "url": "https://github.com/YipengChen/SeeEnd-downloads/releases/download/v0.8.56/SeeEnd-0.8.56-Darwin-arm64.zip",
+      "anonymous_download_verified": true,
+      "verified_at": "2026-10-16T22:28:45.090318+08:00"
+    },
+    {
+      "role": "third-party-sources",
+      "filename": "SeeEnd-third-party-sources-0.8.56.zip",
+      "path": "../../../code/dist/gemini-0.8.56/SeeEnd-third-party-sources-0.8.56.zip",
+      "sha256": "02cb60ea55946965585a93ea5fd1b2d824b15bddc00303c47ea1c039cd9778f9",
+      "bytes": 111719421,
+      "url": "https://github.com/YipengChen/SeeEnd-downloads/releases/download/v0.8.56/SeeEnd-third-party-sources-0.8.56.zip",
+      "anonymous_download_verified": true,
+      "verified_at": "2026-10-16T22:28:50.966953+08:00"
+    },
+    {
+      "role": "extension",
+      "filename": "SeeEnd-Web-extension-0.2.13.zip",
+      "path": "../../../code/dist/gemini-0.8.56/SeeEnd-Web-extension-0.2.13.zip",
+      "sha256": "2e988ef6acf82924bb0ad79825b7001d28ea731c04e5a3de628463345e1d67b1",
+      "bytes": 39293,
+      "url": "https://github.com/YipengChen/SeeEnd-downloads/releases/download/v0.8.56/SeeEnd-Web-extension-0.2.13.zip",
+      "anonymous_download_verified": true,
+      "verified_at": "2026-10-16T22:28:37.744991+08:00"
+    },
+    {
+      "role": "store-extension",
+      "filename": "SeeEnd-Chrome-Web-Store-extension-0.2.13.zip",
+      "path": "../../../code/dist/gemini-0.8.56/SeeEnd-Chrome-Web-Store-extension-0.2.13.zip",
+      "sha256": "80833f54b3c56abe3e2656e213d1ce999a1d3b89932c83231450c61bcce9bd96",
+      "bytes": 35866,
+      "url": "https://github.com/YipengChen/SeeEnd-downloads/releases/download/v0.8.56/SeeEnd-Chrome-Web-Store-extension-0.2.13.zip",
+      "anonymous_download_verified": true,
+      "verified_at": "2026-10-16T22:28:38.671990+08:00"
+    }
+  ],
+  "validation": {
+    "javascript": {
+      "passed": 192,
+      "failed": 0
+    },
+    "browser_host_python": {
+      "passed": 16,
+      "failed": 0
+    },
+    "frozen": {
+      "identity": "passed",
+      "helper_subprocess_checks": 25,
+      "http_lifecycle": "passed",
+      "http_tests": 3,
+      "http_skipped": 0
+    },
+    "live_post_update": {
+      "status": "not_verified",
+      "blocker": "No new live-generation acceptance after loading extension 0.2.13. Earlier computer-control failure ended the repair-time live verification."
+    },
+    "live_pre_update": {
+      "extension_version": "0.2.12",
+      "long": "working -> done, 21:45:07 -> 21:45:32",
+      "stop": "working -> idle/cancelled, 21:49:03 -> 21:49:16"
+    },
+    "source": {
+      "discovered": 680,
+      "passed": 677,
+      "skipped": 3,
+      "failures": 0,
+      "errors": 0,
+      "seconds": 170.384,
+      "environment": "main agent unrestricted runtime"
+    },
+    "skill": {
+      "version": "1.0.3",
+      "passed": 34,
+      "failed": 0,
+      "app_baseline": "0.8.56"
+    }
+  },
+  "chrome_store": {
+    "draft_version": "0.2.13",
+    "published_version": "0.2.12",
+    "distribution": "unlisted",
+    "uploaded_by_this_task": true,
+    "submitted_for_review_by_this_task": false,
+    "verified_at": "2026-10-16T14:34:36.844252+00:00",
+    "review_status": "pending_review",
+    "listing_editable": false,
+    "reviewer_instructions_app_version": "0.8.56",
+    "reviewer_instructions_saved_and_reloaded": true,
+    "listing_download_app_version": "0.8.6",
+    "listing_update_blocker": "Product details are locked while review is pending; review was not withdrawn."
+  },
+  "skill_release": {
+    "version": "1.0.3",
+    "app_baseline": "0.8.56",
+    "release_url": "https://github.com/YipengChen/SeeEnd-skill/releases/tag/v1.0.3",
+    "asset": "SeeEnd-skill-1.0.3.zip",
+    "sha256": "f4bdcae3485a20b477bdd2fe3f2d40a343ff3c6ce1f57fef3352752a9b3ca25a",
+    "asset_url": "https://github.com/YipengChen/SeeEnd-skill/releases/download/v1.0.3/SeeEnd-skill-1.0.3.zip",
+    "bytes": 31584,
+    "anonymous_download_verified": true,
+    "verified_at": "2026-10-16T22:28:39.594535+08:00"
+  },
+  "release_url": "https://github.com/YipengChen/SeeEnd-downloads/releases/tag/v0.8.56",
+  "published_at": "2026-10-16T14:28:29Z",
+  "verified_at": "2026-10-16T22:28:50.966953+08:00"
+}

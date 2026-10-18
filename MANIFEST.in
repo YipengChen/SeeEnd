@@ -5,6 +5,8 @@ prune packaging/generated_licenses
 prune third_party_sources
 recursive-include tests *.py *.js
 # Documentation lives in the repository and is included directly.
-recursive-include docs *.md *.png *.jpg *.gif *.svg *.html *.json *.txt *.zip
+recursive-include docs *.md *.png *.jpg *.gif *.svg *.html *.json *.txt
 prune docs/reference-full-analysis
 global-exclude __pycache__ *.py[cod] .DS_Store
+recursive-include skill *.md *.py *.yaml *.json LICENSE
+recursive-include tools *.py

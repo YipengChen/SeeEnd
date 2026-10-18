@@ -73,7 +73,7 @@ class IntegrationGuidanceTests(unittest.TestCase):
             self.assertTrue(first_use['preparation'] and first_use['reload_steps'] and first_use['limitations'])
             self.assertEqual(first_use['verification_prompt'], VERIFICATION_PROMPT)
             self.assertIn('SeeEnd Skill', guide['automatic'])
-            self.assertEqual(guide['skill_url'], 'https://github.com/YipengChen/SeeEnd-skill')
+            self.assertEqual(guide['skill_url'], 'https://github.com/YipengChen/SeeEnd/tree/main/skill/seeend')
         self.assertEqual(before, sorted(str(p.relative_to(self.root)) for p in self.root.rglob('*')))
         self.assertFalse((self.root / 'runtime').exists())
 

@@ -1,0 +1,37 @@
+SeeEnd Proprietary Software License / SeeEnd 专有软件许可
+Copyright (c) 2026 Yipeng Chen. All rights reserved.
+Effective for the SeeEnd 0.8.4 release and later releases designated proprietary.
+
+1. Permission / 使用许可
+The copyright holder grants the lawful recipient a non-exclusive right to install
+and run SeeEnd for personal or internal business use, and to make backup copies.
+This grant does not require payment unless separate terms are expressly provided.
+版权所有者允许合法取得软件的用户安装、运行，并为个人或内部业务使用制作备份。
+
+2. Reserved rights / 保留权利
+Except as expressly permitted by this license, applicable law, or the licenses of
+third-party components, no permission is granted to redistribute, sell, sublicense,
+modify, or publish SeeEnd's original implementation or source code. Source code is
+not offered under this license. Copyright and license notices must be preserved.
+除本许可、适用法律或第三方许可明确允许外，未授予再分发、销售、转授权、修改或
+公开 SeeEnd 原创实现及源码的权利。随包可读脚本仅为执行功能提供，不构成开源授权。
+
+3. Third-party rights / 第三方权利
+Third-party components are governed exclusively by their respective licenses.
+This license does not restrict any right granted by those licenses, including
+copying, redistribution, modification, library replacement or reverse engineering
+for debugging modifications to LGPL-covered libraries. See THIRD_PARTY_NOTICES.md
+and third_party_licenses for notices, license texts, sources and installation details.
+第三方组件继续适用各自许可；允许依相应许可替换库，以及为调试 LGPL 库的修改进行
+必要的逆向工程。本许可不限制这些权利，不重新授权第三方组件。
+
+4. Warranty / 保证
+To the extent permitted by applicable law, the software is provided as-is without
+warranty. Mandatory statutory rights are unaffected.
+在适用法律允许范围内，本软件按现状提供，不作保证；法定不可排除的权利不受影响。
+
+5. Earlier grants / 既有授权
+This license does not revoke rights already granted under an earlier license.
+本许可不撤销此前版本已经授予的权利。
+
+Contact / 联系：ypchenmail@gmail.com

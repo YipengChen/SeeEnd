@@ -1,0 +1,297 @@
+{
+  "status": "published",
+  "app_version": "0.8.68",
+  "extension_version": "0.2.14",
+  "skill_version": "1.0.5",
+  "contract_version": 1,
+  "schema_version": "1.0",
+  "external_publication_verified": true,
+  "prepared_at": "2026-10-17T11:37:38.709688+00:00",
+  "source_sha256": "f845c7dc18f50bcafe95b97da73d9da8971b1c0d2d078ae94e0609498cf18dae",
+  "build_receipt": "SeeEnd-build-macOS-arm64.json",
+  "assets": [
+    {
+      "role": "app",
+      "filename": "SeeEnd-0.8.68-Darwin-arm64.zip",
+      "path": "SeeEnd-0.8.68-Darwin-arm64.zip",
+      "sha256": "4676cb0a6b165e35f5e3f78f80e74675fdfeca525e936295ca888a833ac049a3",
+      "bytes": 57572514,
+      "url": "https://github.com/YipengChen/SeeEnd-downloads/releases/download/v0.8.68/SeeEnd-0.8.68-Darwin-arm64.zip",
+      "anonymous_download_verified": true,
+      "verified_at": "2026-10-17T12:25:06.035618+00:00"
+    },
+    {
+      "role": "third-party-sources",
+      "filename": "SeeEnd-third-party-sources-0.8.68.zip",
+      "path": "SeeEnd-third-party-sources-0.8.68.zip",
+      "sha256": "a20dbb5a5065134157d4b70a7e0b02bde3302c4282d88f4204725e825c6821e7",
+      "bytes": 111720206,
+      "url": "https://github.com/YipengChen/SeeEnd-downloads/releases/download/v0.8.68/SeeEnd-third-party-sources-0.8.68.zip",
+      "anonymous_download_verified": true,
+      "verified_at": "2026-10-17T12:25:13.980164+00:00"
+    },
+    {
+      "role": "extension",
+      "filename": "SeeEnd-Web-extension-0.2.14.zip",
+      "path": "SeeEnd-Web-extension-0.2.14.zip",
+      "sha256": "aac7977acf74c70e1acc9d817a86eeb677a51d9cca8c1277ed35f6f56114d2f1",
+      "bytes": 39392,
+      "url": "https://github.com/YipengChen/SeeEnd-downloads/releases/download/v0.8.68/SeeEnd-Web-extension-0.2.14.zip",
+      "anonymous_download_verified": true,
+      "verified_at": "2026-10-17T12:25:06.904846+00:00"
+    },
+    {
+      "role": "store-extension",
+      "filename": "SeeEnd-Chrome-Web-Store-extension-0.2.14.zip",
+      "path": "SeeEnd-Chrome-Web-Store-extension-0.2.14.zip",
+      "sha256": "e53514515610d9d389bedfca88f89b2ae297e13b271bb03810016453839fa3a1",
+      "bytes": 35959,
+      "url": "https://github.com/YipengChen/SeeEnd-downloads/releases/download/v0.8.68/SeeEnd-Chrome-Web-Store-extension-0.2.14.zip",
+      "anonymous_download_verified": true,
+      "verified_at": "2026-10-17T12:25:07.809603+00:00"
+    }
+  ],
+  "skill_release": {
+    "role": "skill",
+    "filename": "SeeEnd-skill-1.0.5.zip",
+    "path": "SeeEnd-skill-1.0.5.zip",
+    "sha256": "26acf46d6b022bc4a9e29447be08e7c05e409541d12d51c50979018f967b5ff1",
+    "bytes": 36257,
+    "url": "https://github.com/YipengChen/SeeEnd-downloads/releases/download/v0.8.68/SeeEnd-skill-1.0.5.zip",
+    "version": "1.0.5",
+    "app_baseline": "0.8.68",
+    "release_url": "https://github.com/YipengChen/SeeEnd-skill/releases/tag/v1.0.5",
+    "asset_url": "https://github.com/YipengChen/SeeEnd-skill/releases/download/v1.0.5/SeeEnd-skill-1.0.5.zip",
+    "anonymous_download_verified": true,
+    "verified_at": "2026-10-17T12:25:11.072353+00:00",
+    "git_revision": "3ec69dbb0d9e45d153ae56a05c8f4eb2ab7109c9",
+    "published_at": "2026-10-17T12:24:24Z"
+  },
+  "validation": {
+    "macos_native": {
+      "total": 840,
+      "passed": 837,
+      "skipped": 3,
+      "failures": 0,
+      "errors": 0,
+      "environment_skips": 0,
+      "modules": 36
+    },
+    "frozen": {
+      "helper_subprocess_checks": 25,
+      "real_http_tests": 3,
+      "failed": 0,
+      "platforms": [
+        "Darwin-arm64",
+        "Windows-AMD64"
+      ]
+    },
+    "windows": {
+      "source_integration_passed": 20,
+      "fleet_passed": 34,
+      "javascript_passed": 201,
+      "native_modules": 36,
+      "native_widget_tests": 2,
+      "frozen_gui_launch": "passed;authenticatedAPIandvisiblemainwindow;disposableprofilecleaned",
+      "prior_full_regression": {
+        "passed": 823,
+        "skipped": 16,
+        "errors": 1,
+        "failed": 0,
+        "error_scope": "temporarySQLitecleanup in testfixture;fixed and targetedWindowsretestpassed",
+        "full_rerun_after_fixture_fix": false
+      }
+    },
+    "skill": {
+      "version": "1.0.5",
+      "app_baseline": "0.8.68",
+      "passed": 40,
+      "skipped": 0
+    },
+    "real_browser_scope": [
+      "ChatGPT text conversation and background completion",
+      "ChatGPT/Gemini concurrent tasks",
+      "Gemini completion and stopping"
+    ],
+    "limitations": [
+      "WeChat actual delivery not verified",
+      "Gemini website end time and reminder latency need further validation",
+      "Windows end-user browser, notification and physical-device acceptance not verified"
+    ],
+    "macos_signing": "ad-hoc;notDeveloperIDsigned;notnotarized",
+    "workspace": {
+      "passed": 11,
+      "failed": 0
+    },
+    "zip_crc": "allpublicZIPspassed",
+    "linux_source_ci": {
+      "python_versions": [
+        "3.11",
+        "3.13"
+      ],
+      "total_per_version": 840,
+      "passed_per_version": 822,
+      "skipped_per_version": 17,
+      "failures_per_version": 1,
+      "errors_per_version": 0,
+      "status": "failed",
+      "known_issue": "English 920px window: bound but disconnected WeChat action buttons cause 12px horizontal overflow; macOS default-font targeted retest passed; this specific state not retested on Windows",
+      "linux_binary_published": false
+    }
+  },
+  "changes": [
+    "Fix valid desktop notification and sound claims being rejected when the UI task snapshot has not yet caught up with the Hub.",
+    "Preserve stale-claim rejection, server validation, configuration generation, reset and expiration checks.",
+    "Add real Engine and output validation regression for both desktop and sound."
+  ],
+  "platform_builds": {
+    "Windows-AMD64": {
+      "canonical_source_sha256": "f845c7dc18f50bcafe95b97da73d9da8971b1c0d2d078ae94e0609498cf18dae",
+      "platform_receipt_source_sha256": "81623feb972e7b70544b1ba2e5e2f56e0aa36a0c58e2e72f76cbf46d0c6f41be",
+      "build_receipt": "SeeEnd-build-Windows-AMD64.json",
+      "app": {
+        "role": "windows-app",
+        "filename": "SeeEnd-0.8.68-Windows-AMD64.zip",
+        "path": "SeeEnd-0.8.68-Windows-AMD64.zip",
+        "sha256": "2ec7275fde0b453cd956a0b6d46815efea14f9d9792d267c6e38d59a3d94e6d2",
+        "bytes": 63916927,
+        "url": "https://github.com/YipengChen/SeeEnd-downloads/releases/download/v0.8.68/SeeEnd-0.8.68-Windows-AMD64.zip",
+        "anonymous_download_verified": true,
+        "verified_at": "2026-10-17T12:25:09.390257+00:00"
+      },
+      "third_party_sources": {
+        "role": "windows-third-party-sources",
+        "filename": "SeeEnd-third-party-sources-0.8.68-Windows-AMD64.zip",
+        "path": "SeeEnd-third-party-sources-0.8.68-Windows-AMD64.zip",
+        "sha256": "b857fdbd6c9c94fd28b99973c710680c6cc425ace00beaeaac3c6bdb61cea1dc",
+        "bytes": 74878650,
+        "url": "https://github.com/YipengChen/SeeEnd-downloads/releases/download/v0.8.68/SeeEnd-third-party-sources-0.8.68-Windows-AMD64.zip",
+        "anonymous_download_verified": true,
+        "verified_at": "2026-10-17T12:25:10.235350+00:00"
+      },
+      "verification": "nativeimports,frozenHTTP,realGUIandartifactintegritypassed",
+      "end_user_acceptance": false
+    }
+  },
+  "asset_base_url": "https://github.com/YipengChen/SeeEnd-downloads/releases/download/v0.8.68/",
+  "path_scope": "Paths are filenames within this release; use url or asset_url for public downloads.",
+  "release_url": "https://github.com/YipengChen/SeeEnd-downloads/releases/tag/v0.8.68",
+  "published_at": "2026-10-17T12:24:29Z",
+  "verified_at": "2026-10-17T12:25:13.980164+00:00",
+  "verified_source_revision": "75145cb7480875c4dd73c66476dc7fa21cee0f75",
+  "release_assets": [
+    {
+      "role": "app",
+      "filename": "SeeEnd-0.8.68-Darwin-arm64.zip",
+      "path": "SeeEnd-0.8.68-Darwin-arm64.zip",
+      "sha256": "4676cb0a6b165e35f5e3f78f80e74675fdfeca525e936295ca888a833ac049a3",
+      "bytes": 57572514,
+      "url": "https://github.com/YipengChen/SeeEnd-downloads/releases/download/v0.8.68/SeeEnd-0.8.68-Darwin-arm64.zip",
+      "anonymous_download_verified": true,
+      "verified_at": "2026-10-17T12:25:06.035618+00:00"
+    },
+    {
+      "role": "extension",
+      "filename": "SeeEnd-Web-extension-0.2.14.zip",
+      "path": "SeeEnd-Web-extension-0.2.14.zip",
+      "sha256": "aac7977acf74c70e1acc9d817a86eeb677a51d9cca8c1277ed35f6f56114d2f1",
+      "bytes": 39392,
+      "url": "https://github.com/YipengChen/SeeEnd-downloads/releases/download/v0.8.68/SeeEnd-Web-extension-0.2.14.zip",
+      "anonymous_download_verified": true,
+      "verified_at": "2026-10-17T12:25:06.904846+00:00"
+    },
+    {
+      "role": "store-extension",
+      "filename": "SeeEnd-Chrome-Web-Store-extension-0.2.14.zip",
+      "path": "SeeEnd-Chrome-Web-Store-extension-0.2.14.zip",
+      "sha256": "e53514515610d9d389bedfca88f89b2ae297e13b271bb03810016453839fa3a1",
+      "bytes": 35959,
+      "url": "https://github.com/YipengChen/SeeEnd-downloads/releases/download/v0.8.68/SeeEnd-Chrome-Web-Store-extension-0.2.14.zip",
+      "anonymous_download_verified": true,
+      "verified_at": "2026-10-17T12:25:07.809603+00:00"
+    },
+    {
+      "role": "macos-receipt",
+      "filename": "SeeEnd-build-macOS-arm64.json",
+      "path": "SeeEnd-build-macOS-arm64.json",
+      "sha256": "e198252f8c9b29deb9fc79a4e086c2c04ed451805cf670f2eba8991376af8783",
+      "bytes": 580,
+      "url": "https://github.com/YipengChen/SeeEnd-downloads/releases/download/v0.8.68/SeeEnd-build-macOS-arm64.json",
+      "anonymous_download_verified": true,
+      "verified_at": "2026-10-17T12:25:08.679225+00:00"
+    },
+    {
+      "role": "windows-app",
+      "filename": "SeeEnd-0.8.68-Windows-AMD64.zip",
+      "path": "SeeEnd-0.8.68-Windows-AMD64.zip",
+      "sha256": "2ec7275fde0b453cd956a0b6d46815efea14f9d9792d267c6e38d59a3d94e6d2",
+      "bytes": 63916927,
+      "url": "https://github.com/YipengChen/SeeEnd-downloads/releases/download/v0.8.68/SeeEnd-0.8.68-Windows-AMD64.zip",
+      "anonymous_download_verified": true,
+      "verified_at": "2026-10-17T12:25:09.390257+00:00"
+    },
+    {
+      "role": "windows-receipt",
+      "filename": "SeeEnd-build-Windows-AMD64.json",
+      "path": "SeeEnd-build-Windows-AMD64.json",
+      "sha256": "5a69fe1735563fd9d6bbb91c6a0b19734435f8ec711d7611cdce162031e3f9ba",
+      "bytes": 597,
+      "url": "https://github.com/YipengChen/SeeEnd-downloads/releases/download/v0.8.68/SeeEnd-build-Windows-AMD64.json",
+      "anonymous_download_verified": true,
+      "verified_at": "2026-10-17T12:25:09.522069+00:00"
+    },
+    {
+      "role": "extension-receipt",
+      "filename": "SeeEnd-extension-0.2.14.json",
+      "path": "SeeEnd-extension-0.2.14.json",
+      "sha256": "b383be547f1224c7a53580b335603286e2cccb59bfcc51100fc32208395eaff9",
+      "bytes": 1905,
+      "url": "https://github.com/YipengChen/SeeEnd-downloads/releases/download/v0.8.68/SeeEnd-extension-0.2.14.json",
+      "anonymous_download_verified": true,
+      "verified_at": "2026-10-17T12:25:10.224479+00:00"
+    },
+    {
+      "role": "windows-third-party-sources",
+      "filename": "SeeEnd-third-party-sources-0.8.68-Windows-AMD64.zip",
+      "path": "SeeEnd-third-party-sources-0.8.68-Windows-AMD64.zip",
+      "sha256": "b857fdbd6c9c94fd28b99973c710680c6cc425ace00beaeaac3c6bdb61cea1dc",
+      "bytes": 74878650,
+      "url": "https://github.com/YipengChen/SeeEnd-downloads/releases/download/v0.8.68/SeeEnd-third-party-sources-0.8.68-Windows-AMD64.zip",
+      "anonymous_download_verified": true,
+      "verified_at": "2026-10-17T12:25:10.235350+00:00"
+    },
+    {
+      "role": "skill",
+      "filename": "SeeEnd-skill-1.0.5.zip",
+      "path": "SeeEnd-skill-1.0.5.zip",
+      "sha256": "26acf46d6b022bc4a9e29447be08e7c05e409541d12d51c50979018f967b5ff1",
+      "bytes": 36257,
+      "url": "https://github.com/YipengChen/SeeEnd-downloads/releases/download/v0.8.68/SeeEnd-skill-1.0.5.zip",
+      "version": "1.0.5",
+      "app_baseline": "0.8.68",
+      "release_url": "https://github.com/YipengChen/SeeEnd-skill/releases/tag/v1.0.5",
+      "asset_url": "https://github.com/YipengChen/SeeEnd-skill/releases/download/v1.0.5/SeeEnd-skill-1.0.5.zip",
+      "anonymous_download_verified": true,
+      "verified_at": "2026-10-17T12:25:10.384816+00:00"
+    },
+    {
+      "filename": "SHA256SUMS",
+      "role": "checksums",
+      "bytes": 1004,
+      "sha256": "182d09cf23c9a6b39838dc5646cc24fda8ec9ea8694f1c58f60ed261eab39a90",
+      "url": "https://github.com/YipengChen/SeeEnd-downloads/releases/download/v0.8.68/SHA256SUMS",
+      "anonymous_download_verified": true,
+      "verified_at": "2026-10-17T12:25:11.094376+00:00"
+    },
+    {
+      "role": "third-party-sources",
+      "filename": "SeeEnd-third-party-sources-0.8.68.zip",
+      "path": "SeeEnd-third-party-sources-0.8.68.zip",
+      "sha256": "a20dbb5a5065134157d4b70a7e0b02bde3302c4282d88f4204725e825c6821e7",
+      "bytes": 111720206,
+      "url": "https://github.com/YipengChen/SeeEnd-downloads/releases/download/v0.8.68/SeeEnd-third-party-sources-0.8.68.zip",
+      "anonymous_download_verified": true,
+      "verified_at": "2026-10-17T12:25:13.980164+00:00"
+    }
+  ]
+}
