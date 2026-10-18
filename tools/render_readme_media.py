@@ -6,6 +6,7 @@ Requires the desktop dependencies and Pillow. No Hub, device or user config is u
 
 import io
 import os
+from functools import lru_cache
 from pathlib import Path
 import sys
 
@@ -15,7 +16,7 @@ sys.path.insert(0, str(ROOT))
 
 from PIL import Image
 from PySide6.QtCore import QBuffer, QIODevice, QPoint, QRectF, Qt
-from PySide6.QtGui import QColor, QFont, QImage, QPainter, QRegion
+from PySide6.QtGui import QColor, QFont, QFontMetricsF, QImage, QPainter, QRegion
 from PySide6.QtWidgets import QApplication, QWidget
 
 from aiflame.desktop.light_controls import LightStateCanvas
@@ -75,21 +76,37 @@ def image(width, height):
     return result
 
 
-def text(painter, rect, value, size=17, color="#24292f", language="en", bold=False):
-    font = QFont("PingFang SC" if language == "zh" else "Arial", size)
-    font.setPixelSize(size)
-    font.setBold(bold)
-    painter.setFont(font)
-    painter.setPen(QColor(color))
-    painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, value)
+def caption_parts(state, detail, language):
+    effect, task = ("灯效：", "任务状态：") if language == "zh" else ("Effect: ", "Task status: ")
+    return effect + LABELS[language][detail], task + LABELS[language][state]
+
+
+@lru_cache(maxsize=4)
+def caption_layout(width, language):
+    # Keep font size and field positions fixed as states change; fit the longest labels.
+    details = ("back", "front", "power_on", "power_off", "status", "comet", "snake", "text")
+    gap = 24
+    for size in range(34, 15, -1):
+        font = QFont("PingFang SC" if language == "zh" else "Arial")
+        font.setPixelSize(size)
+        font.setBold(True)
+        metrics = QFontMetricsF(font)
+        left = max(metrics.horizontalAdvance(caption_parts("working", key, language)[0]) for key in details)
+        right = max(metrics.horizontalAdvance(caption_parts(key, "back", language)[1]) for key, _ in STATES)
+        if left + gap + right <= width - 24:
+            return font, left, gap, right
+    raise RuntimeError("Caption does not fit the animation width")
 
 
 def status_bar(painter, width, height, state, detail, language, theme):
-    y = height - 92
-    text(painter, QRectF(12, y + 5, width - 24, 28), LABELS[language][detail],
-         23, THEMES[theme], language)
-    text(painter, QRectF(12, y + 31, width - 24, 54), LABELS[language][state],
-         42, THEMES[theme], language, bold=True)
+    font, left, gap, right = caption_layout(width, language)
+    effect, task = caption_parts(state, detail, language)
+    x = (width - left - gap - right) / 2
+    y = height - 68
+    painter.setFont(font)
+    painter.setPen(QColor(THEMES[theme]))
+    painter.drawText(QRectF(x, y, left, 44), Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter, effect)
+    painter.drawText(QRectF(x + left + gap, y, right, 44), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, task)
 
 
 def capture(canvas, painter, x, y, scale=1):
