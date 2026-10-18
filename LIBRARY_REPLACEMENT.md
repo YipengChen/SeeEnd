@@ -1,10 +1,10 @@
 # 替换 LGPL 动态库
 
-SeeEnd 原创代码保持专有许可；本说明保障第三方 LGPL 库的替换与调试权利。无需取得 SeeEnd 原创源码即可替换兼容的动态库。
+SeeEnd 当前原创代码采用 GPL-3.0-only；本说明同时保留第三方 LGPL 库的替换与调试权利。兼容的动态库可独立替换，应用对应源码另随同版本发行提供。
 
 正常使用 App 只需下载桌面安装包。下述第三方源码与构建材料仅在查阅、修改或重新构建第三方库时按需下载。
 
-先读取随包 `SeeEnd-build.json` 的 `app_version`，选择同版本的 `SeeEnd-third-party-sources-<app_version>.zip`。本地构建的材料与安装包由 `packaging/archive.py` 生成在同一分发目录；公开下载入口见 [SeeEnd 下载仓库](https://github.com/YipengChen/SeeEnd-downloads/releases)。本地构建不代表该版本已经上传。
+先读取随包 `SeeEnd-build.json` 的 `app_version`，选择同版本的 `SeeEnd-third-party-sources-<app_version>-<platform>-<architecture>.zip`。本地构建的材料与安装包由 `packaging/archive.py` 生成在同一分发目录；公开下载入口见 [SeeEnd Releases](https://github.com/YipengChen/SeeEnd/releases)。本地构建不代表该版本已经上传。
 
 ## macOS Apple 芯片包
 
@@ -18,6 +18,6 @@ SeeEnd 原创代码保持专有许可；本说明保障第三方 LGPL 库的替�
 
 ## Windows / Linux
 
-使用与应用 Python ABI、架构和动态加载路径兼容的 LGPL DLL／共享库替换对应文件。当前公开预览产物仅验证 macOS Apple 芯片版本；其他平台构建仍需本机验证。
+使用与应用 Python ABI、架构和动态加载路径兼容的 LGPL DLL／共享库替换对应文件。选择对应平台的构建包及匹配材料；各目标系统的安装、系统权限与真实设备行为须分别验证。
 
-源码包仅含第三方源码和第三方发行方补丁。联系方式：ypchenmail@gmail.com。
+第三方源码 ZIP 仅含第三方源码和发行方补丁；SeeEnd 完整对应源码为单独的 SeeEnd-source-<app_version>.zip。联系方式：ypchenmail@gmail.com。

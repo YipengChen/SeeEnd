@@ -55,7 +55,7 @@ python3 scripts/seeend_client.py check --source claude-code
 python3 scripts/seeend_client.py evidence --source claude-code
 ```
 
-开发验证：
+开发验证（从 SeeEnd 仓库根目录执行）：
 
 ```sh
 python3 -m unittest discover -s skill/tests -v
@@ -69,4 +69,4 @@ CI 在同一仓库检查 App 声明式契约和 Skill 客户端。也可显式�
 SEEEND_APP_ROOT=/absolute/path/to/app-repository PYTHONDONTWRITEBYTECODE=1 python3.12 -m unittest discover -s skill/tests -v
 ```
 
-`tests/fixtures/integration-contract.json` 仅是测试快照，不作为运行时能力来源。契约测试仅导入 App 的声明式 registry，不启动服务、不加载用户配置、不发送任务事件。
+`skill/tests/fixtures/integration-contract.json` 仅是测试快照，不作为运行时能力来源。契约测试仅导入 App 的声明式 registry，不启动服务、不加载用户配置、不发送任务事件。
