@@ -89,11 +89,11 @@ def text(painter, rect, value, size=17, color=INK, language="en", bold=False):
 
 def status_bar(painter, width, height, state, detail, language):
     y = height - 92
-    painter.fillRect(QRectF(0, y, width, 92), QColor(COLOR_DEFAULTS[state]))
+    painter.fillRect(QRectF(0, y, width, 92), QColor(BACKGROUND))
     text(painter, QRectF(12, y + 5, width - 24, 28), LABELS[language][detail],
-         23, BACKGROUND, language)
+         23, INK, language)
     text(painter, QRectF(12, y + 31, width - 24, 54), LABELS[language][state],
-         42, BACKGROUND, language, bold=True)
+         42, INK, language, bold=True)
 
 
 def capture(canvas, painter, x, y, scale=1):
