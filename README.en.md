@@ -10,7 +10,9 @@ See your AI task status through a desktop flame, notifications, sounds, WeChat, 
 
 Screen Light Bar Pro, W3 color bulbs, and Beam light bars support color and white-light notifications.
 
-![Screen Light Bar Pro, W3 bulb, and Beam: three task states in color and white-light modes](docs/images/light-effects/lights.gif)
+| Screen Light Bar Pro | W3 Color Bulb | Beam |
+| :---: | :---: | :---: |
+| <img src="docs/images/light-effects/en/screen-light-bar.gif" width="240" alt="Screen light bar: working, waiting, and done in color and white-light modes"> | <img src="docs/images/light-effects/en/w3-bulb.gif" width="240" alt="W3 bulb: working, waiting, and done in color and white-light modes"> | <img src="docs/images/light-effects/en/beam.gif" width="240" alt="Beam: working, waiting, and done in color and white-light modes"> |
 
 Default colors: **yellow for working · red for input · green for done**. Colors and brightness are customizable.
 
@@ -18,11 +20,19 @@ Default colors: **yellow for working · red for input · green for done**. Color
 
 | Pixel status | Comet |
 | :---: | :---: |
-| ![Cube Lite status: moving dots, question mark, and check mark](docs/images/light-effects/cube-status.gif) | ![Cube Lite comet: traveling trail, alternating ends, and expanding center](docs/images/light-effects/cube-comet.gif) |
+| <img src="docs/images/light-effects/en/cube-status.gif" width="370" alt="Cube Lite status: moving dots, question mark, and check mark"> | <img src="docs/images/light-effects/en/cube-comet.gif" width="370" alt="Cube Lite comet: traveling trail, alternating ends, and expanding center"> |
 | **Snake** | **Text** |
-| ![Cube Lite snake: moving, paused for input, and WIN on completion](docs/images/light-effects/cube-snake.gif) | ![Cube Lite text: WORK, WAIT, DONE](docs/images/light-effects/cube-text.gif) |
+| <img src="docs/images/light-effects/en/cube-snake.gif" width="370" alt="Cube Lite snake: moving, paused for input, and WIN on completion"> | <img src="docs/images/light-effects/en/cube-text.gif" width="370" alt="Cube Lite text: WORK, WAIT, DONE"> |
 
-These animations are **effect previews** exported from the current app's local preview widgets. Physical brightness and color vary by device. Mijia Smart Plug 3/4 can also switch a connected lamp. See [supported devices and setup](docs/quick-start.md#连接设备).
+### Mijia Smart Plugs
+
+| Plug 3 · ZNCZ301KK | Plug 4 · ZNCZ401KK |
+| :---: | :---: |
+| <img src="docs/images/light-effects/en/mijia-plug-3.gif" width="370" alt="Mijia Plug 3 switches a lamp off while working and on for input or completion"> | <img src="docs/images/light-effects/en/mijia-plug-4.gif" width="370" alt="Mijia Plug 4 switches a lamp off while working and on for input or completion"> |
+
+By default, power is off while working and on for input or completion. These rules are customizable.
+
+These are **effect previews** using bright display settings. Physical brightness and color vary by device. See [device setup](docs/quick-start.md#连接设备). GIF autoplay can be enabled in [GitHub accessibility settings](https://github.com/settings/accessibility).
 
 ## Connect your AI tools
 

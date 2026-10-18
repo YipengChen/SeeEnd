@@ -10,7 +10,9 @@
 
 屏幕挂灯、W3 彩色灯泡和 Beam 塔灯，支持彩灯与白灯两种提醒方式。
 
-![屏幕挂灯、W3 灯泡、Beam 塔灯的三种任务状态与彩光、白光演示](docs/images/light-effects/lights.gif)
+| 屏幕挂灯 Pro | W3 彩色灯泡 | Beam 塔灯 |
+| :---: | :---: | :---: |
+| <img src="docs/images/light-effects/zh/screen-light-bar.gif" width="240" alt="屏幕挂灯：彩灯和白灯的工作、等待输入、完成提醒"> | <img src="docs/images/light-effects/zh/w3-bulb.gif" width="240" alt="W3 灯泡：彩灯和白灯的工作、等待输入、完成提醒"> | <img src="docs/images/light-effects/zh/beam.gif" width="240" alt="Beam 塔灯：彩灯和白灯的工作、等待输入、完成提醒"> |
 
 默认彩灯：**黄色工作中 · 红色等待输入 · 绿色已完成**，颜色和亮度可以自行设置。
 
@@ -18,11 +20,19 @@
 
 | 像素状态牌 | 彗星巡航 |
 | :---: | :---: |
-| ![Cube Lite 像素状态牌：工作跳点、等待问号、完成对勾](docs/images/light-effects/cube-status.gif) | ![Cube Lite 彗星巡航：往返拖尾、两端交替、中心展开](docs/images/light-effects/cube-comet.gif) |
+| <img src="docs/images/light-effects/zh/cube-status.gif" width="370" alt="Cube Lite 像素状态牌：工作跳点、等待问号、完成对勾"> | <img src="docs/images/light-effects/zh/cube-comet.gif" width="370" alt="Cube Lite 彗星巡航：往返拖尾、两端交替、中心展开"> |
 | **贪吃蛇** | **文字状态** |
-| ![Cube Lite 贪吃蛇：运行、等待时暂停、完成显示 WIN](docs/images/light-effects/cube-snake.gif) | ![Cube Lite 文字状态：WORK、WAIT、DONE](docs/images/light-effects/cube-text.gif) |
+| <img src="docs/images/light-effects/zh/cube-snake.gif" width="370" alt="Cube Lite 贪吃蛇：运行、等待时暂停、完成显示 WIN"> | <img src="docs/images/light-effects/zh/cube-text.gif" width="370" alt="Cube Lite 文字状态：WORK、WAIT、DONE"> |
 
-以上动态图由当前应用的本地预览组件生成，为**灯效示意**；实际亮度与色彩以设备为准。米家智能插座 3／4 也可通过通断电提醒，完整型号与连接步骤见[设备指南](docs/quick-start.md#连接设备)。
+### 米家智能插座
+
+| 插座 3 · ZNCZ301KK | 插座 4 · ZNCZ401KK |
+| :---: | :---: |
+| <img src="docs/images/light-effects/zh/mijia-plug-3.gif" width="370" alt="米家智能插座 3 控制台灯通断电，工作时断电，等待输入和完成时通电"> | <img src="docs/images/light-effects/zh/mijia-plug-4.gif" width="370" alt="米家智能插座 4 控制台灯通断电，工作时断电，等待输入和完成时通电"> |
+
+默认工作中断电，等待输入和完成时通电；可自行设置。
+
+以上为**灯效示意**，使用高亮参数；实际色彩与亮度以设备为准。连接步骤见[设备指南](docs/quick-start.md#连接设备)。GIF 自动播放可在 [GitHub 辅助功能设置](https://github.com/settings/accessibility)中开启。
 
 ## 接入 AI 工具
 
