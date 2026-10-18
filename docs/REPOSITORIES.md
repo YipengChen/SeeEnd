@@ -31,10 +31,12 @@ python tools/check_workspace.py
 1. 推送源码或 PR 后，Tests 检查 Python 3.11/3.13、JavaScript、Skill 和单仓契约。
 2. 在 Actions 的 `Build desktop and draft release` 手动选择 all，可构建 macOS arm64、Windows x64、Linux x64。构建使用 GitHub runner，含测试、Cython 编译、冻结 Helper 验证和归档；手动运行只生成 artifact。
 3. 正式准备版本时，提交版本号并推送匹配的 `v<app_version>` tag。CI 检查 tag 与源码版本一致，全部平台、扩展、完整源码和 Skill 构建成功后，自动创建同仓库的 **草稿 Release**。
-4. 草稿包含各平台 App、对应第三方源码、receipt、浏览器开发包与商店包、完整 SeeEnd 源码 ZIP、独立 Skill ZIP，以及统一 SHA256SUMS。聚合验证拒绝缺失、重名、篡改、版本或提交不匹配的文件。
+4. 发布附件只展示三个系统安装包、一个 `SeeEnd-developer-materials-<版本>.zip` 开发资料包和一份 `SHA256SUMS`；加上 GitHub 自动提供的两份源码归档，页面共七项。开发资料包保留各平台第三方源码、全部 receipt、浏览器开发包与商店包、完整 SeeEnd 源码 ZIP、独立 Skill ZIP 及原始校验清单。外部 `SHA256SUMS` 校验三个安装包和开发资料包，包内清单校验合并前的全部文件。聚合验证仍拒绝缺失、重名、篡改、版本或提交不匹配的文件。
 5. 维护者完成目标系统与真实提醒验收后，可在 GitHub 手动发布草稿。仓库私有期间，Release 也需要仓库权限。公开仓库和发布 Release 是两个独立动作。macOS 构建使用 ad-hoc 签名，不代表 Apple 公证；Windows 也不自动取得发行签名。
 
 本地构建用于调试与验收，仍按 build → verify_frozen → archive 执行。常规对外版本由 Actions 构建，不从本地上传大型安装包。
+
+已有草稿可运行 Actions 的 `Compact draft release`，输入原构建 run ID 和发布 tag。该任务从 GitHub 取回原制品，以原 tag 源码校验，上传并验证新开发资料包和校验清单后，才移除已合并的独立附件；三个安装包保持原样。任务只处理草稿，不发布版本，也不修改仓库可见性。
 
 ## 旧仓库与政策域名
 

@@ -167,10 +167,10 @@ jobs:
           pattern: seeend-*
           path: dist/release-assets
           merge-multiple: true
-      - name: Verify complete platform set, receipts and checksums
+      - name: Verify all assets and prepare compact public downloads
         env:
           RELEASE_TAG: ${{ github.ref_name }}
-        run: python packaging/release_assets.py finalize --assets-dir dist/release-assets --tag "$RELEASE_TAG"
+        run: python packaging/release_assets.py present --assets-dir dist/release-assets --output-dir dist/public-assets --tag "$RELEASE_TAG"
       - name: Create a draft release from verified CI assets
         env:
           GH_TOKEN: ${{ github.token }}
@@ -178,7 +178,8 @@ jobs:
           GH_REPO: ${{ github.repository }}
         shell: bash
         run: |
-          mapfile -t asset_names < <(sed 's/^[0-9a-f]*  //' dist/release-assets/SHA256SUMS)
-          assets=(dist/release-assets/SHA256SUMS)
-          for name in "${asset_names[@]}"; do assets+=("dist/release-assets/$name"); done
+          mapfile -t asset_names < <(sed 's/^[0-9a-f]*  //' dist/public-assets/SHA256SUMS)
+          assets=(dist/public-assets/SHA256SUMS)
+          for name in "${asset_names[@]}"; do assets+=("dist/public-assets/$name"); done
           gh release create "$RELEASE_TAG" "${assets[@]}" --verify-tag --draft --title "SeeEnd $RELEASE_TAG" --generate-notes
+          python .github/scripts/update_compact_draft.py --tag "$RELEASE_TAG" --assets-dir dist/release-assets --public-dir dist/public-assets

@@ -6,6 +6,7 @@ from pathlib import Path
 import re
 import shutil
 import subprocess
+import zipfile
 
 from release import sha256_file, source_identity
 
@@ -148,6 +149,39 @@ def finalize(root, directory, tag):
     return names
 
 
+def present(root, directory, destination, tag):
+    """Keep downloads small in number without discarding verified source material."""
+    names = finalize(root, directory, tag)
+    require(not destination.exists() or not any(destination.iterdir()), "Public asset directory must be empty")
+    identity = source_identity(root)
+    installers = {desktop_names({**identity, "platform": system, "architecture": architecture})[0]
+                  for system, architecture in DESKTOPS}
+    destination.mkdir(parents=True, exist_ok=True)
+    for name in installers:
+        shutil.copy2(directory / name, destination / name)
+    bundle = f"SeeEnd-developer-materials-{identity['app_version']}.zip"
+    readme = ("SeeEnd developer materials\n\n"
+              "Contains the complete application source, standalone Skill, browser extension packages,\n"
+              "third-party source archives for all three platforms, and original build receipts.\n"
+              "Third-party licenses remain in the supplied source archives and application packages.\n"
+              "SHA256SUMS inside this ZIP covers all original assets, including the three application\n"
+              "installers distributed beside this ZIP. Extract here and put the installers in the\n"
+              "same directory to verify that original manifest. The separate release SHA256SUMS\n"
+              "covers the three installers and this developer materials ZIP.\n")
+    with zipfile.ZipFile(destination / bundle, "w", compression=zipfile.ZIP_STORED) as archive:
+        for name in sorted(names - installers | {"SHA256SUMS"}):
+            info = zipfile.ZipInfo(name)
+            info.external_attr = 0o100644 << 16
+            with (directory / name).open("rb") as source, archive.open(info, "w") as target:
+                shutil.copyfileobj(source, target)
+        info = zipfile.ZipInfo("README.txt")
+        info.external_attr = 0o100644 << 16
+        archive.writestr(info, readme)
+    public = installers | {bundle}
+    write_checksums(destination, public, "SHA256SUMS")
+    return public
+
+
 def main():
     root = Path(__file__).resolve().parents[1]
     parser = argparse.ArgumentParser(description=__doc__)
@@ -164,6 +198,11 @@ def main():
     final = subparsers.add_parser("finalize")
     final.add_argument("--assets-dir", type=Path, required=True)
     final.add_argument("--tag", required=True)
+    presentation = subparsers.add_parser("present")
+    presentation.add_argument("--assets-dir", type=Path, required=True)
+    presentation.add_argument("--output-dir", type=Path, required=True)
+    presentation.add_argument("--source-root", type=Path, default=root)
+    presentation.add_argument("--tag", required=True)
     args = parser.parse_args()
     if args.command == "check-tag":
         check_tag(root, args.tag)
@@ -171,6 +210,8 @@ def main():
         stage(root, args.dist_dir, args.output_dir, args.kind)
     elif args.command == "source":
         source_archives(root, args.dist_dir, args.output_dir)
+    elif args.command == "present":
+        present(args.source_root, args.assets_dir, args.output_dir, args.tag)
     else:
         finalize(root, args.assets_dir, args.tag)
     print("Release asset checks passed.")
