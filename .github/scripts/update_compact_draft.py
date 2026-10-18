@@ -57,12 +57,14 @@ def update(tag, original, public):
                 f"New public download failed verification: {name}")
     labels = (("Darwin-arm64.zip", "macOS（Apple 芯片）"),
               ("Windows-AMD64.zip", "Windows x64"), ("Linux-x86_64.tar.gz", "Linux x64"))
-    lines = ["<!-- seeend-downloads:start -->", "## 下载", ""]
+    # GitHub changes temporary draft URLs when notes are edited; use filenames that
+    # remain valid in both the draft and the eventual published release.
+    lines = ["<!-- seeend-downloads:start -->", "## 下载", "", "在页面下方 Assets 中选择对应系统的安装包：", ""]
     for suffix, label in labels:
         name = next(name for name in installers if name.endswith(suffix))
-        lines.append(f"- [{label}]({remote[name]['url']})")
+        lines.append(f"- **{label}**：`{name}`")
     bundle = next(name for name in new if "-developer-materials-" in name)
-    lines.extend(["", f"[开发资料包]({remote[bundle]['url']}) · [SHA-256 校验清单]({remote['SHA256SUMS']['url']})",
+    lines.extend(["", f"开发资料：`{bundle}`；文件校验：`SHA256SUMS`。",
                   "", "开发资料包包含完整项目源码、Skill、浏览器扩展、三平台第三方依赖源码和构建记录。",
                   "<!-- seeend-downloads:end -->"])
     previous = re.sub(r"<!-- seeend-downloads:start -->.*?<!-- seeend-downloads:end -->\s*", "",

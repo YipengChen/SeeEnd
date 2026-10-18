@@ -183,6 +183,8 @@ class ReleaseAssetTests(unittest.TestCase):
                                      "url": "https://example.invalid/" + path.name}
             elif arguments[:2] == ("release", "delete-asset"):
                 del remote[arguments[3]]
+            elif arguments[:2] == ("release", "edit"):
+                value["body"] = Path(arguments[4]).read_text(encoding="utf-8")
             return ""
 
         return directory, public, value, remote, calls, fake_gh
@@ -198,6 +200,8 @@ class ReleaseAssetTests(unittest.TestCase):
         self.assertEqual(sum(call[:2] == ("release", "upload") for call in calls), 2)
         self.assertEqual(set(remote), set(draft.manifest(public)))
         self.assertTrue(all(remote[name] is item for name, item in originals.items()))
+        self.assertIn("macOS（Apple 芯片）", value["body"])
+        self.assertNotIn("https://example.invalid/", value["body"])
         first_delete = next(i for i, call in enumerate(calls) if call[:2] == ("release", "delete-asset"))
         self.assertGreater(first_delete, max(i for i, call in enumerate(calls) if call[:2] == ("release", "upload")))
         self.assertTrue(any(call[:2] == ("release", "view") for call in calls[3:first_delete]))
