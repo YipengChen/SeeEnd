@@ -1,4 +1,4 @@
-"""Export documentation GIFs from the app's local-only light preview widgets.
+"""Export transparent documentation animations from local-only preview widgets.
 
 Run: QT_QPA_PLATFORM=offscreen .venv/bin/python tools/render_readme_media.py
 Requires the desktop dependencies and Pillow. No Hub, device or user config is used.
@@ -15,22 +15,21 @@ sys.path.insert(0, str(ROOT))
 
 from PIL import Image
 from PySide6.QtCore import QBuffer, QIODevice, QPoint, QRectF, Qt
-from PySide6.QtGui import QColor, QFont, QImage, QPainter, QPalette
+from PySide6.QtGui import QColor, QFont, QImage, QPainter, QRegion
 from PySide6.QtWidgets import QApplication, QWidget
 
 from aiflame.desktop.light_controls import LightStateCanvas
 from aiflame.devices.cube_effects import mini_snake_game, snake_game
 from aiflame.devices.light_settings import light_settings
-from aiflame.devices.light_settings import COLOR_DEFAULTS
 from aiflame.devices.models import (YEELIGHT_MODEL, YEELIGHT_BULB_MODEL, YEELIGHT_BEAM_MODEL,
                                     YEELIGHT_CUBE_MODEL, MIJIA_PLUG_MODEL, MIJIA_PLUG4_MODEL)
 from aiflame.transports.mijia import desired_power
 
-BACKGROUND = "#14201a"
-INK = "#f3f6ef"
+THEMES = {"light": "#24292f", "dark": "#f0f6fc"}
 STATES = (("working", "Working"), ("needs_input", "Waiting for input"), ("done", "Done"))
 FPS = 10
-SECONDS = 3
+STATE_DURATION_MS = 1200
+FRAMES_PER_STATE = STATE_DURATION_MS * FPS // 1000
 LABELS = {
     "zh": {"working": "工作中", "needs_input": "等待输入", "done": "已完成",
            "back": "彩灯", "front": "白灯", "power_on": "已通电", "power_off": "已断电",
@@ -64,21 +63,19 @@ def preview(model, mode):
     panel.clock = Clock()
     panel.revision = panel.selection_revision = 0
     canvas = LightStateCanvas("working", panel)
-    palette = canvas.palette()
-    palette.setColor(QPalette.ColorRole.Window, QColor(BACKGROUND))
-    canvas.setPalette(palette)
-    canvas.setAutoFillBackground(True)
+    canvas.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+    canvas.setAutoFillBackground(False)
     canvas.resize(300, 120)
     return panel, canvas
 
 
 def image(width, height):
-    result = QImage(width, height, QImage.Format.Format_RGB32)
-    result.fill(QColor(BACKGROUND))
+    result = QImage(width, height, QImage.Format.Format_ARGB32_Premultiplied)
+    result.fill(Qt.GlobalColor.transparent)
     return result
 
 
-def text(painter, rect, value, size=17, color=INK, language="en", bold=False):
+def text(painter, rect, value, size=17, color="#24292f", language="en", bold=False):
     font = QFont("PingFang SC" if language == "zh" else "Arial", size)
     font.setPixelSize(size)
     font.setBold(bold)
@@ -87,20 +84,19 @@ def text(painter, rect, value, size=17, color=INK, language="en", bold=False):
     painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, value)
 
 
-def status_bar(painter, width, height, state, detail, language):
+def status_bar(painter, width, height, state, detail, language, theme):
     y = height - 92
-    painter.fillRect(QRectF(0, y, width, 92), QColor(BACKGROUND))
     text(painter, QRectF(12, y + 5, width - 24, 28), LABELS[language][detail],
-         23, INK, language)
+         23, THEMES[theme], language)
     text(painter, QRectF(12, y + 31, width - 24, 54), LABELS[language][state],
-         42, INK, language, bold=True)
+         42, THEMES[theme], language, bold=True)
 
 
 def capture(canvas, painter, x, y, scale=1):
     painter.save()
     painter.translate(x, y)
     painter.scale(scale, scale)
-    canvas.render(painter, QPoint(0, 0))
+    canvas.render(painter, QPoint(0, 0), QRegion(), QWidget.RenderFlag.DrawChildren)
     painter.restore()
 
 
@@ -108,46 +104,37 @@ def pillow(qimage):
     buffer = QBuffer()
     buffer.open(QIODevice.OpenModeFlag.WriteOnly)
     qimage.save(buffer, "PNG")
-    return Image.open(io.BytesIO(bytes(buffer.data()))).convert("RGB")
+    return Image.open(io.BytesIO(bytes(buffer.data()))).convert("RGBA")
 
 
 def save(frames, path):
-    # A shared palette keeps constant backgrounds and LED colors stable between frames.
-    sample = Image.new("RGB", (frames[0].width, frames[0].height * len(frames)))
-    for index, frame in enumerate(frames):
-        sample.paste(frame, (0, index * frame.height))
-    palette = sample.quantize(colors=125, method=Image.Quantize.MEDIANCUT)
-    colors = palette.getpalette()[:125 * 3]
-    for value in COLOR_DEFAULTS.values():
-        colors.extend(tuple(QColor(value).getRgb()[:3]))
-    palette.putpalette(colors)
-    indexed = [frame.quantize(palette=palette, dither=Image.Dither.NONE) for frame in frames]
-    indexed[0].save(path, save_all=True, append_images=indexed[1:], duration=1000 // FPS,
-                    loop=0, optimize=True, disposal=1)
+    # Lossless animated WebP preserves soft alpha edges and avoids a fixed matte.
+    frames[0].save(path, save_all=True, append_images=frames[1:], duration=1000 // FPS,
+                   loop=0, lossless=True, background=(0, 0, 0, 0), method=4)
     print(f"{path.relative_to(ROOT)}: {path.stat().st_size:,} bytes")
 
 
-def light(path, model, language):
+def light(path, model, language, theme):
     panel, canvas = preview(model, "back")
     canvas.resize(300, 140)
     frames = []
     for mode in ("back", "front"):
         panel.settings = display_settings(model, mode)
         for state, _ in STATES:
-            for tick in range(SECONDS * FPS):
+            for tick in range(FRAMES_PER_STATE):
                 output = image(640, 390)
                 painter = QPainter(output)
                 painter.setRenderHint(QPainter.RenderHint.Antialiasing)
                 panel.clock.milliseconds = tick * 1000 // FPS
                 canvas.state = state
                 capture(canvas, painter, 20, 10, 2)
-                status_bar(painter, 640, 390, state, mode, language)
+                status_bar(painter, 640, 390, state, mode, language, theme)
                 painter.end()
                 frames.append(pillow(output))
     save(frames, path)
 
 
-def plug(path, model, language):
+def plug(path, model, language, theme):
     panel, canvas = preview(model, "back")
     canvas.resize(300, 140)
     frames = []
@@ -160,14 +147,14 @@ def plug(path, model, language):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         capture(canvas, painter, 20, 10, 2)
         power = "power_on" if desired_power({"state": state}, panel.settings) else "power_off"
-        status_bar(painter, 640, 390, state, power, language)
+        status_bar(painter, 640, 390, state, power, language, theme)
         painter.end()
-        for _ in range(SECONDS * FPS):
+        for _ in range(FRAMES_PER_STATE):
             frames.append(pillow(output))
     save(frames, path)
 
 
-def cube(path, mode, language):
+def cube(path, mode, language, theme):
     panel, canvas = preview(YEELIGHT_CUBE_MODEL, mode)
     # Use the exact animation identity used by LightStateCanvas, with reproducible food.
     key = ("local-preview", id(panel), panel.revision)
@@ -178,14 +165,14 @@ def cube(path, mode, language):
     frames = []
     for index, (state, _) in enumerate(STATES):
         panel.selection_revision = index
-        for tick in range(SECONDS * FPS):
+        for tick in range(FRAMES_PER_STATE):
             panel.clock.milliseconds = tick * 1000 // FPS
             canvas.state = state
             output = image(640, 300)
             painter = QPainter(output)
             painter.setRenderHint(QPainter.RenderHint.Antialiasing)
             capture(canvas, painter, 20, 0, 2)
-            status_bar(painter, 640, 300, state, mode, language)
+            status_bar(painter, 640, 300, state, mode, language, theme)
             painter.end()
             frames.append(pillow(output))
     save(frames, path)
@@ -198,13 +185,16 @@ def main():
     for language in LABELS:
         localized = destination / language
         localized.mkdir(exist_ok=True)
-        for model, name in ((YEELIGHT_MODEL, "screen-light-bar"), (YEELIGHT_BULB_MODEL, "w3-bulb"),
-                            (YEELIGHT_BEAM_MODEL, "beam")):
-            light(localized / f"{name}.gif", model, language)
-        for model, name in ((MIJIA_PLUG_MODEL, "mijia-plug-3"), (MIJIA_PLUG4_MODEL, "mijia-plug-4")):
-            plug(localized / f"{name}.gif", model, language)
-        for mode in ("status", "comet", "snake", "text"):
-            cube(localized / f"cube-{mode}.gif", mode, language)
+        for theme in THEMES:
+            themed = localized / theme
+            themed.mkdir(exist_ok=True)
+            for model, name in ((YEELIGHT_MODEL, "screen-light-bar"), (YEELIGHT_BULB_MODEL, "w3-bulb"),
+                                (YEELIGHT_BEAM_MODEL, "beam")):
+                light(themed / f"{name}.webp", model, language, theme)
+            for model, name in ((MIJIA_PLUG_MODEL, "mijia-plug-3"), (MIJIA_PLUG4_MODEL, "mijia-plug-4")):
+                plug(themed / f"{name}.webp", model, language, theme)
+            for mode in ("status", "comet", "snake", "text"):
+                cube(themed / f"cube-{mode}.webp", mode, language, theme)
     application.quit()
 
 

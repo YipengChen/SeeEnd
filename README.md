@@ -12,7 +12,7 @@
 
 | 屏幕挂灯 Pro | W3 彩色灯泡 | Beam 塔灯 |
 | :---: | :---: | :---: |
-| <img src="docs/images/light-effects/zh/screen-light-bar.gif" width="240" alt="屏幕挂灯：彩灯和白灯的工作、等待输入、完成提醒"> | <img src="docs/images/light-effects/zh/w3-bulb.gif" width="240" alt="W3 灯泡：彩灯和白灯的工作、等待输入、完成提醒"> | <img src="docs/images/light-effects/zh/beam.gif" width="240" alt="Beam 塔灯：彩灯和白灯的工作、等待输入、完成提醒"> |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/light-effects/zh/dark/screen-light-bar.webp"><img src="docs/images/light-effects/zh/light/screen-light-bar.webp" width="240" alt="屏幕挂灯：彩灯和白灯的工作、等待输入、完成提醒"></picture> | <picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/light-effects/zh/dark/w3-bulb.webp"><img src="docs/images/light-effects/zh/light/w3-bulb.webp" width="240" alt="W3 灯泡：彩灯和白灯的工作、等待输入、完成提醒"></picture> | <picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/light-effects/zh/dark/beam.webp"><img src="docs/images/light-effects/zh/light/beam.webp" width="240" alt="Beam 塔灯：彩灯和白灯的工作、等待输入、完成提醒"></picture> |
 
 默认彩灯：**黄色工作中 · 红色等待输入 · 绿色已完成**，颜色和亮度可以自行设置。
 
@@ -20,19 +20,19 @@
 
 | 像素状态牌 | 彗星巡航 |
 | :---: | :---: |
-| <img src="docs/images/light-effects/zh/cube-status.gif" width="370" alt="Cube Lite 像素状态牌：工作跳点、等待问号、完成对勾"> | <img src="docs/images/light-effects/zh/cube-comet.gif" width="370" alt="Cube Lite 彗星巡航：往返拖尾、两端交替、中心展开"> |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/light-effects/zh/dark/cube-status.webp"><img src="docs/images/light-effects/zh/light/cube-status.webp" width="370" alt="Cube Lite 像素状态牌：工作跳点、等待问号、完成对勾"></picture> | <picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/light-effects/zh/dark/cube-comet.webp"><img src="docs/images/light-effects/zh/light/cube-comet.webp" width="370" alt="Cube Lite 彗星巡航：往返拖尾、两端交替、中心展开"></picture> |
 | **贪吃蛇** | **文字状态** |
-| <img src="docs/images/light-effects/zh/cube-snake.gif" width="370" alt="Cube Lite 贪吃蛇：运行、等待时暂停、完成显示 WIN"> | <img src="docs/images/light-effects/zh/cube-text.gif" width="370" alt="Cube Lite 文字状态：WORK、WAIT、DONE"> |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/light-effects/zh/dark/cube-snake.webp"><img src="docs/images/light-effects/zh/light/cube-snake.webp" width="370" alt="Cube Lite 贪吃蛇：运行、等待时暂停、完成显示 WIN"></picture> | <picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/light-effects/zh/dark/cube-text.webp"><img src="docs/images/light-effects/zh/light/cube-text.webp" width="370" alt="Cube Lite 文字状态：WORK、WAIT、DONE"></picture> |
 
 ### 米家智能插座
 
 | 插座 3 · ZNCZ301KK | 插座 4 · ZNCZ401KK |
 | :---: | :---: |
-| <img src="docs/images/light-effects/zh/mijia-plug-3.gif" width="370" alt="米家智能插座 3 控制台灯通断电，工作时断电，等待输入和完成时通电"> | <img src="docs/images/light-effects/zh/mijia-plug-4.gif" width="370" alt="米家智能插座 4 控制台灯通断电，工作时断电，等待输入和完成时通电"> |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/light-effects/zh/dark/mijia-plug-3.webp"><img src="docs/images/light-effects/zh/light/mijia-plug-3.webp" width="370" alt="米家智能插座 3 控制台灯通断电，工作时断电，等待输入和完成时通电"></picture> | <picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/light-effects/zh/dark/mijia-plug-4.webp"><img src="docs/images/light-effects/zh/light/mijia-plug-4.webp" width="370" alt="米家智能插座 4 控制台灯通断电，工作时断电，等待输入和完成时通电"></picture> |
 
 默认工作中断电，等待输入和完成时通电；可自行设置。
 
-以上为**灯效示意**，使用高亮参数；实际色彩与亮度以设备为准。连接步骤见[设备指南](docs/quick-start.md#连接设备)。GIF 自动播放可在 [GitHub 辅助功能设置](https://github.com/settings/accessibility)中开启。
+以上为**灯效示意**，使用高亮参数；实际色彩与亮度以设备为准。连接步骤见[设备指南](docs/quick-start.md#连接设备)。动画播放可在 [GitHub 辅助功能设置](https://github.com/settings/accessibility)中开启。
 
 ## 接入 AI 工具
 
