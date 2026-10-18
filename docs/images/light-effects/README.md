@@ -8,7 +8,7 @@
 | --- | --- | --- |
 | screen-light-bar-white.webp / screen-light-bar-color.webp | 屏幕挂灯 Pro：白灯、彩灯分别展示三态 | 3.6 秒 |
 | w3-bulb-white.webp / w3-bulb-color.webp | W3 灯泡：白灯、彩灯分别展示三态 | 3.6 秒 |
-| beam-white.webp / beam-color.webp | Beam 塔灯：白灯、彩灯分别展示三态 | 3.6 秒 |
+| beam-white.webp / beam-color.webp | Beam 塔灯：显示器两侧的塔灯，白灯、彩灯分别展示三态 | 3.6 秒 |
 | mijia-plug-3.webp | 插座 3（ZNCZ301KK）控制外接台灯 | 3.6 秒 |
 | mijia-plug-4.webp | 插座 4（ZNCZ401KK）控制外接台灯 | 3.6 秒 |
 | cube-status.webp | 像素状态牌：跳点、问号、对勾 | 3.6 秒 |

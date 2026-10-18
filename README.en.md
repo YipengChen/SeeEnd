@@ -6,6 +6,8 @@ See your AI task status through a desktop flame, notifications, sounds, WeChat, 
 
 **No extra hardware or model API key for SeeEnd is required.** Physical lights are optional.
 
+![SeeEnd app overview (demo data)](docs/images/overview-en.png)
+
 ## Light notifications
 
 ### Yeelight Screen Light Bar Pro
@@ -48,14 +50,14 @@ See your AI task status through a desktop flame, notifications, sounds, WeChat, 
 
 By default, power is off while working and on for input or completion. These rules are customizable.
 
-These are **effect previews** using bright display settings. Physical brightness and color vary by device. See [device setup](docs/quick-start.md#连接设备). Animation playback can be enabled in [GitHub accessibility settings](https://github.com/settings/accessibility).
+These are **effect previews** using bright display settings. Physical brightness and color vary by device. See [device setup](docs/quick-start.md#连接设备).
 
 ## Connect your AI tools
 
 | Integration | Sources |
 | --- | --- |
 | Coding tools | Codex, Claude Code, Qoder CLI, DeepSeek Harness, Gemini CLI, OpenCode |
-| Browser extension | ChatGPT, DeepSeek, Qianwen, Doubao, Yuanbao, Kimi, Zhipu, Claude, Gemini (experimental) |
+| Web | ChatGPT, DeepSeek, Qianwen, Doubao, Yuanbao, Kimi, Zhipu, Claude, Gemini |
 | Local API | Your own scripts and tools |
 
 ## Get started

@@ -102,6 +102,26 @@ def capture(canvas, painter, x, y, scale=1):
     painter.restore()
 
 
+def beam_preview(canvas, painter):
+    # Space the existing towers around a monitor without changing their light.
+    for offset, clip in ((-90, QRectF(0, 0, 320, 300)),
+                         (90, QRectF(320, 0, 320, 300))):
+        painter.save()
+        painter.translate(offset, 0)
+        painter.setClipRect(clip)
+        capture(canvas, painter, 20, 10, 2)
+        painter.restore()
+    painter.save()
+    painter.setPen(Qt.PenStyle.NoPen)
+    painter.setBrush(QColor("#36383d"))
+    painter.drawRoundedRect(QRectF(216, 82, 208, 144), 8, 8)
+    painter.drawRoundedRect(QRectF(310, 222, 20, 27), 3, 3)
+    painter.drawRoundedRect(QRectF(279, 247, 82, 9), 4, 4)
+    painter.setBrush(QColor("#aeb8c0"))
+    painter.drawRoundedRect(QRectF(224, 90, 192, 122), 3, 3)
+    painter.restore()
+
+
 def pillow(qimage):
     buffer = QBuffer()
     buffer.open(QIODevice.OpenModeFlag.WriteOnly)
@@ -127,7 +147,10 @@ def light(path, model, mode, language, theme):
             painter.setRenderHint(QPainter.RenderHint.Antialiasing)
             panel.clock.milliseconds = tick * 1000 // FPS
             canvas.state = state
-            capture(canvas, painter, 20, 10, 2)
+            if model == YEELIGHT_BEAM_MODEL:
+                beam_preview(canvas, painter)
+            else:
+                capture(canvas, painter, 20, 10, 2)
             status_bar(painter, 640, 390, state, language, theme)
             painter.end()
             frames.append(pillow(output))

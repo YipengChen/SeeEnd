@@ -2,9 +2,11 @@
 
 **中文** · [English](README.en.md) · [下载应用](https://github.com/YipengChen/SeeEnd/releases) · [使用指南](docs/quick-start.md)
 
-让 AI 的任务状态（工作中、等待输入、已完成）看得见。可通过桌面火焰（虚拟）、系统通知、音效、微信通知或多种功能设备灯光提醒你。
+让 AI 的任务状态（工作中、等待输入、已完成）看得见。可通过桌面火焰（虚拟）、系统通知、音效、微信通知或多种实体灯具（灯光）提醒你。
 
 **软件不读取对话内容，不读取API Key，无云端服务。** 实体灯具是可选（建议）的提醒方式。
+
+![SeeEnd 应用总览（演示数据）](docs/images/overview-zh.png)
 
 ## 灯光提醒
 
@@ -48,14 +50,14 @@
 
 默认工作中断电，等待输入和完成时通电；可自行设置。
 
-以上为**灯效示意**，使用高亮参数；实际色彩与亮度以设备为准。连接步骤见[设备指南](docs/quick-start.md#连接设备)。动画播放可在 [GitHub 辅助功能设置](https://github.com/settings/accessibility)中开启。
+以上为**灯效示意**，使用高亮参数；实际色彩与亮度以设备为准。连接步骤见[设备指南](docs/quick-start.md#连接设备)。
 
 ## 接入 AI 工具
 
 | 方式 | 支持来源 |
 | --- | --- |
 | 编程工具 | Codex、Claude Code、Qoder CLI、DeepSeek Harness、Gemini CLI、OpenCode |
-| 浏览器扩展 | ChatGPT、DeepSeek、千问、豆包、元宝、Kimi、智谱清言、Claude、Gemini（实验功能） |
+| 网页 | ChatGPT、DeepSeek、千问、豆包、元宝、Kimi、智谱清言、Claude、Gemini |
 | 本地 API | 你自己的脚本或工具 |
 
 ## 开始使用
