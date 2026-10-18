@@ -2,7 +2,8 @@
 
 | 需要了解 | 维护入口 |
 | --- | --- |
-| 产品、源码启动、开发测试 | [中文 README](../README.md) · [English](../README.en.md) |
+| 产品与灯效演示 | [中文 README](../README.md) · [English](../README.en.md) |
+| 源码启动、开发测试与本地构建 | [开发与构建](development.md) · [English](development.en.md) |
 | 提醒、任务返回与设备连接 | [使用指南](quick-start.md) |
 | 当前功能与兼容范围 | [产品基线](product/CURRENT_PRODUCT.md) |
 | 模块、数据、凭据和协议 | [架构](architecture.md) |

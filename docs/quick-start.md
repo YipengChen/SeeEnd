@@ -144,4 +144,4 @@ Beam 在待机、提醒结束和正常退出时发送全黑画面，避免原厂
 
 事件历史最长 7 天、最多 10,000 条，去重记录保留 24 小时，正在运行的任务保留至结束或租期失效。默认数据目录为 macOS `~/Library/Application Support/AI Flame`、Windows `%LOCALAPPDATA%/AI Flame`、Linux `$XDG_DATA_HOME/ai-flame`（默认 `~/.local/share/ai-flame`）。目录含凭据，不应公开；移动 App 不删除配置。开发测试可用 `AIFLAME_DATA_DIR` 隔离数据。
 
-源码启动、测试和打包命令统一见 [README](../README.md#开发测试与构建)；模块与接口边界见[架构](architecture.md)。
+源码启动、测试和打包命令统一见 [开发与构建](development.md)；模块与接口边界见[架构](architecture.md)。

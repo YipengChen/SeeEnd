@@ -14,7 +14,7 @@ App、扩展和 Skill 保持独立版本号。应用构建 receipt 的 `source_s
 
 ## 本地开发
 
-从仓库根执行 README 中的安装与测试命令。额外检查：
+从仓库根执行[开发与构建](development.md)中的安装与测试命令。额外检查：
 
 ```sh
 python -m unittest discover -s skill/tests -v

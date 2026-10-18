@@ -18,7 +18,7 @@
 
 ## 自动检查入口
 
-安装与环境要求见 [README](../README.md#开发测试与构建)。先跑改动涉及的定向用例，再按范围运行完整回归：
+安装与环境要求见 [开发与构建](development.md)。先跑改动涉及的定向用例，再按范围运行完整回归：
 
 ```sh
 python -m unittest discover -s tests -v
