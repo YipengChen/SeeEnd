@@ -55,7 +55,7 @@ with tempfile.TemporaryDirectory(prefix="seeend-archive-", dir=dist) as work_dir
             for document in documents:
                 archive.write(document, document.name)
 
-    source_archive = work / f"SeeEnd-third-party-sources-{version}.zip"
+    source_archive = work / f"SeeEnd-third-party-sources-{version}-{identity['platform']}-{identity['architecture']}.zip"
     with zipfile.ZipFile(source_archive, "w", zipfile.ZIP_DEFLATED) as archive:
         for item in sources:
             archive.write(item, "third-party-sources/" + item.relative_to(materials).as_posix())
@@ -66,6 +66,7 @@ with tempfile.TemporaryDirectory(prefix="seeend-archive-", dir=dist) as work_dir
             archive.write(item, "third-party-sources/licenses/" + item.relative_to(notices).as_posix())
     app_archive.replace(dist / app_archive.name)
     source_archive.replace(dist / source_archive.name)
+    shutil.copy2(dist / RECEIPT, dist / (name + "-build.json"))
     shutil.copy2(guide, dist / guide.name)
 
 print("Archive:", name)

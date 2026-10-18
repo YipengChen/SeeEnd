@@ -1,4 +1,4 @@
-name: Build desktop preview
+name: Build desktop and draft release
 on:
   workflow_dispatch:
     inputs:
@@ -6,25 +6,49 @@ on:
         description: Desktop build runner
         type: choice
         default: all
-        options: [all, windows-latest, macos-14, ubuntu-22.04]
+        options: [all, windows-latest, macos-14, macos-15-intel, ubuntu-22.04]
       probe_only:
-        description: Run focused Windows compatibility diagnostics
+        description: Run focused Windows compatibility diagnostics only
         type: boolean
         default: false
   push:
     tags: ['v*']
+permissions:
+  contents: read
+concurrency:
+  group: desktop-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: false
 jobs:
+  metadata:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Check repository structure and integration contract
+        run: python tools/check_workspace.py
+      - run: python .github/scripts/test_release_assets.py
+      - name: Require the tag to match the application version
+        if: github.ref_type == 'tag'
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: python packaging/release_assets.py check-tag "$RELEASE_TAG"
   desktop:
+    needs: metadata
     strategy:
       fail-fast: false
       matrix:
-        os: ${{ fromJSON((github.event_name == 'workflow_dispatch' && inputs.target_os != 'all') && format('["{0}"]', inputs.target_os) || '["macos-14","windows-latest","ubuntu-22.04"]') }}
+        os: ${{ fromJSON((github.event_name == 'workflow_dispatch' && inputs.probe_only) && '["windows-latest"]' || ((github.event_name == 'workflow_dispatch' && inputs.target_os != 'all') && format('["{0}"]', inputs.target_os) || '["macos-14","macos-15-intel","windows-latest","ubuntu-22.04"]')) }}
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
     env:
       QT_QPA_PLATFORM: offscreen
       PYTHONFAULTHANDLER: '1'
       PYTHONUNBUFFERED: '1'
     steps:
+      - name: Preserve identical source bytes across platforms
+        run: git config --global core.autocrlf false
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
@@ -53,6 +77,11 @@ jobs:
       - name: Verify Windows source fleet regressions
         if: ${{ !inputs.probe_only && runner.os == 'Windows' }}
         run: python -m unittest discover -s tests -p test_device_fleet.py -v
+      - name: Verify skill integration against this checkout
+        if: ${{ !inputs.probe_only }}
+        env:
+          SEEEND_APP_ROOT: ${{ github.workspace }}
+        run: python -m unittest discover -s skill/tests -v
       - if: ${{ !inputs.probe_only }}
         run: npm ci --ignore-scripts --no-audit --no-fund
       - if: ${{ !inputs.probe_only }}
@@ -63,20 +92,93 @@ jobs:
         run: python packaging/verify_frozen.py
       - if: ${{ !inputs.probe_only }}
         run: python packaging/archive.py
-      - if: ${{ !inputs.probe_only }}
-        run: python packaging/extension_release.py
       - name: Verify native Windows widgets
         if: runner.os == 'Windows'
         env:
           QT_QPA_PLATFORM: windows
         run: python .github/scripts/windows_compatibility.py --native-smoke
+      - name: Stage exact desktop assets and verify SHA256SUMS
+        if: ${{ !inputs.probe_only }}
+        run: python packaging/release_assets.py stage --kind desktop --output-dir dist/release-assets
       - uses: actions/upload-artifact@v4
-        if: always() && inputs.probe_only
+        if: always() && runner.os == 'Windows'
         with:
           name: windows-compatibility
           path: validation/windows-compatibility
+          retention-days: 7
+          if-no-files-found: warn
       - uses: actions/upload-artifact@v4
         if: ${{ !inputs.probe_only }}
         with:
           name: seeend-${{ matrix.os }}
-          path: dist/SeeEnd-*
+          path: dist/release-assets/*
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
+  extension:
+    needs: metadata
+    if: ${{ !inputs.probe_only }}
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: python packaging/extension_release.py
+      - run: python packaging/release_assets.py stage --kind extension --output-dir dist/release-assets
+      - uses: actions/upload-artifact@v4
+        with:
+          name: seeend-extension
+          path: dist/release-assets/*
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
+  source:
+    needs: metadata
+    if: ${{ !inputs.probe_only }}
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Archive the exact Git commit and standalone Skill
+        run: python packaging/release_assets.py source
+      - uses: actions/upload-artifact@v4
+        with:
+          name: seeend-source
+          path: dist/source-assets/*
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
+  draft-release:
+    needs: [metadata, desktop, extension, source]
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: seeend-*
+          path: dist/release-assets
+          merge-multiple: true
+      - name: Verify complete platform set, receipts and checksums
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: python packaging/release_assets.py finalize --assets-dir dist/release-assets --tag "$RELEASE_TAG"
+      - name: Create a draft release from verified CI assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          mapfile -t asset_names < <(sed 's/^[0-9a-f]*  //' dist/release-assets/SHA256SUMS)
+          assets=(dist/release-assets/SHA256SUMS)
+          for name in "${asset_names[@]}"; do assets+=("dist/release-assets/$name"); done
+          gh release create "$RELEASE_TAG" "${assets[@]}" --verify-tag --draft --title "SeeEnd $RELEASE_TAG" --generate-notes
