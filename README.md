@@ -36,11 +36,15 @@
 
 ### 米家智能插座3
 
-<picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/light-effects/zh/dark/mijia-plug-3.webp"><img src="docs/images/light-effects/zh/light/mijia-plug-3.webp" width="370" alt="ZNCZ301KK 控制台灯通断电"></picture>
+| 通断电提醒 |
+| :---: |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/light-effects/zh/dark/mijia-plug-3.webp"><img src="docs/images/light-effects/zh/light/mijia-plug-3.webp" width="370" alt="ZNCZ301KK 控制台灯通断电"></picture> |
 
 ### 米家智能插座4
 
-<picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/light-effects/zh/dark/mijia-plug-4.webp"><img src="docs/images/light-effects/zh/light/mijia-plug-4.webp" width="370" alt="ZNCZ401KK 控制台灯通断电"></picture>
+| 通断电提醒 |
+| :---: |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/light-effects/zh/dark/mijia-plug-4.webp"><img src="docs/images/light-effects/zh/light/mijia-plug-4.webp" width="370" alt="ZNCZ401KK 控制台灯通断电"></picture> |
 
 默认工作中断电，等待输入和完成时通电；可自行设置。
 

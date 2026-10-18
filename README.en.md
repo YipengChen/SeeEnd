@@ -36,11 +36,15 @@ See your AI task status through a desktop flame, notifications, sounds, WeChat, 
 
 ### Mijia Smart Plug 3
 
-<picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/light-effects/en/dark/mijia-plug-3.webp"><img src="docs/images/light-effects/en/light/mijia-plug-3.webp" width="370" alt="ZNCZ301KK switches a connected lamp"></picture>
+| Power control |
+| :---: |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/light-effects/en/dark/mijia-plug-3.webp"><img src="docs/images/light-effects/en/light/mijia-plug-3.webp" width="370" alt="ZNCZ301KK switches a connected lamp"></picture> |
 
 ### Mijia Smart Plug 4
 
-<picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/light-effects/en/dark/mijia-plug-4.webp"><img src="docs/images/light-effects/en/light/mijia-plug-4.webp" width="370" alt="ZNCZ401KK switches a connected lamp"></picture>
+| Power control |
+| :---: |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/light-effects/en/dark/mijia-plug-4.webp"><img src="docs/images/light-effects/en/light/mijia-plug-4.webp" width="370" alt="ZNCZ401KK switches a connected lamp"></picture> |
 
 By default, power is off while working and on for input or completion. These rules are customizable.
 
