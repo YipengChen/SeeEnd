@@ -98,16 +98,16 @@ class ReleaseAssetTests(unittest.TestCase):
                 shutil.copy2(path, destination / path.name)
         return destination
 
-    def test_requires_matching_tag_and_all_four_platforms_source_and_skill(self):
+    def test_requires_matching_tag_and_all_supported_platforms_source_and_skill(self):
         directory = self.aggregate()
         names = assets.finalize(self.root, directory, "v0.8.69")
-        self.assertEqual(len(names), 18)
-        self.assertEqual(len((directory / "SHA256SUMS").read_text().splitlines()), 18)
+        self.assertEqual(len(names), 15)
+        self.assertEqual(len((directory / "SHA256SUMS").read_text().splitlines()), 15)
         self.assertIn("SeeEnd-source-0.8.69.zip", names)
         self.assertIn("SeeEnd-skill-1.0.6.zip", names)
         with self.assertRaisesRegex(RuntimeError, "must equal"):
             assets.finalize(self.root, directory, "v0.8.68")
-        (directory / "SeeEnd-0.8.69-Darwin-x86_64.zip").unlink()
+        (directory / "SeeEnd-0.8.69-Linux-x86_64.tar.gz").unlink()
         with self.assertRaisesRegex(RuntimeError, "Missing regular"):
             assets.finalize(self.root, directory, "v0.8.69")
 

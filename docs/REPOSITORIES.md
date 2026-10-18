@@ -29,7 +29,7 @@ python tools/check_workspace.py
 ## GitHub 构建与发布
 
 1. 推送源码或 PR 后，Tests 检查 Python 3.11/3.13、JavaScript、Skill 和单仓契约。
-2. 在 Actions 的 `Build desktop and draft release` 手动选择 all，可构建 macOS arm64、macOS Intel、Windows x64、Linux x64。构建使用 GitHub runner，含测试、Cython 编译、冻结 Helper 验证和归档；手动运行只生成 artifact。
+2. 在 Actions 的 `Build desktop and draft release` 手动选择 all，可构建 macOS arm64、Windows x64、Linux x64。构建使用 GitHub runner，含测试、Cython 编译、冻结 Helper 验证和归档；手动运行只生成 artifact。
 3. 正式准备版本时，提交版本号并推送匹配的 `v<app_version>` tag。CI 检查 tag 与源码版本一致，全部平台、扩展、完整源码和 Skill 构建成功后，自动创建同仓库的 **草稿 Release**。
 4. 草稿包含各平台 App、对应第三方源码、receipt、浏览器开发包与商店包、完整 SeeEnd 源码 ZIP、独立 Skill ZIP，以及统一 SHA256SUMS。聚合验证拒绝缺失、重名、篡改、版本或提交不匹配的文件。
 5. 维护者完成目标系统与真实提醒验收后，可在 GitHub 手动发布草稿。仓库私有期间，Release 也需要仓库权限。公开仓库和发布 Release 是两个独立动作。macOS 构建使用 ad-hoc 签名，不代表 Apple 公证；Windows 也不自动取得发行签名。

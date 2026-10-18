@@ -10,7 +10,7 @@ import subprocess
 from release import sha256_file, source_identity
 
 
-DESKTOPS = (("Darwin", "arm64"), ("Darwin", "x86_64"),
+DESKTOPS = (("Darwin", "arm64"),
             ("Windows", "AMD64"), ("Linux", "x86_64"))
 IDENTITY_FIELDS = ("app_version", "extension_version", "git_revision", "source_sha256")
 
@@ -143,7 +143,7 @@ def finalize(root, directory, tag):
         for name in package_names[:2]:
             require(receipt.get("packages_sha256", {}).get(name) == sha256_file(directory / name),
                     f"Package checksum mismatch: {name}")
-    require(listed == names, "Release requires four desktop builds, extensions, application source and Skill")
+    require(listed == names, "Release requires all three desktop builds, extensions, application source and Skill")
     write_checksums(directory, names, "SHA256SUMS")
     return names
 

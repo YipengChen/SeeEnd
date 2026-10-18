@@ -85,7 +85,7 @@ The default output is `dist/SeeEnd.app` plus the platform distribution. Use `--d
 
 Application sources live at this repository root. `skill/seeend/` is independently installable; `website/` contains policy pages and historical release records. `packaging/` and `.github/` build and verify distributions. Personal configuration, raw acceptance evidence and research media stay outside the repository.
 
-Manually run `Build desktop and draft release` in Actions with `target_os=all` to build macOS arm64/Intel, Windows x64 and Linux x64. Pushing a matching `v<app_version>` tag creates a draft Release only after every platform, extension and source job succeeds. Assets include the exact application source, standalone Skill, matching third-party sources, build receipts and SHA256SUMS. The maintainer reviews and publishes the draft manually; repository visibility also stays private until manually changed. Local binary uploads are unnecessary. See [release workflow](docs/REPOSITORIES.md).
+Manually run `Build desktop and draft release` in Actions with `target_os=all` to build macOS arm64, Windows x64 and Linux x64. Pushing a matching `v<app_version>` tag creates a draft Release only after every platform, extension and source job succeeds. Assets include the exact application source, standalone Skill, matching third-party sources, build receipts and SHA256SUMS. The maintainer reviews and publishes the draft manually; repository visibility also stays private until manually changed. Local binary uploads are unnecessary. See [release workflow](docs/REPOSITORIES.md).
 
 ## Documentation and license
 

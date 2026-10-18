@@ -77,7 +77,7 @@ python packaging/archive.py
 
 macOS 默认输出 `dist/SeeEnd.app`，Windows 输出 `dist/SeeEnd/SeeEnd.exe`，归档命令生成对应平台的分发包；三个命令可统一加 `--dist-dir dist/staging` 使用独立目录。首次构建下载并校验第三方材料，准备完成后可省略 `--download-sources` 离线重建。需要本机 C 编译器；核心模块经 Cython 原生编译，无 Python 回退。修改核心逻辑可先运行 `python packaging/verify_native.py`，或构建时加 `--verify-native`。
 
-云端构建在 Actions 中手动触发 `Build desktop and draft release`，选择 `target_os=all`、`probe_only=false`，生成 macOS arm64 / Intel、Windows x64、Linux x64 制品。推送与源码版本匹配的 `v<版本>` tag 后，全部平台成功才在本 SeeEnd 仓库创建草稿 Release，包含应用、完整对应源码、独立 Skill、第三方材料及 SHA256SUMS。维护者验收后手动发布；仓库继续保持私有，公开可见性由维护者手动切换。无需从本地上传安装包。步骤见[单仓库维护与发布](docs/REPOSITORIES.md)。
+云端构建在 Actions 中手动触发 `Build desktop and draft release`，选择 `target_os=all`、`probe_only=false`，生成 macOS arm64、Windows x64、Linux x64 制品。推送与源码版本匹配的 `v<版本>` tag 后，全部平台成功才在本 SeeEnd 仓库创建草稿 Release，包含应用、完整对应源码、独立 Skill、第三方材料及 SHA256SUMS。维护者验收后手动发布；仓库继续保持私有，公开可见性由维护者手动切换。无需从本地上传安装包。步骤见[单仓库维护与发布](docs/REPOSITORIES.md)。
 
 `SeeEnd-build.json` 记录版本、源码指纹、Git 状态与第三方材料身份；源码变更后须重建，冻结验证与归档拒绝复用不匹配的 App。分发 App ZIP（Linux 为 `.tar.gz`）是用户安装入口；第三方源码 ZIP 独立按需下载，使用 App 无需下载。当前机器的签名与发布验收状态应以实际产物为准。
 
