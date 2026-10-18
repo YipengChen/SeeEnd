@@ -256,6 +256,30 @@ class ResponsiveUiTests(unittest.TestCase):
                             self.assertLessEqual(bounds.right(), page.viewport().width())
                             self.assertGreaterEqual(group.width(), group.minimumSizeHint().width())
 
+    def test_disconnected_wechat_actions_fit_narrow_english_with_wider_font(self):
+        self.screen.change_area(QRect(0, 0, 1920, 1440))
+        self.window.resize(920, 850)
+        self.render("en")
+        self.widget.navigate(3)
+        buttons = (self.widget.wechat_prepare_button, self.widget.wechat_test_button,
+                   self.widget.wechat_disconnect_button)
+        # Font metrics vary across platforms; exercise a wider face even on macOS.
+        for button in buttons:
+            font = button.font()
+            font.setStretch(115)
+            button.setFont(font)
+        self.widget.render_wechat({"bound": True, "available": False,
+                                   "error": "Connection failed"})
+        self.settle()
+        page = self.widget.tabs.widget(3)
+        self.assertEqual(page.horizontalScrollBar().maximum(), 0)
+        for button in buttons:
+            self.assertTrue(button.isVisible())
+            bounds = self.geometry_in(button, page.viewport())
+            self.assertGreaterEqual(bounds.left(), 0)
+            self.assertLess(bounds.right(), page.viewport().width())
+            self.assertGreaterEqual(button.width(), button.minimumSizeHint().width())
+
     def test_help_details_expand_without_truncating_bounded_paragraphs(self):
         from PySide6.QtWidgets import QLabel
 
