@@ -53,6 +53,7 @@ with tempfile.TemporaryDirectory() as work:
     (source / 'providers.js').write_text("const VERSION = '1.2.3';")
     (source / 'popup.html').write_text('<p>fixture</p>')
     (source / 'README.md').write_text('source instructions')
+    (source / 'LICENSE.md').write_text('GPL license fixture')
     (source / '.DS_Store').write_text('ignored')
     old = dist / 'SeeEnd-Web-extension'
     old.mkdir(); (old / 'manifest.json').write_text('old loaded extension')
@@ -73,6 +74,7 @@ with tempfile.TemporaryDirectory() as work:
         assert 'manifest.json' in archive.namelist()
         assert 'key' not in json.loads(archive.read('manifest.json'))
         assert 'README.md' not in archive.namelist()
+        assert archive.read('LICENSE.md') == b'GPL license fixture'
     receipt = json.loads((dist / 'SeeEnd-extension-1.2.3.json').read_text())
     assert receipt['packages_sha256'][store.name] == hashlib.sha256(store.read_bytes()).hexdigest()
     (source / 'providers.js').write_text("const VERSION = '1.2.2';")

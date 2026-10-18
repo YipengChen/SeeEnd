@@ -290,6 +290,7 @@ def main():
     skill_ver = checks.run("Skill frontmatter version", lambda: skill_version(skill))
     checks.run("Skill repository / package LICENSE bytes", lambda: identical(skill / "LICENSE", skill / "seeend/LICENSE"))
     checks.run("App / Skill GPL license bytes", lambda: identical(code / "LICENSE", skill / "LICENSE"))
+    checks.run("App / standalone extension GPL license bytes", lambda: identical(code / "LICENSE", code / "aiflame/integrations/chatgpt_web/extension/LICENSE.md"))
     for name in ("index.html", "support.html"):
         checks.run("canonical website " + name, lambda name=name: require((downloads / name).is_file(), "missing website file: " + name))
     contract = checks.run("actual App contract / actual Skill validator / fixture", lambda: actual_contract(code, skill))
