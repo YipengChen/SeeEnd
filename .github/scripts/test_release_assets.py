@@ -1,7 +1,8 @@
 """Regression checks for the CI release boundary, using tiny local fixtures."""
 
+import hashlib
 import json
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 import shutil
 import subprocess
 import sys
@@ -12,6 +13,43 @@ import zipfile
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "packaging"))
 import release_assets as assets
+import release as build_release
+
+
+class SourceIdentityOrderTests(unittest.TestCase):
+    def test_source_fingerprint_uses_the_same_case_sensitive_order_on_windows(self):
+        # Insertion order is the independently specified POSIX lexical order.
+        # Upper/lowercase names exist on every OS; no case-only duplicates are needed.
+        files = {
+            "LICENSE": "GPL fixture\n",
+            "aiflame/Zebra.py": "UPPER = True\n",
+            "aiflame/apple.py": "lower = True\n",
+            "aiflame/integrations/chatgpt_web/extension/manifest.json": '{"version":"0.2.14"}\n',
+            "packaging/Zebra.py": "UPPER_BUILD = True\n",
+            "packaging/apple.py": "lower_build = True\n",
+            "pyproject.toml": '[project]\nversion = "0.8.69"\n',
+        }
+        expected = "90d26cbc098d4363be33e951866b24674682e3f1be3d7259845c08cfce2c669a"
+        legacy_windows = hashlib.sha256()
+        for name in sorted(files, key=PureWindowsPath):
+            legacy_windows.update(name.encode() + b"\0")
+            legacy_windows.update(hashlib.sha256(files[name].encode()).digest())
+        self.assertNotEqual(legacy_windows.hexdigest(), expected)
+
+        class WindowsOrderPath(type(Path())):
+            # Keep real local I/O while reproducing WindowsPath's old ordering.
+            def __lt__(self, other):
+                return PureWindowsPath(self.as_posix()) < PureWindowsPath(other.as_posix())
+
+        with tempfile.TemporaryDirectory(prefix="seeend-source-order-") as work:
+            root = Path(work)
+            for name, content in files.items():
+                path = root / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(content.encode())
+            self.assertEqual(build_release.source_identity(root)["source_sha256"], expected)
+            with patch.object(build_release, "Path", WindowsOrderPath):
+                self.assertEqual(build_release.source_identity(root)["source_sha256"], expected)
 
 
 class ReleaseAssetTests(unittest.TestCase):
