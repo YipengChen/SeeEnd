@@ -8,6 +8,8 @@
 
 ![SeeEnd 应用总览（演示数据）](docs/images/overview-zh.png)
 
+![SeeEnd 支持的设备](docs/images/supported-devices-zh.png)
+
 ## 灯光提醒
 
 ### Yeelight 屏幕挂灯 Pro

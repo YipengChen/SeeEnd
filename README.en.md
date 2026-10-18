@@ -8,6 +8,8 @@ See your AI task status through a desktop flame, notifications, sounds, WeChat, 
 
 ![SeeEnd app overview (demo data)](docs/images/overview-en.png)
 
+![Devices supported by SeeEnd](docs/images/supported-devices-en.png)
+
 ## Light notifications
 
 ### Yeelight Screen Light Bar Pro

@@ -1,4 +1,4 @@
-"""Capture the real Overview widget with public demo data, without a running Hub.
+"""Capture Overview and supported devices with demo data, without a running Hub.
 
 Run: .venv/bin/python tools/render_readme_overview.py
 Requires desktop dependencies. Never reads user configuration or contacts devices.
@@ -78,6 +78,17 @@ def capture(app, destination, language):
                 if not widget.grab().save(str(destination)):
                     raise RuntimeError(f"Could not save {destination}")
             print(destination.relative_to(ROOT))
+            widget.resize(1240, 920)
+            widget.navigate(1)
+            widget.show_device_catalog()
+            if app.focusWidget():
+                app.focusWidget().clearFocus()
+            for _ in range(8):
+                app.processEvents()
+            devices_path = destination.with_name(destination.name.replace("overview-", "supported-devices-"))
+            if not widget.grab().save(str(devices_path)):
+                raise RuntimeError(f"Could not save {devices_path}")
+            print(devices_path.relative_to(ROOT))
         finally:
             widget.shutdown()
             widget.hide()
