@@ -8,27 +8,39 @@ See your AI task status through a desktop flame, notifications, sounds, WeChat, 
 
 ## Light notifications
 
-Screen Light Bar Pro, W3 color bulbs, and Beam light bars support color and white-light notifications.
+### Yeelight Screen Light Bar Pro
 
-| Screen Light Bar Pro | W3 Color Bulb | Beam |
-| :---: | :---: | :---: |
-| <picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/light-effects/en/dark/screen-light-bar.webp"><img src="docs/images/light-effects/en/light/screen-light-bar.webp" width="240" alt="Screen light bar: working, waiting, and done in color and white-light modes"></picture> | <picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/light-effects/en/dark/w3-bulb.webp"><img src="docs/images/light-effects/en/light/w3-bulb.webp" width="240" alt="W3 bulb: working, waiting, and done in color and white-light modes"></picture> | <picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/light-effects/en/dark/beam.webp"><img src="docs/images/light-effects/en/light/beam.webp" width="240" alt="Beam: working, waiting, and done in color and white-light modes"></picture> |
+| White light | Color light |
+| :---: | :---: |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/light-effects/en/dark/screen-light-bar-white.webp"><img src="docs/images/light-effects/en/light/screen-light-bar-white.webp" width="370" alt="Yeelight Screen Light Bar Pro white-light task notifications"></picture> | <picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/light-effects/en/dark/screen-light-bar-color.webp"><img src="docs/images/light-effects/en/light/screen-light-bar-color.webp" width="370" alt="Yeelight Screen Light Bar Pro color-light task notifications"></picture> |
 
-Default colors: **yellow for working · red for input · green for done**. Colors and brightness are customizable.
+### Yeelight W3 Color Bulb
 
-### Cube Lite pixel effects
+| White light | Color light |
+| :---: | :---: |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/light-effects/en/dark/w3-bulb-white.webp"><img src="docs/images/light-effects/en/light/w3-bulb-white.webp" width="370" alt="Yeelight W3 Color Bulb white-light task notifications"></picture> | <picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/light-effects/en/dark/w3-bulb-color.webp"><img src="docs/images/light-effects/en/light/w3-bulb-color.webp" width="370" alt="Yeelight W3 Color Bulb color-light task notifications"></picture> |
+
+### Yeelight Beam
+
+| White light | Color light |
+| :---: | :---: |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/light-effects/en/dark/beam-white.webp"><img src="docs/images/light-effects/en/light/beam-white.webp" width="370" alt="Yeelight Beam white-light task notifications"></picture> | <picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/light-effects/en/dark/beam-color.webp"><img src="docs/images/light-effects/en/light/beam-color.webp" width="370" alt="Yeelight Beam color-light task notifications"></picture> |
+
+### Yeelight Cube Lite pixel effects
 
 | Pixel status | Comet |
 | :---: | :---: |
-| <picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/light-effects/en/dark/cube-status.webp"><img src="docs/images/light-effects/en/light/cube-status.webp" width="370" alt="Cube Lite status: moving dots, question mark, and check mark"></picture> | <picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/light-effects/en/dark/cube-comet.webp"><img src="docs/images/light-effects/en/light/cube-comet.webp" width="370" alt="Cube Lite comet: traveling trail, alternating ends, and expanding center"></picture> |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/light-effects/en/dark/cube-status.webp"><img src="docs/images/light-effects/en/light/cube-status.webp" width="370" alt="Cube Lite pixel status"></picture> | <picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/light-effects/en/dark/cube-comet.webp"><img src="docs/images/light-effects/en/light/cube-comet.webp" width="370" alt="Cube Lite comet"></picture> |
 | **Snake** | **Text** |
-| <picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/light-effects/en/dark/cube-snake.webp"><img src="docs/images/light-effects/en/light/cube-snake.webp" width="370" alt="Cube Lite snake: moving, paused for input, and WIN on completion"></picture> | <picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/light-effects/en/dark/cube-text.webp"><img src="docs/images/light-effects/en/light/cube-text.webp" width="370" alt="Cube Lite text: WORK, WAIT, DONE"></picture> |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/light-effects/en/dark/cube-snake.webp"><img src="docs/images/light-effects/en/light/cube-snake.webp" width="370" alt="Cube Lite snake"></picture> | <picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/light-effects/en/dark/cube-text.webp"><img src="docs/images/light-effects/en/light/cube-text.webp" width="370" alt="Cube Lite text"></picture> |
 
-### Mijia Smart Plugs
+### Mijia Smart Plug 3
 
-| Plug 3 · ZNCZ301KK | Plug 4 · ZNCZ401KK |
-| :---: | :---: |
-| <picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/light-effects/en/dark/mijia-plug-3.webp"><img src="docs/images/light-effects/en/light/mijia-plug-3.webp" width="370" alt="Mijia Plug 3 switches a lamp off while working and on for input or completion"></picture> | <picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/light-effects/en/dark/mijia-plug-4.webp"><img src="docs/images/light-effects/en/light/mijia-plug-4.webp" width="370" alt="Mijia Plug 4 switches a lamp off while working and on for input or completion"></picture> |
+<picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/light-effects/en/dark/mijia-plug-3.webp"><img src="docs/images/light-effects/en/light/mijia-plug-3.webp" width="370" alt="ZNCZ301KK switches a connected lamp"></picture>
+
+### Mijia Smart Plug 4
+
+<picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/light-effects/en/dark/mijia-plug-4.webp"><img src="docs/images/light-effects/en/light/mijia-plug-4.webp" width="370" alt="ZNCZ401KK switches a connected lamp"></picture>
 
 By default, power is off while working and on for input or completion. These rules are customizable.
 

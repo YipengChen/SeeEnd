@@ -24,7 +24,6 @@ from aiflame.devices.cube_effects import mini_snake_game, snake_game
 from aiflame.devices.light_settings import light_settings
 from aiflame.devices.models import (YEELIGHT_MODEL, YEELIGHT_BULB_MODEL, YEELIGHT_BEAM_MODEL,
                                     YEELIGHT_CUBE_MODEL, MIJIA_PLUG_MODEL, MIJIA_PLUG4_MODEL)
-from aiflame.transports.mijia import desired_power
 
 THEMES = {"light": "#24292f", "dark": "#f0f6fc"}
 STATES = (("working", "Working"), ("needs_input", "Waiting for input"), ("done", "Done"))
@@ -32,12 +31,8 @@ FPS = 10
 STATE_DURATION_MS = 1200
 FRAMES_PER_STATE = STATE_DURATION_MS * FPS // 1000
 LABELS = {
-    "zh": {"working": "工作中", "needs_input": "等待输入", "done": "已完成",
-           "back": "彩灯", "front": "白灯", "power_on": "已通电", "power_off": "已断电",
-           "status": "像素状态牌", "comet": "彗星巡航", "snake": "贪吃蛇", "text": "文字状态"},
-    "en": {"working": "Working", "needs_input": "Waiting for input", "done": "Done",
-           "back": "Color", "front": "White", "power_on": "Power on", "power_off": "Power off",
-           "status": "Pixel status", "comet": "Comet", "snake": "Snake", "text": "Text"},
+    "zh": {"working": "工作中", "needs_input": "等待输入", "done": "已完成"},
+    "en": {"working": "Working", "needs_input": "Waiting for input", "done": "Done"},
 }
 
 
@@ -76,37 +71,27 @@ def image(width, height):
     return result
 
 
-def caption_parts(state, detail, language):
-    effect, task = ("灯效：", "任务状态：") if language == "zh" else ("Effect: ", "Task status: ")
-    return effect + LABELS[language][detail], task + LABELS[language][state]
+def caption(state, language):
+    return ("任务状态：" if language == "zh" else "Task status: ") + LABELS[language][state]
 
 
 @lru_cache(maxsize=4)
 def caption_layout(width, language):
-    # Keep font size and field positions fixed as states change; fit the longest labels.
-    details = ("back", "front", "power_on", "power_off", "status", "comet", "snake", "text")
-    gap = 24
-    for size in range(34, 15, -1):
+    # Keep font size fixed as states change; fit the longest status.
+    for size in range(42, 15, -1):
         font = QFont("PingFang SC" if language == "zh" else "Arial")
         font.setPixelSize(size)
         font.setBold(True)
         metrics = QFontMetricsF(font)
-        left = max(metrics.horizontalAdvance(caption_parts("working", key, language)[0]) for key in details)
-        right = max(metrics.horizontalAdvance(caption_parts(key, "back", language)[1]) for key, _ in STATES)
-        if left + gap + right <= width - 24:
-            return font, left, gap, right
+        if max(metrics.horizontalAdvance(caption(key, language)) for key, _ in STATES) <= width - 24:
+            return font
     raise RuntimeError("Caption does not fit the animation width")
 
 
-def status_bar(painter, width, height, state, detail, language, theme):
-    font, left, gap, right = caption_layout(width, language)
-    effect, task = caption_parts(state, detail, language)
-    x = (width - left - gap - right) / 2
-    y = height - 68
-    painter.setFont(font)
+def status_bar(painter, width, height, state, language, theme):
+    painter.setFont(caption_layout(width, language))
     painter.setPen(QColor(THEMES[theme]))
-    painter.drawText(QRectF(x, y, left, 44), Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter, effect)
-    painter.drawText(QRectF(x + left + gap, y, right, 44), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, task)
+    painter.drawText(QRectF(12, height - 76, width - 24, 60), Qt.AlignmentFlag.AlignCenter, caption(state, language))
 
 
 def capture(canvas, painter, x, y, scale=1):
@@ -131,23 +116,21 @@ def save(frames, path):
     print(f"{path.relative_to(ROOT)}: {path.stat().st_size:,} bytes")
 
 
-def light(path, model, language, theme):
-    panel, canvas = preview(model, "back")
+def light(path, model, mode, language, theme):
+    panel, canvas = preview(model, mode)
     canvas.resize(300, 140)
     frames = []
-    for mode in ("back", "front"):
-        panel.settings = display_settings(model, mode)
-        for state, _ in STATES:
-            for tick in range(FRAMES_PER_STATE):
-                output = image(640, 390)
-                painter = QPainter(output)
-                painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-                panel.clock.milliseconds = tick * 1000 // FPS
-                canvas.state = state
-                capture(canvas, painter, 20, 10, 2)
-                status_bar(painter, 640, 390, state, mode, language, theme)
-                painter.end()
-                frames.append(pillow(output))
+    for state, _ in STATES:
+        for tick in range(FRAMES_PER_STATE):
+            output = image(640, 390)
+            painter = QPainter(output)
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+            panel.clock.milliseconds = tick * 1000 // FPS
+            canvas.state = state
+            capture(canvas, painter, 20, 10, 2)
+            status_bar(painter, 640, 390, state, language, theme)
+            painter.end()
+            frames.append(pillow(output))
     save(frames, path)
 
 
@@ -163,8 +146,7 @@ def plug(path, model, language, theme):
         painter = QPainter(output)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         capture(canvas, painter, 20, 10, 2)
-        power = "power_on" if desired_power({"state": state}, panel.settings) else "power_off"
-        status_bar(painter, 640, 390, state, power, language, theme)
+        status_bar(painter, 640, 390, state, language, theme)
         painter.end()
         for _ in range(FRAMES_PER_STATE):
             frames.append(pillow(output))
@@ -189,7 +171,7 @@ def cube(path, mode, language, theme):
             painter = QPainter(output)
             painter.setRenderHint(QPainter.RenderHint.Antialiasing)
             capture(canvas, painter, 20, 0, 2)
-            status_bar(painter, 640, 300, state, mode, language, theme)
+            status_bar(painter, 640, 300, state, language, theme)
             painter.end()
             frames.append(pillow(output))
     save(frames, path)
@@ -207,7 +189,8 @@ def main():
             themed.mkdir(exist_ok=True)
             for model, name in ((YEELIGHT_MODEL, "screen-light-bar"), (YEELIGHT_BULB_MODEL, "w3-bulb"),
                                 (YEELIGHT_BEAM_MODEL, "beam")):
-                light(themed / f"{name}.webp", model, language, theme)
+                for mode, suffix in (("front", "white"), ("back", "color")):
+                    light(themed / f"{name}-{suffix}.webp", model, mode, language, theme)
             for model, name in ((MIJIA_PLUG_MODEL, "mijia-plug-3"), (MIJIA_PLUG4_MODEL, "mijia-plug-4")):
                 plug(themed / f"{name}.webp", model, language, theme)
             for mode in ("status", "comet", "snake", "text"):

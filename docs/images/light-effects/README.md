@@ -1,14 +1,14 @@
 # README 灯效素材
 
-中文 `zh/`、英文 `en/` 各九种动画，分别供中英文 README 使用。每种动画导出 `light/` 深色文字与 `dark/` 浅色文字两份透明 WebP，README 用 `<picture>` 按页面明暗选择。图片从当前 `aiflame/desktop/light_controls.py` 的 `LightStateCanvas` 本地预览组件导出；点阵帧来自 `cube_effects.frame`。
+中文 `zh/`、英文 `en/` 各十二种动画，分别供中英文 README 使用。每种动画导出 `light/` 深色文字与 `dark/` 浅色文字两份透明 WebP，README 用 `<picture>` 按页面明暗选择。图片从当前 `aiflame/desktop/light_controls.py` 的 `LightStateCanvas` 本地预览组件导出；点阵帧来自 `cube_effects.frame`。
 
 这些是程序生成的灯效示意，不是实拍，不证明实体设备的色彩、亮度、发送帧率或接入验收结果。未使用旧 AI Flame 火焰参考视频、个人配置或设备凭据，也不启动 Hub 或发送设备指令。
 
 | 每种语言中的文件 | 内容 | 循环时长 |
 | --- | --- | --- |
-| screen-light-bar.webp | 屏幕挂灯 Pro：彩灯三态、白灯三态 | 7.2 秒 |
-| w3-bulb.webp | W3 灯泡：彩灯三态、白灯三态 | 7.2 秒 |
-| beam.webp | Beam 塔灯：彩灯三态、白灯三态 | 7.2 秒 |
+| screen-light-bar-white.webp / screen-light-bar-color.webp | 屏幕挂灯 Pro：白灯、彩灯分别展示三态 | 3.6 秒 |
+| w3-bulb-white.webp / w3-bulb-color.webp | W3 灯泡：白灯、彩灯分别展示三态 | 3.6 秒 |
+| beam-white.webp / beam-color.webp | Beam 塔灯：白灯、彩灯分别展示三态 | 3.6 秒 |
 | mijia-plug-3.webp | 插座 3（ZNCZ301KK）控制外接台灯 | 3.6 秒 |
 | mijia-plug-4.webp | 插座 4（ZNCZ401KK）控制外接台灯 | 3.6 秒 |
 | cube-status.webp | 像素状态牌：跳点、问号、对勾 | 3.6 秒 |
@@ -16,7 +16,7 @@
 | cube-snake.webp | 贪吃蛇：工作、原地等待、完成 WIN | 3.6 秒 |
 | cube-text.webp | 文字状态：WORK、WAIT、DONE | 3.6 秒 |
 
-每种状态展示 1.2 秒（原为 3 秒），动画本身的移动与闪烁速度不变。底部将灯效与任务状态放在同一行，间隔 24 像素：中文为“灯效：彩灯　　任务状态：工作中”，英文使用“Effect:”与“Task status:”前缀。字号和两段文字的位置固定，避免切换状态时跳动。文字无底色，随页面明暗使用固定黑色或白色，颜色变化仅体现在灯光中。点阵里的 WORK / WAIT / DONE / WIN 是应用实际使用的灯效图案，保持与实际输出一致。
+每种状态展示 1.2 秒（原为 3 秒），动画本身的移动与闪烁速度不变。底部只显示“任务状态：工作中”等状态提示，英文使用“Task status:”前缀。灯效名称位于 README 小节标题与表格列标题中，不绘入动画。字号固定，文字无底色，随页面明暗使用固定黑色或白色，颜色变化仅体现在灯光中。点阵里的 WORK / WAIT / DONE / WIN 是应用实际使用的灯效图案，保持与实际输出一致。
 
 ## 可见度与参数
 
