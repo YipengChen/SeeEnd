@@ -314,13 +314,15 @@ class ResetHttpTests(ResetFixture, unittest.TestCase):
     def test_reset_rejects_active_posts_and_blocks_new_mutations_until_finished(self):
         original = deepcopy(self.hub.config)
         with self.hub.request_guard:
-            self.hub.active_posts = 1
+            # The client's session GET may still be finishing on the server.
+            # Preserve its count while simulating one additional active request.
+            self.hub.active_posts += 1
         try:
             self.assertEqual(self.client.request("/api/reset", {"confirm": True})[0], 409)
             self.assertEqual(self.hub.config, original)
         finally:
             with self.hub.request_guard:
-                self.hub.active_posts = 0
+                self.hub.active_posts -= 1
         entered, release = threading.Event(), threading.Event()
         result, errors = [], []
 
